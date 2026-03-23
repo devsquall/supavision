@@ -7,10 +7,11 @@ else depends on.
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Enums ────────────────────────────────────────────────────────────
@@ -83,11 +84,22 @@ class Resource(BaseModel):
     at runtime to resolve the full credential set.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     resource_type: str = Field(
         description="Resource type identifier, e.g. 'aws_account', 'backup_policy', 'ec2_volumes'"
     )
+
+    @field_validator("resource_type")
+    @classmethod
+    def validate_resource_type(cls, v: str) -> str:
+        """Prevent path traversal — resource_type is used in template file paths."""
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError(
+                f"resource_type must contain only alphanumeric characters, underscores, "
+                f"and hyphens (got: {v!r})"
+            )
+        return v
     parent_id: str | None = Field(
         default=None,
         description="Parent resource ID. Children inherit parent credentials.",
@@ -140,7 +152,7 @@ class SystemContext(BaseModel):
     version N vs N-1 for drift detection.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     resource_id: str
     content: str = Field(description="The full system context document (structured Markdown)")
     version: int = 1
@@ -153,7 +165,7 @@ class SystemContext(BaseModel):
 class ChecklistItem(BaseModel):
     """A single item to verify during health checks."""
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:8])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     description: str
     source: str = Field(
         default="discovery",
@@ -169,7 +181,7 @@ class Checklist(BaseModel):
     Team requests persist across versions.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     resource_id: str
     items: list[ChecklistItem] = Field(default_factory=list)
     version: int = 1
@@ -186,11 +198,10 @@ class Report(BaseModel):
     API response (for debugging).
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     resource_id: str
     run_type: RunType
     content: str = Field(description="The full report from Claude")
-    raw_response: str = Field(default="", description="Raw API response for debugging")
     status: RunStatus = RunStatus.COMPLETED
     error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -206,7 +217,7 @@ class Evaluation(BaseModel):
     team should be alerted.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     report_id: str
     resource_id: str
     severity: Severity
@@ -226,7 +237,7 @@ class Run(BaseModel):
     Links to the report and evaluation produced by the run.
     """
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    id: str = Field(default_factory=lambda: str(uuid4()))
     resource_id: str
     run_type: RunType
     status: RunStatus = RunStatus.PENDING
