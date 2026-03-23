@@ -9,9 +9,12 @@ You can also trigger runs manually via CLI without the scheduler.
 
 from __future__ import annotations
 
+import fcntl
 import logging
+import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from croniter import croniter
 
@@ -21,7 +24,8 @@ from .models import Resource, RunType
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 60  # How often to check for due jobs
+CHECK_INTERVAL_SECONDS = 60
+LOCK_FILE = ".supervisor/scheduler.lock"
 
 
 class Scheduler:
@@ -31,9 +35,35 @@ class Scheduler:
         self.store = store
         self.engine = engine
         self._running = True
+        self._lock_fd = None
+
+    def _acquire_lock(self) -> bool:
+        """Acquire an exclusive file lock to prevent multiple scheduler instances."""
+        lock_path = Path(LOCK_FILE)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_fd = open(lock_path, "w")
+        try:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._lock_fd.write(str(os.getpid()) if hasattr(os, 'getpid') else "locked")
+            self._lock_fd.flush()
+            return True
+        except (OSError, BlockingIOError):
+            self._lock_fd.close()
+            self._lock_fd = None
+            return False
+
+    def _release_lock(self) -> None:
+        if self._lock_fd:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            self._lock_fd.close()
+            self._lock_fd = None
 
     def start(self) -> None:
         """Blocking loop. Checks every 60 seconds for due jobs."""
+        if not self._acquire_lock():
+            logger.error("Another scheduler instance is already running. Exiting.")
+            return
+
         logger.info("Scheduler started. Checking every %ds for due jobs.", CHECK_INTERVAL_SECONDS)
 
         while self._running:
@@ -49,49 +79,37 @@ class Scheduler:
     def stop(self) -> None:
         """Signal the scheduler to stop."""
         self._running = False
+        self._release_lock()
 
     def _get_due_jobs(self) -> list[tuple[Resource, RunType]]:
-        """Check all resources' schedules against current time and last run."""
+        """Check all resources' schedules in one batch (no N+1 queries)."""
         now = datetime.now(timezone.utc)
         due: list[tuple[Resource, RunType]] = []
 
         resources = self.store.list_resources()
-        for resource in resources:
-            # Check discovery schedule
-            if resource.discovery_schedule and resource.discovery_schedule.enabled:
-                if self._is_due(resource, RunType.DISCOVERY, now):
-                    due.append((resource, RunType.DISCOVERY))
+        latest_runs = self.store.get_latest_runs_batch()
 
-            # Check health check schedule
-            if resource.health_check_schedule and resource.health_check_schedule.enabled:
-                if self._is_due(resource, RunType.HEALTH_CHECK, now):
-                    due.append((resource, RunType.HEALTH_CHECK))
+        for resource in resources:
+            for run_type, schedule in [
+                (RunType.DISCOVERY, resource.discovery_schedule),
+                (RunType.HEALTH_CHECK, resource.health_check_schedule),
+            ]:
+                if not schedule or not schedule.enabled:
+                    continue
+
+                last_run = latest_runs.get((resource.id, str(run_type)))
+
+                if last_run and last_run.completed_at:
+                    cron = croniter(schedule.cron, last_run.completed_at)
+                    next_run = cron.get_next(datetime)
+                    if next_run.tzinfo is None:
+                        next_run = next_run.replace(tzinfo=timezone.utc)
+                    if now >= next_run:
+                        due.append((resource, run_type))
+                else:
+                    due.append((resource, run_type))
 
         return due
-
-    def _is_due(self, resource: Resource, run_type: RunType, now: datetime) -> bool:
-        """Check if a run is due based on cron schedule and last run time."""
-        schedule = (
-            resource.discovery_schedule
-            if run_type == RunType.DISCOVERY
-            else resource.health_check_schedule
-        )
-        if not schedule or not schedule.enabled:
-            return False
-
-        # Find last completed run of this type
-        last_run = self.store.get_latest_run(resource.id, run_type)
-
-        if last_run and last_run.completed_at:
-            # Calculate next run time after last completion
-            cron = croniter(schedule.cron, last_run.completed_at)
-            next_run = cron.get_next(datetime)
-            if next_run.tzinfo is None:
-                next_run = next_run.replace(tzinfo=timezone.utc)
-            return now >= next_run
-        else:
-            # Never run before — due immediately
-            return True
 
     def _execute_run(self, resource: Resource, run_type: RunType) -> None:
         """Execute a single scheduled run."""

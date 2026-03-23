@@ -272,7 +272,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     checks.append({"check": "template_dir", "ok": has_templates, "detail": str(tdir.resolve())})
 
     # SQLite writable
-    db_dir = Path(DB_PATH_DEFAULT).parent
+    db_dir = Path(args.db).parent
     try:
         db_dir.mkdir(parents=True, exist_ok=True)
         writable = os.access(db_dir, os.W_OK)

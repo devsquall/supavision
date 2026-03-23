@@ -298,6 +298,29 @@ class Store:
         ).fetchall()
         return [Run.model_validate(json.loads(r[0])) for r in rows]
 
+    def get_latest_runs_batch(self) -> dict[tuple[str, str], Run]:
+        """Get latest run for each (resource_id, run_type) pair in one query.
+
+        Returns {(resource_id, run_type): Run} for the most recent completed run.
+        Used by the scheduler to avoid N+1 queries.
+        """
+        sql = """
+        SELECT data FROM runs r1
+        WHERE created_at = (
+            SELECT MAX(r2.created_at) FROM runs r2
+            WHERE r2.resource_id = r1.resource_id
+            AND r2.run_type = r1.run_type
+            AND r2.status = ?
+        )
+        """
+        with self._lock:
+            rows = self._conn.execute(sql, (str(RunStatus.COMPLETED),)).fetchall()
+        result: dict[tuple[str, str], Run] = {}
+        for row in rows:
+            run = Run.model_validate(json.loads(row[0]))
+            result[(run.resource_id, str(run.run_type))] = run
+        return result
+
     def get_latest_run(self, resource_id: str, run_type: RunType) -> Run | None:
         row = self._execute(
             "SELECT data FROM runs WHERE resource_id = ? AND run_type = ? "
