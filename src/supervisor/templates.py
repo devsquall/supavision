@@ -34,6 +34,13 @@ def load_template(
     subdir = "discovery.md" if run_type == RunType.DISCOVERY else "health_check.md"
     path = Path(template_dir) / resource_type / subdir
 
+    # Prevent path traversal — ensure resolved path stays within template_dir
+    if not path.resolve().is_relative_to(Path(template_dir).resolve()):
+        raise ValueError(
+            f"Path traversal detected: resource_type {resource_type!r} "
+            f"would escape template directory"
+        )
+
     if not path.exists():
         raise FileNotFoundError(
             f"Template not found: {path}. "
@@ -116,7 +123,7 @@ def resolve_template(
 
 def list_templates(template_dir: str | Path = TEMPLATE_DIR_DEFAULT) -> list[dict[str, str]]:
     """List all available template sets (resource types that have templates)."""
-    tdir = Path(template_dir)
+    tdir = Path(template_dir).resolve()
     if not tdir.exists():
         return []
 
