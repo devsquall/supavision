@@ -109,7 +109,19 @@ class Evaluator:
                 timeout=60.0,
             )
             resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
+            data = resp.json()
+            choices = data.get("choices")
+            if not choices or not isinstance(choices, list) or len(choices) == 0:
+                raise RuntimeError(
+                    f"OpenRouter returned no choices for evaluation. Keys: {list(data.keys())}"
+                )
+            content = choices[0].get("message", {}).get("content")
+            if not content:
+                raise RuntimeError(
+                    f"OpenRouter returned empty eval content. "
+                    f"finish_reason: {choices[0].get('finish_reason')}"
+                )
+            raw = content.strip()
             # Strip markdown fences if present
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1] if "\n" in raw else raw
@@ -124,9 +136,12 @@ class Evaluator:
 
             return severity, summary, should_alert
 
-        except Exception as e:
-            logger.warning("LLM evaluation failed, falling back to keyword: %s", e)
+        except json.JSONDecodeError as e:
+            logger.warning("LLM evaluation returned invalid JSON, falling back to keyword: %s", e)
             return self._eval_keyword(report)
+        except Exception as e:
+            logger.error("LLM evaluation failed: %s", e)
+            return Severity.WARNING, f"Evaluation failed ({e}), defaulting to warning", True
 
     def _eval_hybrid(self, report: Report) -> tuple[Severity, str, bool]:
         """Keyword first. If healthy, accept. Otherwise confirm with LLM."""

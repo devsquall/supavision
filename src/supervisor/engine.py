@@ -52,6 +52,11 @@ class Engine:
         self.template_dir = template_dir
         self.model = model
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
+        if not self._api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY environment variable is not set. "
+                "Get your key at https://openrouter.ai/keys"
+            )
         self._evaluator = Evaluator(api_key=self._api_key)
 
     # ── Public API ───────────────────────────────────────────────────
@@ -316,11 +321,6 @@ class Engine:
 
     def _call_llm(self, system_prompt: str, user_message: str) -> str:
         """Call LLM via OpenRouter (OpenAI-compatible endpoint)."""
-        if not self._api_key:
-            raise RuntimeError(
-                "OPENROUTER_API_KEY environment variable is not set. "
-                "Get your key at https://openrouter.ai/keys"
-            )
         response = httpx.post(
             OPENROUTER_URL,
             headers={
@@ -339,7 +339,20 @@ class Engine:
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        choices = data.get("choices")
+        if not choices or not isinstance(choices, list) or len(choices) == 0:
+            raise RuntimeError(
+                f"OpenRouter returned unexpected response: no choices in payload. "
+                f"Model: {self.model}, keys: {list(data.keys())}"
+            )
+        message = choices[0].get("message", {})
+        content = message.get("content")
+        if not content:
+            raise RuntimeError(
+                f"OpenRouter returned empty content. "
+                f"Model: {self.model}, finish_reason: {choices[0].get('finish_reason')}"
+            )
+        return content
 
     def _parse_discovery_response(
         self, response: str
