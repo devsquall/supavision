@@ -261,10 +261,10 @@ def cmd_run_scheduler(args: argparse.Namespace) -> None:
 def cmd_doctor(args: argparse.Namespace) -> None:
     checks: list[dict] = []
 
-    # ANTHROPIC_API_KEY
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
-    has_key = bool(key and not key.startswith("sk-ant-your"))
-    checks.append({"check": "anthropic_api_key", "ok": has_key, "detail": "set" if has_key else "missing"})
+    # OPENROUTER_API_KEY
+    key = os.environ.get("OPENROUTER_API_KEY", "")
+    has_key = bool(key and not key.startswith("sk-or-your"))
+    checks.append({"check": "openrouter_api_key", "ok": has_key, "detail": "set" if has_key else "missing"})
 
     # Template directory
     tdir = Path(getattr(args, "templates", TEMPLATE_DIR_DEFAULT))

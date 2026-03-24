@@ -1,7 +1,7 @@
 """Report evaluator — assigns severity and decides whether to alert.
 
 Three strategies:
-  - LLM: Send the report to Claude with a short evaluation prompt.
+  - LLM: Send the report to an LLM via OpenRouter for evaluation.
   - KEYWORD: Pattern match on report text.
   - HYBRID: Keyword first, LLM for ambiguous cases.
 """
@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 
-import anthropic
+import httpx
 
 from .models import EvalStrategy, Evaluation, Report, Severity
 
 logger = logging.getLogger(__name__)
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Keywords that indicate severity levels
 _CRITICAL_PATTERNS = re.compile(
@@ -48,14 +51,9 @@ Respond with JSON only:
 class Evaluator:
     """Evaluates reports to assign severity and decide on alerts."""
 
-    def __init__(self, client: anthropic.Anthropic | None = None, model: str = "claude-sonnet-4-20250514"):
-        self._client = client
+    def __init__(self, api_key: str | None = None, model: str = "anthropic/claude-haiku-3.5"):
+        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._model = model
-
-    def _get_client(self) -> anthropic.Anthropic:
-        if self._client is None:
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def evaluate(self, report: Report, strategy: EvalStrategy) -> Evaluation:
         """Evaluate a report using the specified strategy."""
@@ -90,19 +88,28 @@ class Evaluator:
         return Severity.HEALTHY, "No concerning patterns detected", False
 
     def _eval_llm(self, report: Report) -> tuple[Severity, str, bool]:
-        """Ask Claude to evaluate the report severity."""
+        """Ask LLM via OpenRouter to evaluate the report severity."""
         try:
-            client = self._get_client()
-            response = client.messages.create(
-                model=self._model,
-                max_tokens=256,
-                system=_EVAL_SYSTEM_PROMPT,
-                messages=[
-                    {"role": "user", "content": f"Evaluate this report:\n\n{report.content[:4000]}"}
-                ],
+            if not self._api_key:
+                raise RuntimeError("OPENROUTER_API_KEY not set")
+            resp = httpx.post(
+                OPENROUTER_URL,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._model,
+                    "messages": [
+                        {"role": "system", "content": _EVAL_SYSTEM_PROMPT},
+                        {"role": "user", "content": f"Evaluate this report:\n\n{report.content[:4000]}"},
+                    ],
+                    "max_tokens": 256,
+                },
+                timeout=60.0,
             )
-
-            raw = response.content[0].text.strip()
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
             # Strip markdown fences if present
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1] if "\n" in raw else raw
