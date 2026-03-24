@@ -51,7 +51,7 @@ Respond with JSON only:
 class Evaluator:
     """Evaluates reports to assign severity and decide on alerts."""
 
-    def __init__(self, api_key: str | None = None, model: str = "anthropic/claude-haiku-3.5"):
+    def __init__(self, api_key: str | None = None, model: str = "anthropic/claude-3.5-haiku"):
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._model = model
 
