@@ -246,4 +246,8 @@ class Run(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None
+    turns: int = 0
+    tool_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
