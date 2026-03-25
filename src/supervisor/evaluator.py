@@ -129,6 +129,12 @@ class Evaluator:
                     raw = raw[:-3]
                 raw = raw.strip()
 
+            # Extract JSON object from response (LLM may include extra text)
+            json_start = raw.find("{")
+            json_end = raw.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                raw = raw[json_start:json_end]
+
             data = json.loads(raw)
             severity = Severity(data.get("severity", "healthy"))
             summary = data.get("summary", "")

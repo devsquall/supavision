@@ -12,6 +12,26 @@ import shutil
 import sys
 from pathlib import Path
 
+
+def _load_dotenv() -> None:
+    """Load .env file if it exists. Simple key=value parser, no dependency."""
+    env_path = Path(".env")
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            if key and key not in os.environ:  # Don't override existing env vars
+                os.environ[key] = value
+
+
+_load_dotenv()
+
 from .db import Store
 from .engine import Engine
 from .models import (
