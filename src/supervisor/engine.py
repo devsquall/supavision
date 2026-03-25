@@ -31,6 +31,7 @@ from .models import (
     Run,
     RunStatus,
     RunType,
+    Severity,
     SystemContext,
 )
 from .templates import (
@@ -187,6 +188,40 @@ class Engine:
             # Evaluate
             evaluation = self._evaluator.evaluate(report, resource.eval_strategy)
             self.store.save_evaluation(evaluation)
+
+            # Discovery drift detection
+            if prev_context and system_context_content:
+                try:
+                    from .discovery_diff import (
+                        compute_diff,
+                        format_drift_summary,
+                        should_alert_on_drift,
+                    )
+
+                    diff = compute_diff(system_context_content, prev_context.content)
+                    if diff.has_changes:
+                        logger.info(
+                            "Discovery drift: resource=%s added=%d removed=%d changed=%d",
+                            resource.name,
+                            diff.total_added,
+                            diff.total_removed,
+                            diff.total_changed,
+                        )
+                        if should_alert_on_drift(diff):
+                            from .notifications import send_alert
+
+                            drift_summary = format_drift_summary(diff, resource.name)
+                            drift_eval = Evaluation(
+                                report_id=report.id,
+                                resource_id=resource_id,
+                                severity=Severity.WARNING,
+                                summary=drift_summary,
+                                should_alert=True,
+                            )
+                            send_alert(resource, report, drift_eval)
+                            logger.info("Drift alert sent: resource=%s", resource.name)
+                except Exception as e:
+                    logger.warning("Drift detection failed (non-fatal): %s", e)
 
             # Update run with usage stats
             run.report_id = report.id
@@ -579,7 +614,8 @@ class Engine:
     def _handle_alert(
         self, resource: Resource, report: Report, evaluation: Evaluation
     ) -> None:
-        """Handle an alert. v1: print to stdout. Future: Slack, webhook, etc."""
+        """Handle an alert: print to stdout + dispatch notifications."""
+        # Stdout alert (always — useful for CLI and pipe-to-log)
         print(f"\n{'='*60}")
         print(f"ALERT: {evaluation.severity.upper()} — {resource.name}")
         print(f"{'='*60}")
@@ -587,3 +623,10 @@ class Engine:
         print(f"Resource: {resource.name} ({resource.resource_type})")
         print(f"Report ID: {report.id}")
         print(f"{'='*60}\n")
+
+        # Dispatch to configured notification channels
+        from .notifications import send_alert
+
+        channels = send_alert(resource, report, evaluation)
+        if channels:
+            logger.info("Alert sent via: %s", ", ".join(channels))

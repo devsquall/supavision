@@ -318,6 +318,111 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+# ── Notification commands ────────────────────────────────────────────
+
+
+def cmd_notify_test(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    resource = store.get_resource(args.resource_id)
+    if not resource:
+        _error(f"Resource {args.resource_id} not found")
+
+    from .models import Evaluation, Report, RunType, Severity
+    from .notifications import send_alert
+
+    test_report = Report(
+        resource_id=resource.id,
+        run_type=RunType.HEALTH_CHECK,
+        content="This is a test notification from Supervisor. If you see this, notifications are working.",
+    )
+    test_eval = Evaluation(
+        report_id=test_report.id,
+        resource_id=resource.id,
+        severity=Severity(args.severity),
+        summary="Test notification — verifying webhook configuration",
+        should_alert=True,
+    )
+
+    channels = send_alert(resource, test_report, test_eval, skip_dedup=True)
+    if channels:
+        _json_out({"ok": True, "command": "notify_test", "channels": channels})
+    else:
+        _error(
+            "No notification channels configured or all failed. "
+            "Set slack_webhook in resource config or SLACK_WEBHOOK env var."
+        )
+
+
+def cmd_notify_configure(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    resource = store.get_resource(args.resource_id)
+    if not resource:
+        _error(f"Resource {args.resource_id} not found")
+
+    updated = []
+
+    if args.slack_webhook:
+        resource.config["slack_webhook"] = args.slack_webhook
+        updated.append("slack_webhook")
+
+    if args.webhook_url:
+        from .notifications import validate_webhook_url
+
+        try:
+            validate_webhook_url(args.webhook_url)
+        except ValueError as e:
+            _error(f"Invalid webhook URL: {e}")
+        resource.config["webhook_url"] = args.webhook_url
+        updated.append("webhook_url")
+
+    if args.clear:
+        resource.config.pop("slack_webhook", None)
+        resource.config.pop("webhook_url", None)
+        resource.config.pop("_last_alert_key", None)
+        updated.append("cleared_all")
+
+    if not updated:
+        _error("Nothing to update. Use --slack-webhook, --webhook-url, or --clear.")
+
+    store.save_resource(resource)
+    _json_out({
+        "ok": True,
+        "command": "notify_configure",
+        "resource_id": resource.id,
+        "updated": updated,
+    })
+
+
+def cmd_context_diff(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    history = store.get_context_history(args.resource_id, limit=2)
+    if len(history) < 2:
+        _error(f"Need at least 2 context versions to diff (found {len(history)})")
+
+    from .discovery_diff import compute_diff
+
+    current, previous = history[0], history[1]
+    diff = compute_diff(current.content, previous.content)
+
+    if diff.has_changes:
+        print(diff.summary(), file=sys.stderr)
+    else:
+        print("No changes detected between versions.", file=sys.stderr)
+
+    _json_out({
+        "ok": True,
+        "command": "context_diff",
+        "resource_id": args.resource_id,
+        "current_version": current.version,
+        "previous_version": previous.version,
+        "has_changes": diff.has_changes,
+        "is_significant": diff.is_significant,
+        "added": diff.total_added,
+        "removed": diff.total_removed,
+        "changed": diff.total_changed,
+    })
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 
 
@@ -408,6 +513,25 @@ def main() -> None:
 
     # doctor
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
+
+    # notify-test
+    p = sub.add_parser("notify-test")
+    p.add_argument("resource_id")
+    p.add_argument("--severity", choices=["healthy", "warning", "critical"], default="warning")
+    p.set_defaults(func=cmd_notify_test)
+
+    # notify-configure
+    p = sub.add_parser("notify-configure")
+    p.add_argument("resource_id")
+    p.add_argument("--slack-webhook", default="")
+    p.add_argument("--webhook-url", default="")
+    p.add_argument("--clear", action="store_true", help="Remove all notification config")
+    p.set_defaults(func=cmd_notify_configure)
+
+    # context-diff
+    p = sub.add_parser("context-diff")
+    p.add_argument("resource_id")
+    p.set_defaults(func=cmd_context_diff)
 
     args = parser.parse_args()
     try:
