@@ -343,7 +343,11 @@ def cmd_notify_test(args: argparse.Namespace) -> None:
         should_alert=True,
     )
 
-    channels = send_alert(resource, test_report, test_eval, skip_dedup=True)
+    import asyncio
+
+    channels, _ = asyncio.run(
+        send_alert(resource, test_report, test_eval, skip_dedup=True)
+    )
     if channels:
         _json_out({"ok": True, "command": "notify_test", "channels": channels})
     else:
@@ -421,6 +425,37 @@ def cmd_context_diff(args: argparse.Namespace) -> None:
         "removed": diff.total_removed,
         "changed": diff.total_changed,
     })
+
+
+def cmd_purge(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    days = args.days
+    if args.dry_run:
+        # Count what would be deleted
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with store._lock:
+            reports_count = store._conn.execute(
+                "SELECT COUNT(*) FROM reports WHERE created_at < ?", (cutoff,)
+            ).fetchone()[0]
+            runs_count = store._conn.execute(
+                "SELECT COUNT(*) FROM runs WHERE status IN ('completed', 'failed') AND created_at < ?",
+                (cutoff,),
+            ).fetchone()[0]
+        print(f"Dry run: would delete {reports_count} reports and {runs_count} runs older than {days} days", file=sys.stderr)
+        _json_out({
+            "ok": True, "command": "purge", "dry_run": True,
+            "reports": reports_count, "runs": runs_count, "days": days,
+        })
+    else:
+        reports_deleted = store.purge_old_reports(days)
+        runs_deleted = store.purge_old_runs(days)
+        print(f"Purged {reports_deleted} reports and {runs_deleted} runs older than {days} days", file=sys.stderr)
+        _json_out({
+            "ok": True, "command": "purge", "dry_run": False,
+            "reports_deleted": reports_deleted, "runs_deleted": runs_deleted, "days": days,
+        })
 
 
 # ── Main ─────────────────────────────────────────────────────────────
@@ -532,6 +567,12 @@ def main() -> None:
     p = sub.add_parser("context-diff")
     p.add_argument("resource_id")
     p.set_defaults(func=cmd_context_diff)
+
+    # purge
+    p = sub.add_parser("purge", help="Delete old reports and runs")
+    p.add_argument("--days", type=int, default=90, help="Delete data older than N days (default: 90)")
+    p.add_argument("--dry-run", action="store_true", help="Show what would be deleted without deleting")
+    p.set_defaults(func=cmd_purge)
 
     args = parser.parse_args()
     try:

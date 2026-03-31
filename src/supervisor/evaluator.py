@@ -10,16 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 
 import httpx
 
+from .config import EVAL_MODEL, OPENROUTER_URL
 from .models import EvalStrategy, Evaluation, Report, Severity
 
 logger = logging.getLogger(__name__)
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Keywords that indicate severity levels
 _CRITICAL_PATTERNS = re.compile(
@@ -51,8 +49,10 @@ Respond with JSON only:
 class Evaluator:
     """Evaluates reports to assign severity and decide on alerts."""
 
-    def __init__(self, api_key: str | None = None, model: str = "anthropic/claude-3.5-haiku"):
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
+    def __init__(self, api_key: str | None = None, model: str = EVAL_MODEL):
+        from .config import OPENROUTER_API_KEY
+
+        self._api_key = api_key or OPENROUTER_API_KEY
         self._model = model
 
     def evaluate(self, report: Report, strategy: EvalStrategy) -> Evaluation:

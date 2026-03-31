@@ -18,13 +18,12 @@ from pathlib import Path
 
 from croniter import croniter
 
+from .config import CHECK_INTERVAL_SECONDS
 from .db import Store
 from .engine import Engine
-from .models import Resource, RunType
+from .models import Resource, RunStatus, RunType
 
 logger = logging.getLogger(__name__)
-
-CHECK_INTERVAL_SECONDS = 60
 LOCK_FILE = ".supervisor/scheduler.lock"
 
 
@@ -65,6 +64,8 @@ class Scheduler:
             return
 
         logger.info("Scheduler started. Checking every %ds for due jobs.", CHECK_INTERVAL_SECONDS)
+
+        self._recover_stale_runs()
 
         while self._running:
             try:
@@ -110,6 +111,30 @@ class Scheduler:
                     due.append((resource, run_type))
 
         return due
+
+    _STALE_RUN_HOURS = 4  # Runs older than this are considered stale
+
+    def _recover_stale_runs(self) -> None:
+        """On startup, mark any RUNNING runs older than 4 hours as FAILED.
+
+        File locks (flock) are released by the OS on process death, so no lock
+        cleanup is needed. This only fixes cosmetic database records.
+        """
+        try:
+            stale_runs = self.store.get_stale_runs(hours=self._STALE_RUN_HOURS)
+            for run in stale_runs:
+                run.status = RunStatus.FAILED
+                run.error = f"Recovered by scheduler: stuck in RUNNING for >{self._STALE_RUN_HOURS}h"
+                run.completed_at = datetime.now(timezone.utc)
+                self.store.save_run(run)
+                logger.warning(
+                    "Recovered stale run: id=%s resource=%s started=%s",
+                    run.id, run.resource_id, run.started_at,
+                )
+            if stale_runs:
+                logger.info("Recovered %d stale run(s)", len(stale_runs))
+        except Exception as e:
+            logger.error("Stale run recovery failed (non-fatal): %s", e)
 
     def _execute_run(self, resource: Resource, run_type: RunType) -> None:
         """Execute a single scheduled run."""

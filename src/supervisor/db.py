@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .models import (
@@ -330,3 +331,48 @@ class Store:
         if row is None:
             return None
         return Run.model_validate(json.loads(row[0]))
+
+    def get_stale_runs(self, hours: int = 4) -> list[Run]:
+        """Get runs stuck in RUNNING status older than `hours`."""
+        rows = self._execute(
+            "SELECT data FROM runs WHERE status = ?",
+            (str(RunStatus.RUNNING),),
+        ).fetchall()
+        stale = []
+        for row in rows:
+            run = Run.model_validate(json.loads(row[0]))
+            if run.started_at:
+                age_hours = (
+                    datetime.now(timezone.utc) - run.started_at
+                ).total_seconds() / 3600
+                if age_hours > hours:
+                    stale.append(run)
+        return stale
+
+    def purge_old_reports(self, days: int = 90) -> int:
+        """Delete reports and their evaluations older than `days`. Returns count."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM evaluations WHERE report_id IN "
+                "(SELECT id FROM reports WHERE created_at < ?)",
+                (cutoff,),
+            )
+            cursor = self._conn.execute(
+                "DELETE FROM reports WHERE created_at < ?", (cutoff,)
+            )
+            count = cursor.rowcount
+            self._conn.commit()
+        return count
+
+    def purge_old_runs(self, days: int = 90) -> int:
+        """Delete completed/failed runs older than `days`. Returns count."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM runs WHERE status IN (?, ?) AND created_at < ?",
+                (str(RunStatus.COMPLETED), str(RunStatus.FAILED), cutoff),
+            )
+            count = cursor.rowcount
+            self._conn.commit()
+        return count

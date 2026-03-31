@@ -1,11 +1,12 @@
 """Notification dispatch for Supervisor alerts.
 
 Supports Slack (Block Kit) and generic webhook channels.
-Includes SSRF protection, retry with backoff, and dedup.
+Includes SSRF protection, async retry with backoff, and dedup with TTL.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import ipaddress
 import logging
@@ -40,6 +41,7 @@ _WEBHOOK_TIMEOUT = 10.0
 _MAX_RETRIES = 2
 _RETRY_DELAYS = [1.0, 3.0]
 _DEDUP_MAX_SIZE = 500
+_DEDUP_TTL_SECONDS = 86400  # 24 hours — persistent issues re-alert daily
 
 
 def _is_blocked_ip(ip_str: str) -> bool:
@@ -86,24 +88,31 @@ def validate_webhook_url(url: str) -> str:
     return url
 
 
-# ── Dedup ────────────────────────────────────────────────────────
+# ── Dedup with TTL ──────────────────────────────────────────────
 
 
 class _DedupCache:
-    """Bounded LRU set for dedup keys."""
+    """Bounded LRU set for dedup keys with TTL expiry."""
 
-    def __init__(self, maxsize: int = _DEDUP_MAX_SIZE):
-        self._cache: OrderedDict[str, None] = OrderedDict()
+    def __init__(
+        self, maxsize: int = _DEDUP_MAX_SIZE, ttl: float = _DEDUP_TTL_SECONDS
+    ):
+        self._cache: OrderedDict[str, float] = OrderedDict()  # key → timestamp
         self._maxsize = maxsize
+        self._ttl = ttl
 
     def has(self, key: str) -> bool:
         if key in self._cache:
-            self._cache.move_to_end(key)
-            return True
+            ts = self._cache[key]
+            if time.monotonic() - ts < self._ttl:
+                self._cache.move_to_end(key)
+                return True
+            # Expired — remove
+            del self._cache[key]
         return False
 
     def add(self, key: str) -> None:
-        self._cache[key] = None
+        self._cache[key] = time.monotonic()
         self._cache.move_to_end(key)
         while len(self._cache) > self._maxsize:
             self._cache.popitem(last=False)
@@ -112,46 +121,55 @@ class _DedupCache:
 _dedup = _DedupCache()
 
 
-def _dedup_key(resource: Resource, report: Report, evaluation: Evaluation) -> str:
-    raw = f"{resource.id}:{report.id}:{evaluation.severity}"
+def _dedup_key(resource: Resource, evaluation: Evaluation) -> str:
+    """Build dedup key from resource + severity + summary content hash.
+
+    Uses summary content (not report_id) so the same recurring issue
+    about the same resource deduplicates across runs.
+    """
+    summary_hash = hashlib.sha256(
+        (evaluation.summary or "").encode()
+    ).hexdigest()[:8]
+    raw = f"{resource.id}:{evaluation.severity}:{summary_hash}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-# ── HTTP with retry ──────────────────────────────────────────────
+# ── Async HTTP with retry ───────────────────────────────────────
 
 
-def _post_with_retry(url: str, json_payload: dict) -> bool:
-    """POST JSON with retry on transient failures. Returns True on success."""
-    for attempt in range(_MAX_RETRIES + 1):
-        try:
-            resp = httpx.post(
-                url, json=json_payload, timeout=_WEBHOOK_TIMEOUT,
-                headers={"Content-Type": "application/json"},
-            )
-            if resp.status_code < 400:
-                return True
-            if 400 <= resp.status_code < 500:
-                logger.warning(
-                    "Webhook %s returned %d (permanent), not retrying",
-                    url, resp.status_code,
+async def _post_with_retry(url: str, json_payload: dict) -> bool:
+    """POST JSON with async retry on transient failures. Returns True on success."""
+    async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT) as client:
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                resp = await client.post(
+                    url, json=json_payload,
+                    headers={"Content-Type": "application/json"},
                 )
+                if resp.status_code < 400:
+                    return True
+                if 400 <= resp.status_code < 500:
+                    logger.warning(
+                        "Webhook %s returned %d (permanent), not retrying",
+                        url, resp.status_code,
+                    )
+                    return False
+                # 5xx — transient, retry
+                logger.warning(
+                    "Webhook %s returned %d (attempt %d/%d)",
+                    url, resp.status_code, attempt + 1, _MAX_RETRIES + 1,
+                )
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
+                logger.warning(
+                    "Webhook %s failed (attempt %d/%d): %s",
+                    url, attempt + 1, _MAX_RETRIES + 1, e,
+                )
+            except Exception as e:
+                logger.warning("Webhook %s unexpected error: %s", url, e)
                 return False
-            # 5xx — transient, retry
-            logger.warning(
-                "Webhook %s returned %d (attempt %d/%d)",
-                url, resp.status_code, attempt + 1, _MAX_RETRIES + 1,
-            )
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
-            logger.warning(
-                "Webhook %s failed (attempt %d/%d): %s",
-                url, attempt + 1, _MAX_RETRIES + 1, e,
-            )
-        except Exception as e:
-            logger.warning("Webhook %s unexpected error: %s", url, e)
-            return False
 
-        if attempt < _MAX_RETRIES:
-            time.sleep(_RETRY_DELAYS[attempt])
+            if attempt < _MAX_RETRIES:
+                await asyncio.sleep(_RETRY_DELAYS[attempt])
 
     return False
 
@@ -161,7 +179,7 @@ def _post_with_retry(url: str, json_payload: dict) -> bool:
 
 class NotificationChannel(ABC):
     @abstractmethod
-    def send(
+    async def send(
         self, resource: Resource, report: Report, evaluation: Evaluation
     ) -> bool:
         """Send notification. Returns True on success. Never raises."""
@@ -186,12 +204,12 @@ class SlackChannel(NotificationChannel):
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
 
-    def send(
+    async def send(
         self, resource: Resource, report: Report, evaluation: Evaluation
     ) -> bool:
         try:
             payload = self._build_payload(resource, report, evaluation)
-            return _post_with_retry(self.webhook_url, payload)
+            return await _post_with_retry(self.webhook_url, payload)
         except Exception as e:
             logger.warning("Slack notification failed: %s", e)
             return False
@@ -264,7 +282,7 @@ class WebhookChannel(NotificationChannel):
     def __init__(self, webhook_url: str):
         self.webhook_url = validate_webhook_url(webhook_url)
 
-    def send(
+    async def send(
         self, resource: Resource, report: Report, evaluation: Evaluation
     ) -> bool:
         try:
@@ -279,7 +297,7 @@ class WebhookChannel(NotificationChannel):
                 "report_content": (report.content or "")[:5000],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            return _post_with_retry(self.webhook_url, payload)
+            return await _post_with_retry(self.webhook_url, payload)
         except ValueError as e:
             logger.warning("Webhook SSRF blocked: %s", e)
             return False
@@ -291,34 +309,35 @@ class WebhookChannel(NotificationChannel):
 # ── Dispatch Helper ─────────────────────────────────────────────
 
 
-def send_alert(
+async def send_alert(
     resource: Resource,
     report: Report,
     evaluation: Evaluation,
     *,
     skip_dedup: bool = False,
-) -> list[str]:
+) -> tuple[list[str], str | None]:
     """Dispatch alert to all configured notification channels.
 
     Resolution order:
-    1. resource.config["slack_webhook"] → SlackChannel
-    2. os.environ["SLACK_WEBHOOK"] fallback → SlackChannel
-    3. resource.config["webhook_url"] → WebhookChannel
+    1. resource.config["slack_webhook"] -> SlackChannel
+    2. os.environ["SLACK_WEBHOOK"] fallback -> SlackChannel
+    3. resource.config["webhook_url"] -> WebhookChannel
 
-    Returns list of channel names that succeeded. Never raises.
+    Returns (channel_names, dedup_key). Caller is responsible for
+    persisting dedup_key to the resource if needed. Never raises.
     """
     # Dedup check
+    key = _dedup_key(resource, evaluation)
     if not skip_dedup:
-        key = _dedup_key(resource, report, evaluation)
-        # Check in-memory cache
+        # Check in-memory cache (with TTL)
         if _dedup.has(key):
             logger.debug("Alert deduped (in-memory): %s", key)
-            return []
-        # Check persisted key
+            return [], None
+        # Check persisted key (for cross-restart dedup)
         last_key = resource.config.get("_last_alert_key", "")
         if last_key == key:
             logger.debug("Alert deduped (persisted): %s", key)
-            return []
+            return [], None
 
     succeeded: list[str] = []
     sent_urls: set[str] = set()
@@ -332,7 +351,7 @@ def send_alert(
     if slack_url:
         sent_urls.add(slack_url)
         channel = SlackChannel(slack_url)
-        if channel.send(resource, report, evaluation):
+        if await channel.send(resource, report, evaluation):
             succeeded.append("slack")
         else:
             logger.warning("Slack notification failed for %s", resource.name)
@@ -342,17 +361,15 @@ def send_alert(
     if webhook_url and webhook_url not in sent_urls:
         try:
             channel = WebhookChannel(webhook_url)
-            if channel.send(resource, report, evaluation):
+            if await channel.send(resource, report, evaluation):
                 succeeded.append("webhook")
             else:
                 logger.warning("Webhook notification failed for %s", resource.name)
         except ValueError as e:
             logger.warning("Webhook URL rejected (SSRF): %s", e)
 
-    # Update dedup tracking
+    # Update in-memory dedup tracking
     if succeeded and not skip_dedup:
-        key = _dedup_key(resource, report, evaluation)
         _dedup.add(key)
-        resource.config["_last_alert_key"] = key
 
-    return succeeded
+    return succeeded, key if succeeded else None

@@ -14,6 +14,7 @@ import asyncio
 import fcntl
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,9 +45,9 @@ from .tools import TOOL_DEFINITIONS, ToolDispatcher
 
 logger = logging.getLogger(__name__)
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "anthropic/claude-sonnet-4"
-MAX_TURNS = 50
+from .config import DEFAULT_MODEL, OPENROUTER_API_KEY, OPENROUTER_URL
+
+MAX_TURNS = 50  # Safety limit — not configurable
 LOCK_DIR = Path(".supervisor/locks")
 
 
@@ -65,7 +66,7 @@ class Engine:
         self.template_dir = template_dir
         self.model = model
         self.max_turns = max_turns
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
+        self._api_key = api_key or OPENROUTER_API_KEY
         if not self._api_key:
             raise RuntimeError(
                 "OPENROUTER_API_KEY environment variable is not set. "
@@ -208,8 +209,6 @@ class Engine:
                             diff.total_changed,
                         )
                         if should_alert_on_drift(diff):
-                            from .notifications import send_alert
-
                             drift_summary = format_drift_summary(diff, resource.name)
                             drift_eval = Evaluation(
                                 report_id=report.id,
@@ -218,7 +217,7 @@ class Engine:
                                 summary=drift_summary,
                                 should_alert=True,
                             )
-                            send_alert(resource, report, drift_eval)
+                            await self._handle_alert(resource, report, drift_eval)
                             logger.info("Drift alert sent: resource=%s", resource.name)
                 except Exception as e:
                     logger.warning("Drift detection failed (non-fatal): %s", e)
@@ -337,7 +336,7 @@ class Engine:
 
             # Alert decision
             if evaluation.should_alert:
-                self._handle_alert(resource, report, evaluation)
+                await self._handle_alert(resource, report, evaluation)
 
             # Update run with usage stats
             run.report_id = report.id
@@ -476,10 +475,13 @@ class Engine:
             "max_turns_reached": True,
         }
 
+    _OR_MAX_RETRIES = 3
+    _OR_RETRY_DELAYS = [2.0, 4.0, 8.0]
+
     def _call_openrouter(
         self, messages: list[dict], tools: list[dict]
     ) -> dict:
-        """Make a single call to OpenRouter with optional tools."""
+        """Make a single call to OpenRouter with retry on transient failures."""
         payload: dict = {
             "model": self.model,
             "messages": messages,
@@ -489,26 +491,65 @@ class Engine:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        response = httpx.post(
-            OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=120.0,
-        )
-        response.raise_for_status()
-        data = response.json()
+        last_error: Exception | None = None
+        for attempt in range(self._OR_MAX_RETRIES + 1):
+            try:
+                response = httpx.post(
+                    OPENROUTER_URL,
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=120.0,
+                )
+                if response.status_code == 429 or response.status_code >= 500:
+                    # Transient — retry with backoff
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after and attempt < self._OR_MAX_RETRIES:
+                        try:
+                            delay = min(float(retry_after), 30.0)
+                        except ValueError:
+                            delay = self._OR_RETRY_DELAYS[attempt]
+                    elif attempt < self._OR_MAX_RETRIES:
+                        delay = self._OR_RETRY_DELAYS[attempt]
+                    else:
+                        response.raise_for_status()  # final attempt, raise
 
-        choices = data.get("choices")
-        if not choices or not isinstance(choices, list) or len(choices) == 0:
-            raise RuntimeError(
-                f"OpenRouter returned unexpected response: no choices in payload. "
-                f"Model: {self.model}, keys: {list(data.keys())}"
-            )
+                    logger.warning(
+                        "OpenRouter %d (attempt %d/%d), retrying in %.0fs",
+                        response.status_code, attempt + 1,
+                        self._OR_MAX_RETRIES + 1, delay,
+                    )
+                    time.sleep(delay)
+                    continue
 
-        return data
+                response.raise_for_status()
+                data = response.json()
+
+                choices = data.get("choices")
+                if not choices or not isinstance(choices, list) or len(choices) == 0:
+                    raise RuntimeError(
+                        f"OpenRouter returned unexpected response: no choices in payload. "
+                        f"Model: {self.model}, keys: {list(data.keys())}"
+                    )
+
+                return data
+
+            except httpx.TimeoutException as e:
+                last_error = e
+                if attempt < self._OR_MAX_RETRIES:
+                    delay = self._OR_RETRY_DELAYS[attempt]
+                    logger.warning(
+                        "OpenRouter timeout (attempt %d/%d), retrying in %.0fs",
+                        attempt + 1, self._OR_MAX_RETRIES + 1, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+
+        # Should not reach here, but just in case
+        raise last_error or RuntimeError("OpenRouter call failed after retries")
 
     # ── Resource lock ────────────────────────────────────────────────
 
@@ -611,7 +652,7 @@ class Engine:
 
         return system_context, checklist_items
 
-    def _handle_alert(
+    async def _handle_alert(
         self, resource: Resource, report: Report, evaluation: Evaluation
     ) -> None:
         """Handle an alert: print to stdout + dispatch notifications."""
@@ -627,6 +668,10 @@ class Engine:
         # Dispatch to configured notification channels
         from .notifications import send_alert
 
-        channels = send_alert(resource, report, evaluation)
+        channels, dedup_key = await send_alert(resource, report, evaluation)
         if channels:
             logger.info("Alert sent via: %s", ", ".join(channels))
+            # Persist dedup key so it survives process restarts
+            if dedup_key:
+                resource.config["_last_alert_key"] = dedup_key
+                self.store.save_resource(resource)
