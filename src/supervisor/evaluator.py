@@ -1,70 +1,107 @@
 """Report evaluator — assigns severity and decides whether to alert.
 
-Three strategies:
-  - LLM: Send the report to an LLM via OpenRouter for evaluation.
-  - KEYWORD: Pattern match on report text.
-  - HYBRID: Keyword first, LLM for ambiguous cases.
+Rule-based evaluation: parses report structure and metrics to determine
+severity without any external LLM calls. Zero additional cost.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 
-import httpx
-
-from .config import EVAL_MODEL, OPENROUTER_URL
 from .models import EvalStrategy, Evaluation, Report, Severity
 
 logger = logging.getLogger(__name__)
 
-# Keywords that indicate severity levels
-_CRITICAL_PATTERNS = re.compile(
-    r"\b(critical|failure|down|outage|data loss|breach|compromised|emergency)\b",
-    re.IGNORECASE,
-)
-_WARNING_PATTERNS = re.compile(
-    r"\b(warning|degraded|drift|anomaly|elevated|unusual|risk|concern)\b",
-    re.IGNORECASE,
-)
+# ── Pattern tiers ───────────────────────────────────────────────
 
-_EVAL_SYSTEM_PROMPT = """\
-You are evaluating an infrastructure monitoring report. Assign a severity level.
+# Critical: something is actively broken or dangerous
+_CRITICAL_PATTERNS = [
+    re.compile(r"\b(critical|failure|down|outage|data.?loss|breach|compromised|emergency)\b", re.I),
+    re.compile(r"\b(not running|service.+failed|connection refused|permission denied)\b", re.I),
+    re.compile(r"\b(disk|storage).{0,30}(100|9[5-9])%", re.I),
+    re.compile(r"\bstatus:\s*\*?\*?critical\*?\*?", re.I),
+    re.compile(r"\b(cannot|unable to|failed to)\s+(connect|start|reach|resolve)\b", re.I),
+    re.compile(r"\b(OOM|out of memory|killed by signal|segfault|core dump)\b", re.I),
+    re.compile(r"\bCRITICAL\b"),  # Explicit status marker (case-sensitive)
+]
 
-Rules:
-- "critical": something is broken, actively losing data, or a security breach is in progress
-- "warning": something is degraded, drifted from baseline, or at risk of failure
-- "healthy": everything is operating as expected
+# Warning: something is degraded or at risk
+_WARNING_PATTERNS = [
+    re.compile(r"\b(warning|degraded|drift|anomaly|elevated|unusual|risk|concern)\b", re.I),
+    re.compile(r"\b(high|excessive)\s+(cpu|memory|load|swap|usage)\b", re.I),
+    re.compile(r"\b(disk|storage).{0,30}(8[0-9]|9[0-4])%", re.I),
+    re.compile(r"\b(restarted?|restart count).{0,20}\d{2,}", re.I),  # 10+ restarts
+    re.compile(r"\b(slow|timeout|latency|backlog|queue)\b", re.I),
+    re.compile(r"\bstatus:\s*\*?\*?warning\*?\*?", re.I),
+    re.compile(r"\b(deprecated|expir|stale|outdated|end.of.life)\b", re.I),
+    re.compile(r"\bWARNING\b"),  # Explicit status marker (case-sensitive)
+]
 
-- should_alert is true for critical always
-- should_alert is true for warning only if the issue is new or worsening
-- should_alert is false for healthy
+# Healthy indicators (used to boost confidence in healthy verdict)
+_HEALTHY_PATTERNS = [
+    re.compile(r"\b(healthy|normal|stable|operational|running|active)\b", re.I),
+    re.compile(r"\bstatus:\s*\*?\*?healthy\*?\*?", re.I),
+    re.compile(r"\bno\s+(issues?|errors?|warnings?|problems?)\b", re.I),
+    re.compile(r"\ball\s+(services?|checks?|systems?).{0,20}(pass|ok|running|healthy)\b", re.I),
+]
 
-Respond with JSON only:
-{"severity": "healthy" | "warning" | "critical", "summary": "one sentence", "should_alert": true | false}
-"""
+
+def _extract_status_line(content: str) -> str | None:
+    """Extract explicit status line from structured report (e.g., '## Status: **CRITICAL**')."""
+    match = re.search(
+        r"(?:^|\n)\s*(?:##?\s*)?(?:\*\*)?status(?:\*\*)?:\s*(?:\*\*)?(\w+)(?:\*\*)?",
+        content, re.I,
+    )
+    return match.group(1).lower() if match else None
+
+
+def _count_matches(content: str, patterns: list[re.Pattern]) -> list[str]:
+    """Return list of unique matched pattern descriptions."""
+    matches = []
+    for pattern in patterns:
+        found = pattern.search(content)
+        if found:
+            matches.append(found.group(0).strip())
+    return matches
+
+
+def _build_summary(severity: Severity, critical_matches: list[str],
+                   warning_matches: list[str], explicit_status: str | None) -> str:
+    """Build a concise, specific summary from matched patterns."""
+    if explicit_status:
+        prefix = f"Report status: {explicit_status}."
+    else:
+        prefix = ""
+
+    if severity == Severity.CRITICAL:
+        details = ", ".join(critical_matches[:3])
+        summary = f"Critical issues detected: {details}"
+    elif severity == Severity.WARNING:
+        details = ", ".join(warning_matches[:3])
+        summary = f"Warning indicators: {details}"
+    else:
+        summary = "All checks passed — no issues detected"
+
+    if prefix and severity != Severity.HEALTHY:
+        return f"{prefix} {summary}"
+    return summary
 
 
 class Evaluator:
-    """Evaluates reports to assign severity and decide on alerts."""
+    """Rule-based report evaluator. No external API calls — zero additional cost."""
 
-    def __init__(self, api_key: str | None = None, model: str = EVAL_MODEL):
-        from .config import OPENROUTER_API_KEY
+    def __init__(self, **kwargs):
+        # Accept but ignore api_key/model params for backward compatibility
+        pass
 
-        self._api_key = api_key or OPENROUTER_API_KEY
-        self._model = model
+    def evaluate(self, report: Report, strategy: EvalStrategy = EvalStrategy.KEYWORD) -> Evaluation:
+        """Evaluate a report using rule-based analysis.
 
-    def evaluate(self, report: Report, strategy: EvalStrategy) -> Evaluation:
-        """Evaluate a report using the specified strategy."""
-        if strategy == EvalStrategy.KEYWORD:
-            severity, summary, should_alert = self._eval_keyword(report)
-        elif strategy == EvalStrategy.LLM:
-            severity, summary, should_alert = self._eval_llm(report)
-        elif strategy == EvalStrategy.HYBRID:
-            severity, summary, should_alert = self._eval_hybrid(report)
-        else:
-            severity, summary, should_alert = self._eval_keyword(report)
+        Strategy parameter is accepted for API compatibility but all strategies
+        now use the same rule-based approach (no LLM calls).
+        """
+        severity, summary, should_alert = self._eval_rules(report)
 
         return Evaluation(
             report_id=report.id,
@@ -72,89 +109,50 @@ class Evaluator:
             severity=severity,
             summary=summary,
             should_alert=should_alert,
-            strategy_used=strategy,
+            strategy_used=EvalStrategy.KEYWORD,
         )
 
-    def _eval_keyword(self, report: Report) -> tuple[Severity, str, bool]:
-        """Simple keyword matching on report text."""
-        content = report.content
+    def _eval_rules(self, report: Report) -> tuple[Severity, str, bool]:
+        """Smart rule-based evaluation.
 
-        if _CRITICAL_PATTERNS.search(content):
-            return Severity.CRITICAL, "Critical keywords detected in report", True
+        Decision hierarchy:
+        1. Explicit status line in report (## Status: CRITICAL) takes priority
+        2. Pattern matching on content with tiered severity
+        3. Critical + Warning counts determine final severity
+        """
+        content = report.content or ""
 
-        if _WARNING_PATTERNS.search(content):
-            return Severity.WARNING, "Warning indicators found in report", False
+        # 1. Check for explicit status line (most reliable)
+        explicit_status = _extract_status_line(content)
+        if explicit_status in ("critical", "crit"):
+            critical_matches = _count_matches(content, _CRITICAL_PATTERNS) or ["explicit critical status"]
+            return Severity.CRITICAL, _build_summary(Severity.CRITICAL, critical_matches, [], explicit_status), True
+        if explicit_status in ("warning", "warn"):
+            warning_matches = _count_matches(content, _WARNING_PATTERNS) or ["explicit warning status"]
+            return Severity.WARNING, _build_summary(Severity.WARNING, [], warning_matches, explicit_status), True
+        if explicit_status in ("healthy", "ok", "normal", "good"):
+            return Severity.HEALTHY, _build_summary(Severity.HEALTHY, [], [], explicit_status), False
 
-        return Severity.HEALTHY, "No concerning patterns detected", False
+        # 2. Pattern matching
+        critical_matches = _count_matches(content, _CRITICAL_PATTERNS)
+        warning_matches = _count_matches(content, _WARNING_PATTERNS)
+        healthy_matches = _count_matches(content, _HEALTHY_PATTERNS)
 
-    def _eval_llm(self, report: Report) -> tuple[Severity, str, bool]:
-        """Ask LLM via OpenRouter to evaluate the report severity."""
-        try:
-            if not self._api_key:
-                raise RuntimeError("OPENROUTER_API_KEY not set")
-            resp = httpx.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": _EVAL_SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Evaluate this report:\n\n{report.content[:4000]}"},
-                    ],
-                    "max_tokens": 256,
-                },
-                timeout=60.0,
+        # 3. Decision logic
+        if critical_matches:
+            return (
+                Severity.CRITICAL,
+                _build_summary(Severity.CRITICAL, critical_matches, warning_matches, None),
+                True,  # Always alert on critical
             )
-            resp.raise_for_status()
-            data = resp.json()
-            choices = data.get("choices")
-            if not choices or not isinstance(choices, list) or len(choices) == 0:
-                raise RuntimeError(
-                    f"OpenRouter returned no choices for evaluation. Keys: {list(data.keys())}"
-                )
-            content = choices[0].get("message", {}).get("content")
-            if not content:
-                raise RuntimeError(
-                    f"OpenRouter returned empty eval content. "
-                    f"finish_reason: {choices[0].get('finish_reason')}"
-                )
-            raw = content.strip()
-            # Strip markdown fences if present
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                if raw.endswith("```"):
-                    raw = raw[:-3]
-                raw = raw.strip()
 
-            # Extract JSON object from response (LLM may include extra text)
-            json_start = raw.find("{")
-            json_end = raw.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                raw = raw[json_start:json_end]
+        if warning_matches:
+            # Only alert if multiple warning signals or no healthy signals
+            should_alert = len(warning_matches) >= 2 or not healthy_matches
+            return (
+                Severity.WARNING,
+                _build_summary(Severity.WARNING, [], warning_matches, None),
+                should_alert,
+            )
 
-            data = json.loads(raw)
-            severity = Severity(data.get("severity", "healthy"))
-            summary = data.get("summary", "")
-            should_alert = data.get("should_alert", False)
-
-            return severity, summary, should_alert
-
-        except json.JSONDecodeError as e:
-            logger.warning("LLM evaluation returned invalid JSON, falling back to keyword: %s", e)
-            return self._eval_keyword(report)
-        except Exception as e:
-            logger.error("LLM evaluation failed: %s", e)
-            return Severity.WARNING, f"Evaluation failed ({e}), defaulting to warning", True
-
-    def _eval_hybrid(self, report: Report) -> tuple[Severity, str, bool]:
-        """Keyword first. If healthy, accept. Otherwise confirm with LLM."""
-        severity, summary, should_alert = self._eval_keyword(report)
-
-        if severity == Severity.HEALTHY:
-            return severity, summary, should_alert
-
-        # Keyword found something — confirm with LLM
-        return self._eval_llm(report)
+        return Severity.HEALTHY, _build_summary(Severity.HEALTHY, [], [], None), False

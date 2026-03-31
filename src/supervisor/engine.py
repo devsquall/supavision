@@ -72,7 +72,7 @@ class Engine:
                 "OPENROUTER_API_KEY environment variable is not set. "
                 "Get your key at https://openrouter.ai/keys"
             )
-        self._evaluator = Evaluator(api_key=self._api_key)
+        self._evaluator = Evaluator()
 
     # ── Public API ───────────────────────────────────────────────────
 
