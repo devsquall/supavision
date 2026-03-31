@@ -7,3 +7,6 @@ dist/
 build/
 .venv/
 .review-loop/
+.coverage
+.pytest_cache/
+SUPERVISOR_NEXT_DIRECTION.md
