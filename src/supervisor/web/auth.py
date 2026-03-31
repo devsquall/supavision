@@ -6,7 +6,7 @@ import hashlib
 import secrets
 import uuid
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from ..db import Store
 

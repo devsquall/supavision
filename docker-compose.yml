@@ -1,0 +1,15 @@
+services:
+  supervisor:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - supervisor-data:/app/.supervisor
+      - ${HOME}/.ssh:/root/.ssh:ro  # For SSH-based remote monitoring
+    environment:
+      - SUPERVISOR_BACKEND=${SUPERVISOR_BACKEND:-claude_cli}
+      - SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
+    restart: unless-stopped
+
+volumes:
+  supervisor-data:

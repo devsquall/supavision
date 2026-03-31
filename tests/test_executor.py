@@ -5,13 +5,12 @@ from __future__ import annotations
 import pytest
 
 from supervisor.executor import (
+    MAX_OUTPUT_BYTES,
+    MULTIPLEX_DIR,
     CommandResult,
     ConnectionConfig,
     Executor,
-    MAX_OUTPUT_BYTES,
-    MULTIPLEX_DIR,
 )
-
 
 # ── CommandResult ────────────────────────────────────────────────
 

@@ -2,25 +2,29 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from supervisor.discovery_diff import ContextDiff, SectionDiff, compute_diff, format_drift_summary, should_alert_on_drift
+from supervisor.discovery_diff import (
+    ContextDiff,
+    SectionDiff,
+    compute_diff,
+    format_drift_summary,
+    should_alert_on_drift,
+)
 from supervisor.models import Evaluation, Report, Resource, RunType, Severity
 from supervisor.notifications import (
     SlackChannel,
     WebhookChannel,
-    _DedupCache,
     _dedup_key,
+    _DedupCache,
     _is_blocked_ip,
     send_alert,
     validate_webhook_url,
 )
-
 
 # ── SSRF Protection ─────────────────────────────────────────────
 

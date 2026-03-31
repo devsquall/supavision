@@ -19,7 +19,6 @@ from supervisor.models import (
     RunType,
     Severity,
     SystemContext,
-    EvalStrategy,
 )
 
 

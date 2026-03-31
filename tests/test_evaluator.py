@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 from supervisor.evaluator import (
+    _CRITICAL_PATTERNS,
+    _HEALTHY_PATTERNS,
+    _WARNING_PATTERNS,
     Evaluator,
     _build_summary,
     _count_matches,
     _extract_status_line,
-    _CRITICAL_PATTERNS,
-    _HEALTHY_PATTERNS,
-    _WARNING_PATTERNS,
 )
 from supervisor.models import EvalStrategy, Report, RunType, Severity
 
@@ -139,7 +137,8 @@ class TestEvaluator:
 
     def test_single_warning_with_many_healthy_signals_no_alert(self):
         """Single warning + multiple healthy signals = warning but no alert."""
-        report = _report("All services running healthy and operational. No errors found. System is stable. Minor concern noted.")
+        content = "All services running healthy and operational. No errors found. System is stable. Minor concern."
+        report = _report(content)
         evaluation = self.evaluator.evaluate(report)
         assert evaluation.severity == Severity.WARNING
         assert evaluation.should_alert is False

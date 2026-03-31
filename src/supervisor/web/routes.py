@@ -9,10 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ..models import (
-    Credential,
     Resource,
     RunType,
-    Schedule,
     Severity,
 )
 from .auth import require_api_key
@@ -72,26 +70,21 @@ async def list_resources(request: Request):
     store = _get_store(request)
     resources = store.list_resources()
     latest_runs = store.get_latest_runs_batch()
+    latest_evals = store.get_latest_evaluations_batch()
 
     result = []
     for r in resources:
         latest = latest_runs.get((r.id, str(RunType.HEALTH_CHECK)))
+        ev = latest_evals.get(r.id)
         result.append({
             "id": r.id,
             "name": r.name,
             "resource_type": r.resource_type,
             "parent_id": r.parent_id,
             "created_at": r.created_at.isoformat() if r.created_at else None,
-            "latest_severity": None,
+            "latest_severity": str(ev.severity) if ev else None,
             "latest_run_status": str(latest.status) if latest else None,
         })
-
-    # Attach latest severity from evaluations
-    for item in result:
-        if item["latest_run_status"]:
-            evals = store.get_recent_evaluations(item["id"], limit=1)
-            if evals:
-                item["latest_severity"] = str(evals[0].severity)
 
     return {"ok": True, "resources": result}
 

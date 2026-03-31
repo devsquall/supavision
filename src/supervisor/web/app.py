@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from ..config import DEFAULT_MODEL
 from ..db import Store
 from ..engine import Engine
 from ..scheduler import Scheduler
@@ -48,6 +47,7 @@ def create_app(
             await scheduler_task
         except asyncio.CancelledError:
             pass
+        store.close()
         logger.info("API server shut down")
 
     app = FastAPI(

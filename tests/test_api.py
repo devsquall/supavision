@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supervisor.db import Store
-from supervisor.models import Resource, RunType, RunStatus
+from supervisor.models import Resource, RunStatus, RunType
 from supervisor.web.auth import generate_api_key, hash_api_key
 from supervisor.web.routes import router
-
 
 # ── Fixtures ─────────────────────────────────────────────────────
 

@@ -105,7 +105,7 @@ def cmd_resource_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
     _json_out({"ok": True, "command": "resource_show", "resource": resource.model_dump(mode="json")})
 
 
@@ -113,7 +113,7 @@ def cmd_resource_set_schedule(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
 
     if args.discovery:
         resource.discovery_schedule = Schedule(cron=args.discovery)
@@ -128,7 +128,7 @@ def cmd_resource_add_credential(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
 
     resource.credentials[args.name] = Credential(env_var=args.env_var)
     store.save_resource(resource)
@@ -172,7 +172,7 @@ def cmd_run_status(args: argparse.Namespace) -> None:
     store = _get_store(args)
     run = store.get_run(args.run_id)
     if not run:
-        _error(f"Run {args.run_id} not found")
+        _error(f"Run {args.run_id} not found. Run 'supervisor report-list <resource_id>' to find run IDs.")
     _json_out({"ok": True, "command": "run_status", "run": run.model_dump(mode="json")})
 
 
@@ -183,7 +183,7 @@ def cmd_report_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
     report = store.get_report(args.report_id)
     if not report:
-        _error(f"Report {args.report_id} not found")
+        _error(f"Report {args.report_id} not found. Run 'supervisor report-list <resource_id>' to find report IDs.")
     # Print content to stderr for readability, JSON to stdout
     print(report.content, file=sys.stderr)
     _json_out({"ok": True, "command": "report_show", "report_id": report.id, "run_type": str(report.run_type)})
@@ -237,7 +237,7 @@ def cmd_checklist_add(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
 
     resource.monitoring_requests.append(args.request)
     store.save_resource(resource)
@@ -316,7 +316,8 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         has_croniter = True
     except ImportError:
         has_croniter = False
-    checks.append({"check": "croniter", "ok": has_croniter, "detail": "importable" if has_croniter else "not installed"})
+    detail = "importable" if has_croniter else "not installed"
+    checks.append({"check": "croniter", "ok": has_croniter, "detail": detail})
 
     all_ok = all(c["ok"] for c in checks)
     for c in checks:
@@ -335,7 +336,7 @@ def cmd_notify_test(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
 
     from .models import Evaluation, Report, RunType, Severity
     from .notifications import send_alert
@@ -371,7 +372,7 @@ def cmd_notify_configure(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found")
+        _error(f"Resource {args.resource_id} not found. Run 'supervisor resource-list' to see available resources.")
 
     updated = []
 
@@ -453,7 +454,8 @@ def cmd_purge(args: argparse.Namespace) -> None:
                 "SELECT COUNT(*) FROM runs WHERE status IN ('completed', 'failed') AND created_at < ?",
                 (cutoff,),
             ).fetchone()[0]
-        print(f"Dry run: would delete {reports_count} reports and {runs_count} runs older than {days} days", file=sys.stderr)
+        msg = f"Dry run: would delete {reports_count} reports and {runs_count} runs older than {days} days"
+        print(msg, file=sys.stderr)
         _json_out({
             "ok": True, "command": "purge", "dry_run": True,
             "reports": reports_count, "runs": runs_count, "days": days,
@@ -486,7 +488,7 @@ def cmd_api_key_create(args: argparse.Namespace) -> None:
     key_id, raw_key, key_hash = generate_api_key()
     store.save_api_key(key_id, key_hash, label=args.label)
 
-    print(f"\nAPI Key created. Save this — it cannot be retrieved again:\n", file=sys.stderr)
+    print("\nAPI Key created. Save this — it cannot be retrieved again:\n", file=sys.stderr)
     print(f"  {raw_key}\n", file=sys.stderr)
     _json_out({"ok": True, "command": "api_key_create", "key_id": key_id, "key": raw_key})
 

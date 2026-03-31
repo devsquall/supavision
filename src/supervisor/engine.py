@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import json as json_mod
+import json
 import logging
 import os
 import shutil
@@ -23,6 +23,7 @@ from pathlib import Path
 
 import httpx
 
+from .config import DEFAULT_MODEL, OPENROUTER_API_KEY, OPENROUTER_URL
 from .db import Store
 from .evaluator import Evaluator
 from .executor import ConnectionConfig, Executor
@@ -47,8 +48,6 @@ from .templates import (
 from .tools import TOOL_DEFINITIONS, ToolDispatcher
 
 logger = logging.getLogger(__name__)
-
-from .config import DEFAULT_MODEL, OPENROUTER_API_KEY, OPENROUTER_URL
 
 MAX_TURNS = 50  # Safety limit — not configurable
 LOCK_DIR = Path(".supervisor/locks")
@@ -389,6 +388,15 @@ class Engine:
 
     # ── Claude CLI backend ────────────────────────────────────────────
 
+    def _cli_model_name(self) -> str:
+        """Map model config to Claude CLI model alias."""
+        m = self.model.lower()
+        if "opus" in m:
+            return "opus"
+        if "haiku" in m:
+            return "haiku"
+        return "sonnet"  # Default for all Sonnet variants
+
     def _build_access_section(self, resource: Resource) -> str:
         """Build access instructions for the Claude CLI backend."""
         ssh_host = resource.config.get("ssh_host", "")
@@ -397,7 +405,7 @@ class Engine:
         ssh_port = resource.config.get("ssh_port", "22")
 
         if ssh_host:
-            ssh_cmd = f"ssh -o StrictHostKeyChecking=accept-new"
+            ssh_cmd = "ssh -o StrictHostKeyChecking=accept-new"
             if ssh_key:
                 ssh_cmd += f" -i {ssh_key}"
             if ssh_port != "22":
@@ -432,7 +440,7 @@ class Engine:
             claude_path,
             "--print",
             "--output-format", "text",
-            "--model", "sonnet",
+            "--model", self._cli_model_name(),
             "--permission-mode", "auto",
             "--allowedTools", "Bash(*) Read Glob Grep",
             "--no-session-persistence",
@@ -564,7 +572,6 @@ class Engine:
                 tool_args = func.get("arguments", "{}")
 
                 # Parse arguments (OpenRouter sends as JSON string)
-                import json
                 try:
                     tool_input = json.loads(tool_args) if isinstance(tool_args, str) else tool_args
                 except json.JSONDecodeError:

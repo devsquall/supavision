@@ -8,14 +8,11 @@ from supervisor.executor import CommandResult, Executor
 from supervisor.tools import (
     TOOL_DEFINITIONS,
     ToolDispatcher,
-    _DIAGNOSTIC_ALLOWLIST,
-    _DIAGNOSTIC_PREFIX_ALLOWLIST,
     _is_diagnostic_allowed,
     _is_readonly_sql,
     _validate_path,
     _validate_service_name,
 )
-
 
 # ── Service name validation ──────────────────────────────────────
 

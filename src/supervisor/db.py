@@ -281,6 +281,23 @@ class Store:
         ).fetchall()
         return [Evaluation.model_validate(json.loads(r[0])) for r in rows]
 
+    def get_latest_evaluations_batch(self) -> dict[str, Evaluation]:
+        """Get most recent evaluation per resource in one query. Returns {resource_id: Evaluation}."""
+        sql = """
+        SELECT data FROM evaluations e1
+        WHERE created_at = (
+            SELECT MAX(e2.created_at) FROM evaluations e2
+            WHERE e2.resource_id = e1.resource_id
+        )
+        """
+        with self._lock:
+            rows = self._conn.execute(sql).fetchall()
+        result: dict[str, Evaluation] = {}
+        for row in rows:
+            ev = Evaluation.model_validate(json.loads(row[0]))
+            result[ev.resource_id] = ev
+        return result
+
     # ── Runs ─────────────────────────────────────────────────────────
 
     def save_run(self, run: Run) -> None:
