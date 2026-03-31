@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Report - Supervisor{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/resources/{{ report.resource_id }}">{{ resource_name }}</a></li>
+        <li>Report</li>
+    </ul>
+</nav>
+
+<h2>
+    {% if evaluation %}
+    <span class="health-dot dot-{{ evaluation.severity }}"></span>
+    <span class="badge badge-{{ evaluation.severity }}">{{ evaluation.severity }}</span>
+    {% endif %}
+    Report &middot; {{ report.run_type }}
+</h2>
+
+{% if evaluation %}
+<article>
+    <strong>Summary:</strong> {{ evaluation.summary }}
+</article>
+{% endif %}
+
+<p class="muted">
+    Created: {{ report.created_at }} &middot;
+    Report ID: <code>{{ report.id }}</code>
+</p>
+
+<pre class="report">{{ report.content }}</pre>
+{% endblock %}

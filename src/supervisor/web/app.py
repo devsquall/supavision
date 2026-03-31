@@ -12,7 +12,8 @@ from ..db import Store
 from ..engine import Engine
 from ..scheduler import Scheduler
 from ..templates import TEMPLATE_DIR_DEFAULT
-from .routes import router
+from .dashboard import router as dashboard_router
+from .routes import router as api_router
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
-    app.include_router(router)
+    app.include_router(api_router)       # /api/v1/* (JSON, requires API key)
+    app.include_router(dashboard_router)  # /* (HTML, no auth for dashboard)
 
     return app

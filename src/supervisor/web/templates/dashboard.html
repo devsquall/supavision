@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Supervisor{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="number">{{ total_resources }}</div>
+        <div class="label">Resources</div>
+    </div>
+    <div class="stat-card">
+        <div class="number" style="color: #e74c3c;">{{ critical_count }}</div>
+        <div class="label">Critical</div>
+    </div>
+    <div class="stat-card">
+        <div class="number" style="color: #f39c12;">{{ warning_count }}</div>
+        <div class="label">Warning</div>
+    </div>
+    <div class="stat-card">
+        <div class="number" style="color: #2ecc71;">{{ healthy_count }}</div>
+        <div class="label">Healthy</div>
+    </div>
+</div>
+
+<div hx-get="/dashboard/resources" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <p aria-busy="true">Loading resources...</p>
+</div>
+{% endblock %}

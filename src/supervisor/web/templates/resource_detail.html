@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ resource.name }} - Supervisor{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li>{{ resource.name }}</li>
+    </ul>
+</nav>
+
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>
+        <span class="health-dot dot-{{ severity or 'unknown' }}"></span>
+        {{ resource.name }}
+        <span class="badge badge-type">{{ resource.resource_type }}</span>
+        {% if severity %}
+        <span class="badge badge-{{ severity }}">{{ severity }}</span>
+        {% endif %}
+    </h2>
+    <div class="actions">
+        <button hx-post="/resources/{{ resource.id }}/discover" hx-swap="none" class="outline">
+            Run Discovery
+        </button>
+        <button hx-post="/resources/{{ resource.id }}/health-check" hx-swap="none">
+            Run Health Check
+        </button>
+    </div>
+</div>
+
+{% if context %}
+<details open>
+    <summary><strong>Baseline</strong> (v{{ context.version }})</summary>
+    <pre class="report">{{ context.content }}</pre>
+</details>
+{% else %}
+<article>
+    <p>No discovery baseline yet. Run discovery first.</p>
+</article>
+{% endif %}
+
+{% if checklist %}
+<details>
+    <summary><strong>Checklist</strong> ({{ checklist.items | length }} items)</summary>
+    <ul>
+    {% for item in checklist.items %}
+        <li>{{ item.description }}{% if item.source != 'discovery' %} <small class="muted">({{ item.source }})</small>{% endif %}</li>
+    {% endfor %}
+    </ul>
+</details>
+{% endif %}
+
+<h3>Recent Reports</h3>
+
+{% if runs %}
+<div style="overflow-x:auto;">
+<table>
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Severity</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for run in runs %}
+        <tr>
+            <td>{{ run.run_type }}</td>
+            <td>{{ run.status }}</td>
+            <td>
+                {% if run.severity %}
+                <span class="badge badge-{{ run.severity }}">{{ run.severity }}</span>
+                {% else %}
+                <span class="muted">-</span>
+                {% endif %}
+            </td>
+            <td class="muted">{{ run.started_at }}</td>
+            <td class="muted">{{ run.duration or '-' }}</td>
+            <td>
+                {% if run.report_id %}
+                <a href="/reports/{{ run.report_id }}">View Report</a>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No runs yet.</p>
+{% endif %}
+{% endblock %}
