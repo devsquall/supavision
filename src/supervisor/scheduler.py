@@ -1,14 +1,12 @@
 """Scheduler — runs discovery and health checks on their configured schedules.
 
-Uses croniter for cron expression parsing. Runs as a blocking loop in its own
-process via `supervisor run-scheduler`.
-
-The scheduler creates Run records and executes them via the engine.
-You can also trigger runs manually via CLI without the scheduler.
+Uses croniter for cron expression parsing. Supports both sync mode (standalone
+via `supervisor run-scheduler`) and async mode (embedded in FastAPI via lifespan).
 """
 
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import logging
 import os
@@ -43,7 +41,7 @@ class Scheduler:
         self._lock_fd = open(lock_path, "w")
         try:
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self._lock_fd.write(str(os.getpid()) if hasattr(os, 'getpid') else "locked")
+            self._lock_fd.write(str(os.getpid()))
             self._lock_fd.flush()
             return True
         except (OSError, BlockingIOError):
@@ -57,14 +55,15 @@ class Scheduler:
             self._lock_fd.close()
             self._lock_fd = None
 
+    # ── Sync mode (standalone process) ──────────────────────────────
+
     def start(self) -> None:
-        """Blocking loop. Checks every 60 seconds for due jobs."""
+        """Blocking loop for standalone scheduler process."""
         if not self._acquire_lock():
             logger.error("Another scheduler instance is already running. Exiting.")
             return
 
-        logger.info("Scheduler started. Checking every %ds for due jobs.", CHECK_INTERVAL_SECONDS)
-
+        logger.info("Scheduler started (sync). Checking every %ds.", CHECK_INTERVAL_SECONDS)
         self._recover_stale_runs()
 
         while self._running:
@@ -77,10 +76,33 @@ class Scheduler:
 
             time.sleep(CHECK_INTERVAL_SECONDS)
 
+    # ── Async mode (embedded in FastAPI) ────────────────────────────
+
+    async def start_async(self) -> None:
+        """Non-blocking loop for embedding in an async event loop (FastAPI lifespan)."""
+        if not self._acquire_lock():
+            logger.error("Another scheduler instance is already running.")
+            return
+
+        logger.info("Scheduler started (async). Checking every %ds.", CHECK_INTERVAL_SECONDS)
+        self._recover_stale_runs()
+
+        while self._running:
+            try:
+                due_jobs = self._get_due_jobs()
+                for resource, run_type in due_jobs:
+                    await self._execute_run_async(resource, run_type)
+            except Exception as e:
+                logger.error("Scheduler error: %s", e)
+
+            await asyncio.sleep(CHECK_INTERVAL_SECONDS)
+
     def stop(self) -> None:
         """Signal the scheduler to stop."""
         self._running = False
         self._release_lock()
+
+    # ── Core logic (shared) ─────────────────────────────────────────
 
     def _get_due_jobs(self) -> list[tuple[Resource, RunType]]:
         """Check all resources' schedules in one batch (no N+1 queries)."""
@@ -112,14 +134,10 @@ class Scheduler:
 
         return due
 
-    _STALE_RUN_HOURS = 4  # Runs older than this are considered stale
+    _STALE_RUN_HOURS = 4
 
     def _recover_stale_runs(self) -> None:
-        """On startup, mark any RUNNING runs older than 4 hours as FAILED.
-
-        File locks (flock) are released by the OS on process death, so no lock
-        cleanup is needed. This only fixes cosmetic database records.
-        """
+        """On startup, mark any RUNNING runs older than 4 hours as FAILED."""
         try:
             stale_runs = self.store.get_stale_runs(hours=self._STALE_RUN_HOURS)
             for run in stale_runs:
@@ -137,7 +155,7 @@ class Scheduler:
             logger.error("Stale run recovery failed (non-fatal): %s", e)
 
     def _execute_run(self, resource: Resource, run_type: RunType) -> None:
-        """Execute a single scheduled run."""
+        """Execute a single scheduled run (sync)."""
         logger.info("Executing scheduled %s for %s", run_type, resource.name)
         try:
             if run_type == RunType.DISCOVERY:
@@ -145,6 +163,15 @@ class Scheduler:
             else:
                 self.engine.run_health_check(resource.id)
         except Exception as e:
-            logger.error(
-                "Scheduled %s failed for %s: %s", run_type, resource.name, e
-            )
+            logger.error("Scheduled %s failed for %s: %s", run_type, resource.name, e)
+
+    async def _execute_run_async(self, resource: Resource, run_type: RunType) -> None:
+        """Execute a single scheduled run (async)."""
+        logger.info("Executing scheduled %s for %s", run_type, resource.name)
+        try:
+            if run_type == RunType.DISCOVERY:
+                await self.engine.run_discovery_async(resource.id)
+            else:
+                await self.engine.run_health_check_async(resource.id)
+        except Exception as e:
+            logger.error("Scheduled %s failed for %s: %s", run_type, resource.name, e)

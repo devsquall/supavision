@@ -77,14 +77,14 @@ class Engine:
     # ── Public API ───────────────────────────────────────────────────
 
     def run_discovery(self, resource_id: str) -> Run:
-        """Execute Phase 1: Discovery (sync wrapper for async engine)."""
-        return asyncio.run(self._run_discovery_async(resource_id))
+        """Execute discovery (sync wrapper — use run_discovery_async from async code)."""
+        return asyncio.run(self.run_discovery_async(resource_id))
 
     def run_health_check(self, resource_id: str) -> Run:
-        """Execute Phase 2: Health Check (sync wrapper for async engine)."""
-        return asyncio.run(self._run_health_check_async(resource_id))
+        """Execute health check (sync wrapper — use run_health_check_async from async code)."""
+        return asyncio.run(self.run_health_check_async(resource_id))
 
-    async def _run_discovery_async(self, resource_id: str) -> Run:
+    async def run_discovery_async(self, resource_id: str) -> Run:
         """Execute Phase 1: Discovery.
 
         1. Acquire per-resource lock (prevent concurrent runs)
@@ -251,7 +251,7 @@ class Engine:
             await executor.teardown_multiplexing()
             self._release_resource_lock(lock_fd)
 
-    async def _run_health_check_async(self, resource_id: str) -> Run:
+    async def run_health_check_async(self, resource_id: str) -> Run:
         """Execute Phase 2: Health Check.
 
         Same tool_use loop as discovery but includes baseline context,

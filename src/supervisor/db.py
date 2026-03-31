@@ -86,6 +86,14 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE INDEX IF NOT EXISTS idx_runs_resource ON runs(resource_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    key_hash TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    revoked_at TEXT
+);
 """
 
 
@@ -266,6 +274,13 @@ class Store:
             return None
         return Evaluation.model_validate(json.loads(row[0]))
 
+    def get_recent_evaluations(self, resource_id: str, limit: int = 5) -> list[Evaluation]:
+        rows = self._execute(
+            "SELECT data FROM evaluations WHERE resource_id = ? ORDER BY created_at DESC LIMIT ?",
+            (resource_id, limit),
+        ).fetchall()
+        return [Evaluation.model_validate(json.loads(r[0])) for r in rows]
+
     # ── Runs ─────────────────────────────────────────────────────────
 
     def save_run(self, run: Run) -> None:
@@ -376,3 +391,45 @@ class Store:
             count = cursor.rowcount
             self._conn.commit()
         return count
+
+    # ── API Keys ────────────────────────────────────────────────────
+
+    def save_api_key(self, key_id: str, key_hash: str, label: str = "") -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO api_keys (id, key_hash, label, created_at) VALUES (?, ?, ?, ?)",
+                (key_id, key_hash, label, now),
+            )
+            self._conn.commit()
+
+    def validate_api_key(self, key_hash: str) -> dict | None:
+        """Returns key record if valid (exists and not revoked), else None."""
+        row = self._execute(
+            "SELECT id, label, created_at, revoked_at FROM api_keys WHERE key_hash = ?",
+            (key_hash,),
+        ).fetchone()
+        if not row:
+            return None
+        if row[3]:  # revoked_at is set
+            return None
+        return {"id": row[0], "label": row[1], "created_at": row[2]}
+
+    def list_api_keys(self) -> list[dict]:
+        rows = self._execute(
+            "SELECT id, label, created_at, revoked_at FROM api_keys ORDER BY created_at DESC"
+        ).fetchall()
+        return [
+            {"id": r[0], "label": r[1], "created_at": r[2], "revoked": bool(r[3])}
+            for r in rows
+        ]
+
+    def revoke_api_key(self, key_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+                (now, key_id),
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0

@@ -458,6 +458,47 @@ def cmd_purge(args: argparse.Namespace) -> None:
         })
 
 
+def cmd_serve(args: argparse.Namespace) -> None:
+    import uvicorn
+
+    from .web.app import create_app
+
+    app = create_app(db_path=args.db, template_dir=args.templates)
+    print(f"Starting Supervisor API on {args.host}:{args.port}", file=sys.stderr)
+    print(f"OpenAPI docs: http://{args.host}:{args.port}/docs", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
+
+def cmd_api_key_create(args: argparse.Namespace) -> None:
+    from .web.auth import generate_api_key
+
+    store = _get_store(args)
+    key_id, raw_key, key_hash = generate_api_key()
+    store.save_api_key(key_id, key_hash, label=args.label)
+
+    print(f"\nAPI Key created. Save this — it cannot be retrieved again:\n", file=sys.stderr)
+    print(f"  {raw_key}\n", file=sys.stderr)
+    _json_out({"ok": True, "command": "api_key_create", "key_id": key_id, "key": raw_key})
+
+
+def cmd_api_key_list(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    keys = store.list_api_keys()
+    for k in keys:
+        status = "REVOKED" if k["revoked"] else "active"
+        print(f"  {k['id']}  {k['label'] or '(no label)'}  {status}  {k['created_at']}", file=sys.stderr)
+    _json_out({"ok": True, "command": "api_key_list", "keys": keys})
+
+
+def cmd_api_key_revoke(args: argparse.Namespace) -> None:
+    store = _get_store(args)
+    if store.revoke_api_key(args.key_id):
+        print(f"API key {args.key_id} revoked.", file=sys.stderr)
+        _json_out({"ok": True, "command": "api_key_revoke", "key_id": args.key_id})
+    else:
+        _error(f"API key {args.key_id} not found or already revoked")
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 
 
@@ -573,6 +614,25 @@ def main() -> None:
     p.add_argument("--days", type=int, default=90, help="Delete data older than N days (default: 90)")
     p.add_argument("--dry-run", action="store_true", help="Show what would be deleted without deleting")
     p.set_defaults(func=cmd_purge)
+
+    # serve (API server)
+    p = sub.add_parser("serve", help="Start the REST API server")
+    p.add_argument("--port", type=int, default=8080)
+    p.add_argument("--host", default="0.0.0.0")
+    p.set_defaults(func=cmd_serve)
+
+    # api-key-create
+    p = sub.add_parser("api-key-create", help="Generate a new API key")
+    p.add_argument("--label", default="", help="Label for the key")
+    p.set_defaults(func=cmd_api_key_create)
+
+    # api-key-list
+    sub.add_parser("api-key-list", help="List API keys").set_defaults(func=cmd_api_key_list)
+
+    # api-key-revoke
+    p = sub.add_parser("api-key-revoke", help="Revoke an API key")
+    p.add_argument("key_id")
+    p.set_defaults(func=cmd_api_key_revoke)
 
     args = parser.parse_args()
     try:
