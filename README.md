@@ -48,6 +48,8 @@ CLI / API → Engine (agentic tool_use loop)
 
 ## Installation
 
+**Prerequisites:** [Claude Code CLI](https://claude.ai/code) (included with Claude subscription)
+
 ```bash
 git clone https://github.com/yourusername/supervisor.git
 cd supervisor
@@ -55,18 +57,13 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-Copy `.env.example` to `.env` and add your [OpenRouter API key](https://openrouter.ai/keys):
-
-```bash
-cp .env.example .env
-# Edit .env with your key
-```
-
-Verify:
+That's it. If you have Claude Code installed, no API keys or additional configuration needed.
 
 ```bash
 supervisor doctor
 ```
+
+**Alternative backend:** If you prefer OpenRouter (pay-per-token), set `SUPERVISOR_BACKEND=openrouter` and `OPENROUTER_API_KEY` in `.env`.
 
 ## Quickstart
 
@@ -218,10 +215,10 @@ Discovery templates must output two sections:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENROUTER_API_KEY` | (required) | OpenRouter API key |
+| `SUPERVISOR_BACKEND` | `claude_cli` | Backend: `claude_cli` (free) or `openrouter` (API key) |
+| `OPENROUTER_API_KEY` | (none) | Only needed if `SUPERVISOR_BACKEND=openrouter` |
 | `SLACK_WEBHOOK` | (none) | Global fallback Slack webhook |
-| `SUPERVISOR_MODEL` | `anthropic/claude-sonnet-4` | Model for investigation |
-| `SUPERVISOR_EVAL_MODEL` | `anthropic/claude-3.5-haiku` | Model for evaluation |
+| `SUPERVISOR_MODEL` | `anthropic/claude-sonnet-4` | Model for investigation (openrouter only) |
 | `SUPERVISOR_CHECK_INTERVAL` | `60` | Scheduler check interval (seconds) |
 | `WEBHOOK_ALLOWED_DOMAINS` | (none) | Comma-separated domain allowlist for webhooks |
 

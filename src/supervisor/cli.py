@@ -281,10 +281,20 @@ def cmd_run_scheduler(args: argparse.Namespace) -> None:
 def cmd_doctor(args: argparse.Namespace) -> None:
     checks: list[dict] = []
 
-    # OPENROUTER_API_KEY
-    key = os.environ.get("OPENROUTER_API_KEY", "")
-    has_key = bool(key and not key.startswith("sk-or-your"))
-    checks.append({"check": "openrouter_api_key", "ok": has_key, "detail": "set" if has_key else "missing"})
+    # Backend
+    backend = os.environ.get("SUPERVISOR_BACKEND", "claude_cli")
+    checks.append({"check": "backend", "ok": True, "detail": backend})
+
+    # Claude CLI (needed for claude_cli backend)
+    if backend == "claude_cli":
+        claude_path = shutil.which("claude")
+        has_claude = bool(claude_path)
+        checks.append({"check": "claude_cli", "ok": has_claude, "detail": claude_path or "not found in PATH"})
+    else:
+        # OPENROUTER_API_KEY (needed for openrouter backend)
+        key = os.environ.get("OPENROUTER_API_KEY", "")
+        has_key = bool(key and not key.startswith("sk-or-your"))
+        checks.append({"check": "openrouter_api_key", "ok": has_key, "detail": "set" if has_key else "missing"})
 
     # Template directory
     tdir = Path(getattr(args, "templates", TEMPLATE_DIR_DEFAULT))

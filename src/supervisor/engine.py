@@ -1,19 +1,22 @@
 """Execution engine — the core of Supervisor.
 
-Orchestrates: template → LLM tool_use loop via OpenRouter → report → evaluation.
-Handles both discovery (Phase 1) and health check (Phase 2) flows.
+Orchestrates: template → LLM agent → report → evaluation.
 
-The engine uses scoped tools (tools.py) executed via subprocess (executor.py).
-Claude requests tool calls → our code executes them → returns real output → loop continues.
-No Anthropic SDK needed — uses httpx with OpenRouter's OpenAI-compatible endpoint.
+Two backends:
+  - claude_cli (default): Uses Claude Code CLI (`claude -p`), covered by
+    Claude subscription. Zero additional API cost.
+  - openrouter: Uses OpenRouter API with tool_use loop. Requires API key
+    and costs per-token.
 """
 
 from __future__ import annotations
 
 import asyncio
 import fcntl
+import json as json_mod
 import logging
 import os
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +53,9 @@ from .config import DEFAULT_MODEL, OPENROUTER_API_KEY, OPENROUTER_URL
 MAX_TURNS = 50  # Safety limit — not configurable
 LOCK_DIR = Path(".supervisor/locks")
 
+# Backend selection: claude_cli (default, subscription) or openrouter (API key)
+BACKEND = os.environ.get("SUPERVISOR_BACKEND", "claude_cli")
+
 
 class Engine:
     """Execution engine for discovery and health check runs."""
@@ -61,18 +67,27 @@ class Engine:
         model: str = DEFAULT_MODEL,
         api_key: str | None = None,
         max_turns: int = MAX_TURNS,
+        backend: str = BACKEND,
     ):
         self.store = store
         self.template_dir = template_dir
         self.model = model
         self.max_turns = max_turns
+        self.backend = backend
         self._api_key = api_key or OPENROUTER_API_KEY
-        if not self._api_key:
-            raise RuntimeError(
-                "OPENROUTER_API_KEY environment variable is not set. "
-                "Get your key at https://openrouter.ai/keys"
-            )
         self._evaluator = Evaluator()
+
+        # Validate backend
+        if self.backend == "openrouter" and not self._api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY required when using openrouter backend. "
+                "Set SUPERVISOR_BACKEND=claude_cli to use Claude Code instead (free with subscription)."
+            )
+        if self.backend == "claude_cli" and not shutil.which("claude"):
+            raise RuntimeError(
+                "Claude Code CLI not found in PATH. Install it or set "
+                "SUPERVISOR_BACKEND=openrouter to use OpenRouter API."
+            )
 
     # ── Public API ───────────────────────────────────────────────────
 
@@ -145,12 +160,17 @@ class Engine:
 
             resolved = resolve_template(template, resource, creds, runtime_ctx)
 
-            # Run the agentic tool_use loop
-            response, usage = await self._run_agentic_loop(
-                system_prompt=resolved,
-                user_message=self._build_user_message("Begin discovery for resource", resource),
-                executor=executor,
-            )
+            # Run via selected backend
+            if self.backend == "claude_cli":
+                access_section = self._build_access_section(resource)
+                full_prompt = resolved + "\n\n" + access_section
+                response, usage = await self._run_claude_cli(full_prompt)
+            else:
+                response, usage = await self._run_agentic_loop(
+                    system_prompt=resolved,
+                    user_message=self._build_user_message("Begin discovery for resource", resource),
+                    executor=executor,
+                )
 
             # Parse sections from response
             system_context_content, checklist_items = self._parse_discovery_response(response)
@@ -316,11 +336,16 @@ class Engine:
             )
             resolved = resolve_template(template, resource, creds, runtime_ctx)
 
-            response, usage = await self._run_agentic_loop(
-                system_prompt=resolved,
-                user_message=self._build_user_message("Run health check for resource", resource),
-                executor=executor,
-            )
+            if self.backend == "claude_cli":
+                access_section = self._build_access_section(resource)
+                full_prompt = resolved + "\n\n" + access_section
+                response, usage = await self._run_claude_cli(full_prompt)
+            else:
+                response, usage = await self._run_agentic_loop(
+                    system_prompt=resolved,
+                    user_message=self._build_user_message("Run health check for resource", resource),
+                    executor=executor,
+                )
 
             # Store report
             report = Report(
@@ -362,7 +387,111 @@ class Engine:
             await executor.teardown_multiplexing()
             self._release_resource_lock(lock_fd)
 
-    # ── Agentic loop ─────────────────────────────────────────────────
+    # ── Claude CLI backend ────────────────────────────────────────────
+
+    def _build_access_section(self, resource: Resource) -> str:
+        """Build access instructions for the Claude CLI backend."""
+        ssh_host = resource.config.get("ssh_host", "")
+        ssh_user = resource.config.get("ssh_user", "")
+        ssh_key = resource.config.get("ssh_key_path", "")
+        ssh_port = resource.config.get("ssh_port", "22")
+
+        if ssh_host:
+            ssh_cmd = f"ssh -o StrictHostKeyChecking=accept-new"
+            if ssh_key:
+                ssh_cmd += f" -i {ssh_key}"
+            if ssh_port != "22":
+                ssh_cmd += f" -p {ssh_port}"
+            ssh_cmd += f" {ssh_user}@{ssh_host}" if ssh_user else f" {ssh_host}"
+
+            return (
+                "## Access Instructions\n\n"
+                "This is a REMOTE server. To run any command, use the Bash tool with SSH:\n"
+                f"```\n{ssh_cmd} '<your command here>'\n```\n\n"
+                "Always use this SSH prefix for every command. Do not try to run commands locally.\n"
+                f"Example: `{ssh_cmd} 'uptime'`\n"
+            )
+        else:
+            return (
+                "## Access Instructions\n\n"
+                "This is the LOCAL server. Run commands directly using the Bash tool.\n"
+                "Example: `uptime`\n"
+            )
+
+    async def _run_claude_cli(self, prompt: str) -> tuple[str, dict]:
+        """Run Claude Code CLI as subprocess. Covered by Claude subscription."""
+        claude_path = shutil.which("claude") or "claude"
+
+        # Write prompt to a temp file (avoids argument length limits and stdin issues)
+        import tempfile
+
+        prompt_file = Path(tempfile.mktemp(suffix=".md", prefix="supervisor-"))
+        prompt_file.write_text(prompt, encoding="utf-8")
+
+        cmd = [
+            claude_path,
+            "--print",
+            "--output-format", "text",
+            "--model", "sonnet",
+            "--permission-mode", "auto",
+            "--allowedTools", "Bash(*) Read Glob Grep",
+            "--no-session-persistence",
+            f"Follow the instructions in {prompt_file} exactly. "
+            f"Read the file first, then execute all investigation steps. "
+            f"Your final output MUST use the exact section headers specified in the instructions.",
+        ]
+
+        logger.info("Starting Claude CLI (model=sonnet, backend=claude_cli)")
+        start_time = time.monotonic()
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd="/tmp",  # Safe working directory
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=900  # 15 minute timeout
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                raise RuntimeError("Claude CLI timed out after 15 minutes")
+
+            elapsed = time.monotonic() - start_time
+            output = stdout.decode("utf-8", errors="replace")
+
+            if proc.returncode != 0:
+                stderr_text = stderr.decode("utf-8", errors="replace")[:500]
+                raise RuntimeError(
+                    f"Claude CLI exited with code {proc.returncode}: {stderr_text}"
+                )
+
+            logger.info(
+                "Claude CLI completed in %.0fs (%d chars output)",
+                elapsed, len(output),
+            )
+
+            return output, {
+                "turns": 0,  # CLI doesn't report turns
+                "tool_calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "elapsed_seconds": round(elapsed, 1),
+                "backend": "claude_cli",
+            }
+
+        except FileNotFoundError:
+            raise RuntimeError(
+                "Claude Code CLI not found. Install it: npm install -g @anthropic-ai/claude-code"
+            )
+        finally:
+            prompt_file.unlink(missing_ok=True)
+
+    # ── OpenRouter backend (agentic loop) ───────────────────────────
 
     async def _run_agentic_loop(
         self,
