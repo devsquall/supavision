@@ -55,6 +55,12 @@ _DIAGNOSTIC_ALLOWLIST = {
     "lsblk",
     "mount",
     "sysctl -a",
+    # AWS CLI (read-only)
+    "aws sts get-caller-identity",
+    "aws configure list",
+    "aws s3 ls",
+    # GitHub CLI (read-only)
+    "gh auth status",
 }
 
 # Prefixes that are allowed (command starts with these, args follow)
@@ -84,7 +90,34 @@ _DIAGNOSTIC_PREFIX_ALLOWLIST = [
     "du -sh ",
     "find ",  # directory listing variant
     "ls ",
+    # AWS CLI (read-only describe/list/get operations)
+    "aws ec2 describe-",
+    "aws rds describe-",
+    "aws lambda list-",
+    "aws lambda get-",
+    "aws iam list-",
+    "aws iam get-",
+    "aws s3 ls ",
+    "aws s3api list-",
+    "aws cloudwatch get-",
+    "aws ce get-",
+    "aws elbv2 describe-",
+    "aws route53 list-",
+    # GitHub CLI (read-only)
+    "gh api /orgs/",
+    "gh api /repos/",
+    "gh api /users/",
+    "gh repo list ",
+    "gh repo view ",
+    "gh issue list ",
+    "gh pr list ",
 ]
+
+# AWS CLI write commands — explicitly blocked even if prefix matches
+_AWS_WRITE_KEYWORDS = re.compile(
+    r"\b(delete|terminate|create|put|update|modify|remove|run|start|stop|reboot|deregister)\b",
+    re.IGNORECASE,
+)
 
 # SQL keywords that indicate write operations
 _SQL_WRITE_KEYWORDS = re.compile(
@@ -123,11 +156,28 @@ def _validate_path(path: str) -> str | None:
 def _is_diagnostic_allowed(command: str) -> bool:
     """Check if a diagnostic command is on the allowlist."""
     cmd = command.strip()
+
+    # Block shell chaining (;, &&, ||, |, backticks, $())
+    if any(c in cmd for c in [";", "&&", "||", "|", "`"]):
+        return False
+    if "$(" in cmd:
+        return False
+
+    # Exact match
     if cmd in _DIAGNOSTIC_ALLOWLIST:
+        # Extra check for AWS commands: block write keywords
+        if cmd.startswith("aws ") and _AWS_WRITE_KEYWORDS.search(cmd):
+            return False
         return True
+
+    # Prefix match
     for prefix in _DIAGNOSTIC_PREFIX_ALLOWLIST:
         if cmd.startswith(prefix):
+            # Extra check for AWS commands: block write keywords
+            if cmd.startswith("aws ") and _AWS_WRITE_KEYWORDS.search(cmd):
+                return False
             return True
+
     return False
 
 
@@ -235,7 +285,9 @@ TOOL_DEFINITIONS = [
         "description": (
             "Run a pre-approved diagnostic command from a safe allowlist. "
             "Includes: docker ps, nginx -t, pg_isready, pm2 list, curl localhost, "
-            "docker logs, systemctl list-units, git status, and more. "
+            "docker logs, systemctl list-units, git status, "
+            "aws ec2 describe-*, aws rds describe-*, aws iam list-*, "
+            "gh api /orgs/*, gh repo list, and more. "
             "If the command is not on the allowlist, it will be rejected."
         ),
         "input_schema": {
