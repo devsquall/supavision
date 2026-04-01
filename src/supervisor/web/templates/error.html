@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} - Supervisor{% endblock %}
+{% block content %}
+<div class="empty-state" style="margin-top:var(--sp-12);">
+  <h2 style="margin-bottom:var(--sp-2);">{{ status_code }}</h2>
+  <p>{{ message }}</p>
+  <a href="/" class="btn" style="margin-top:var(--sp-4);">Back to Dashboard</a>
+</div>
+{% endblock %}

@@ -7,8 +7,10 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from ..db import Store
 from ..engine import Engine
@@ -65,5 +67,26 @@ def create_app(
 
     app.include_router(api_router)       # /api/v1/* (JSON, requires API key)
     app.include_router(dashboard_router)  # /* (HTML, no auth for dashboard)
+
+    # Custom error pages (branded, not default FastAPI JSON)
+    _templates_dir = Path(__file__).parent / "templates"
+    _error_templates = Jinja2Templates(directory=str(_templates_dir))
+
+    @app.exception_handler(404)
+    async def not_found(request: Request, exc):
+        if request.url.path.startswith("/api/"):
+            return HTMLResponse(content='{"detail":"Not found"}', status_code=404, media_type="application/json")
+        return _error_templates.TemplateResponse(request, "error.html", {
+            "status_code": 404, "message": "Page not found.",
+        }, status_code=404)
+
+    @app.exception_handler(500)
+    async def server_error(request: Request, exc):
+        if request.url.path.startswith("/api/"):
+            body = '{"detail":"Internal server error"}'
+            return HTMLResponse(content=body, status_code=500, media_type="application/json")
+        return _error_templates.TemplateResponse(request, "error.html", {
+            "status_code": 500, "message": "Something went wrong. Please try again.",
+        }, status_code=500)
 
     return app
