@@ -1,36 +1,35 @@
 {% for r in resources %}
-<div class="resource-card {{ r.severity or 'unknown' }}">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-            <span class="health-dot dot-{{ r.severity or 'unknown' }}"></span>
-            <a href="/resources/{{ r.id }}"><strong>{{ r.name }}</strong></a>
-            <span class="badge badge-type">{{ r.resource_type }}</span>
-            {% if r.severity %}
-            <span class="badge badge-{{ r.severity }}">{{ r.severity }}</span>
-            {% else %}
-            <span class="badge badge-unknown">no data</span>
-            {% endif %}
-        </div>
-        <div class="actions">
-            <button class="outline secondary"
-                    hx-post="/resources/{{ r.id }}/health-check"
-                    hx-swap="none"
-                    hx-indicator="closest .resource-card">
-                Run Check
-            </button>
-        </div>
+<div class="resource-card resource-card--{{ r.severity or 'unknown' }}">
+  <div class="resource-card-header">
+    <div class="resource-card-info">
+      <a href="/resources/{{ r.id }}" class="resource-card-name">{{ r.name }}</a>
+      <span class="badge badge--type">{{ r.resource_type }}</span>
+      {% if r.severity %}
+      <span class="badge badge--{{ r.severity }}">{{ r.severity }}</span>
+      {% else %}
+      <span class="badge badge--unknown">no data</span>
+      {% endif %}
     </div>
-    {% if r.last_run_at %}
-    <p class="muted" style="margin:0.25rem 0 0 18px;">
-        Last check: {{ r.last_run_at }} &middot; {{ r.summary or '' }}
-    </p>
-    {% endif %}
+    <button class="btn btn-outline"
+            hx-post="/resources/{{ r.id }}/health-check"
+            hx-swap="none"
+            data-action="check"
+            data-success-msg="Health check started for {{ r.name }}"
+            data-error-msg="Failed to start health check">
+      Run Check
+    </button>
+  </div>
+  {% if r.last_run_at %}
+  <div class="resource-card-meta">
+    Last check: {{ r.last_run_at }}{% if r.summary %} &middot; {{ r.summary }}{% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endfor %}
 
 {% if not resources %}
-<article>
-    <p>No resources configured yet.</p>
-    <p>Add one with: <code>supervisor resource-add my-server --type server</code></p>
-</article>
+<div class="empty-state">
+  <p>No resources configured yet.</p>
+  <p>Add one with: <code>supervisor resource-add my-server --type server</code></p>
+</div>
 {% endif %}

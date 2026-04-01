@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from ..db import Store
 from ..engine import Engine
@@ -57,6 +59,10 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+    # Static files (CSS, JS)
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
     app.include_router(api_router)       # /api/v1/* (JSON, requires API key)
     app.include_router(dashboard_router)  # /* (HTML, no auth for dashboard)
 

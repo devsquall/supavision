@@ -6,7 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -117,32 +117,38 @@ async def resource_detail(resource_id: str, request: Request):
     })
 
 
-@router.post("/resources/{resource_id}/discover", response_class=HTMLResponse)
+@router.post("/resources/{resource_id}/discover")
 async def trigger_discover(resource_id: str, request: Request):
+    store = request.app.state.store
     engine = request.app.state.engine
+    if not store.get_resource(resource_id):
+        raise HTTPException(status_code=404, detail="Resource not found")
 
     async def _run():
         try:
             await engine.run_discovery_async(resource_id)
         except Exception as e:
-            logger.error("Dashboard discovery failed: %s", e)
+            logger.error("Dashboard discovery failed for %s: %s", resource_id, e)
 
     asyncio.create_task(_run())
-    return HTMLResponse("<small>Discovery started...</small>")
+    return Response(status_code=204)
 
 
-@router.post("/resources/{resource_id}/health-check", response_class=HTMLResponse)
+@router.post("/resources/{resource_id}/health-check")
 async def trigger_health_check(resource_id: str, request: Request):
+    store = request.app.state.store
     engine = request.app.state.engine
+    if not store.get_resource(resource_id):
+        raise HTTPException(status_code=404, detail="Resource not found")
 
     async def _run():
         try:
             await engine.run_health_check_async(resource_id)
         except Exception as e:
-            logger.error("Dashboard health check failed: %s", e)
+            logger.error("Dashboard health check failed for %s: %s", resource_id, e)
 
     asyncio.create_task(_run())
-    return HTMLResponse("<small>Health check started...</small>")
+    return Response(status_code=204)
 
 
 @router.get("/reports/{report_id}", response_class=HTMLResponse)

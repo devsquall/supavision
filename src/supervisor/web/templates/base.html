@@ -1,106 +1,26 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Supervisor{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-    <style>
-        :root {
-            --pico-font-size: 15px;
-        }
-        nav { margin-bottom: 0; }
-        .health-dot {
-            display: inline-block;
-            width: 12px; height: 12px;
-            border-radius: 50%;
-            margin-right: 6px;
-            vertical-align: middle;
-        }
-        .dot-healthy { background: #2ecc71; }
-        .dot-warning { background: #f39c12; }
-        .dot-critical { background: #e74c3c; }
-        .dot-unknown { background: #95a5a6; }
-        .resource-card {
-            border-left: 4px solid var(--pico-muted-border-color);
-            padding: 1rem 1.5rem;
-            margin-bottom: 0.75rem;
-            border-radius: 4px;
-            background: var(--pico-card-background-color);
-        }
-        .resource-card.healthy { border-left-color: #2ecc71; }
-        .resource-card.warning { border-left-color: #f39c12; }
-        .resource-card.critical { border-left-color: #e74c3c; }
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .badge-healthy { background: #2ecc7130; color: #2ecc71; }
-        .badge-warning { background: #f39c1230; color: #f39c12; }
-        .badge-critical { background: #e74c3c30; color: #e74c3c; }
-        .badge-unknown { background: #95a5a630; color: #95a5a6; }
-        .badge-type {
-            background: var(--pico-muted-border-color);
-            color: var(--pico-muted-color);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .stat-card {
-            text-align: center;
-            padding: 1rem;
-            border-radius: 8px;
-            background: var(--pico-card-background-color);
-        }
-        .stat-card .number {
-            font-size: 2rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-        .stat-card .label {
-            font-size: 0.8rem;
-            color: var(--pico-muted-color);
-            margin-top: 0.25rem;
-        }
-        pre.report {
-            max-height: 500px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-            white-space: pre-wrap;
-        }
-        .actions { display: flex; gap: 0.5rem; }
-        .actions button, .actions a {
-            font-size: 0.85rem;
-            padding: 0.4rem 0.8rem;
-        }
-        .muted { color: var(--pico-muted-color); font-size: 0.85rem; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Supervisor{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
 <body>
-    <nav class="container-fluid">
-        <ul>
-            <li><a href="/"><strong>Supervisor</strong></a></li>
-        </ul>
-        <ul>
-            <li><a href="/">Dashboard</a></li>
-            <li><a href="/resources">Resources</a></li>
-        </ul>
-    </nav>
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
-    <footer class="container">
-        <p class="muted" style="text-align:center; margin-top:2rem;">
-            Supervisor &mdash; AI-powered infrastructure monitoring
-        </p>
-    </footer>
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">Supervisor</a>
+      <ul class="nav-links">
+        <li><a href="/">Dashboard</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main class="container main" role="main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="container footer">Supervisor &mdash; AI-powered infrastructure monitoring</footer>
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="/static/supervisor.js"></script>
 </body>
 </html>

@@ -3,26 +3,29 @@
 {% block content %}
 <h2>Dashboard</h2>
 
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="number">{{ total_resources }}</div>
-        <div class="label">Resources</div>
-    </div>
-    <div class="stat-card">
-        <div class="number" style="color: #e74c3c;">{{ critical_count }}</div>
-        <div class="label">Critical</div>
-    </div>
-    <div class="stat-card">
-        <div class="number" style="color: #f39c12;">{{ warning_count }}</div>
-        <div class="label">Warning</div>
-    </div>
-    <div class="stat-card">
-        <div class="number" style="color: #2ecc71;">{{ healthy_count }}</div>
-        <div class="label">Healthy</div>
-    </div>
+<div class="stats-grid" role="region" aria-label="Status summary">
+  <div class="stat-card">
+    <div class="stat-number">{{ total_resources }}</div>
+    <div class="stat-label">Resources</div>
+  </div>
+  <div class="stat-card stat-card--critical">
+    <div class="stat-number">{{ critical_count }}</div>
+    <div class="stat-label">Critical</div>
+  </div>
+  <div class="stat-card stat-card--warning">
+    <div class="stat-number">{{ warning_count }}</div>
+    <div class="stat-label">Warning</div>
+  </div>
+  <div class="stat-card stat-card--healthy">
+    <div class="stat-number">{{ healthy_count }}</div>
+    <div class="stat-label">Healthy</div>
+  </div>
 </div>
 
-<div hx-get="/dashboard/resources" hx-trigger="load, every 30s" hx-swap="innerHTML">
-    <p aria-busy="true">Loading resources...</p>
+<div hx-get="/dashboard/resources" hx-trigger="load, every 30s" hx-swap="innerHTML"
+     role="region" aria-label="Resource list" aria-live="polite">
+  <div class="skeleton skeleton-card"></div>
+  <div class="skeleton skeleton-card"></div>
+  <div class="skeleton skeleton-card"></div>
 </div>
 {% endblock %}
