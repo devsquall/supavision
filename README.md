@@ -1,5 +1,9 @@
 # Supervisor
 
+[![CI](https://github.com/your-org/supervisor-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/supervisor-ai/actions)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 AI-powered infrastructure monitoring that discovers what's running on your servers and watches it intelligently.
 
 Unlike traditional monitoring tools that require you to define what to check, Supervisor uses an LLM agent with security-hardened tools to explore your infrastructure, establish baselines, and detect changes — then alerts you when something is wrong.
