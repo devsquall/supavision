@@ -12,6 +12,10 @@ build/
 .pytest_cache/
 htmlcov/
 
+# Build artifacts
+*.egg-info/
+.ruff_cache/
+
 # IDE
 .idea/
 .vscode/
