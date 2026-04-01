@@ -27,5 +27,5 @@
   Report ID: <code>{{ report.id }}</code>
 </p>
 
-<pre class="report-view">{{ report.content }}</pre>
+<div class="report-content">{{ report_html | safe }}</div>
 {% endblock %}

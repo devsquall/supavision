@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import html as html_mod
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -108,9 +110,12 @@ async def resource_detail(resource_id: str, request: Request):
     latest_eval = store.get_recent_evaluations(resource_id, limit=1)
     severity = str(latest_eval[0].severity) if latest_eval else None
 
+    context_html = _md_to_html(context.content) if context else ""
+
     return templates.TemplateResponse(request, "resource_detail.html", {
         "resource": resource,
         "context": context,
+        "context_html": context_html,
         "checklist": checklist,
         "runs": runs_data,
         "severity": severity,
@@ -151,6 +156,90 @@ async def trigger_health_check(resource_id: str, request: Request):
     return Response(status_code=204)
 
 
+def _md_to_html(text: str) -> str:
+    """Minimal markdown to HTML. Handles headers, bold, code blocks, tables, lists."""
+    lines = html_mod.escape(text).split("\n")
+    out = []
+    in_code = False
+    in_table = False
+
+    for line in lines:
+        # Code blocks
+        if line.strip().startswith("```"):
+            if in_code:
+                out.append("</code></pre>")
+                in_code = False
+            else:
+                out.append("<pre class=\"report-view\"><code>")
+                in_code = True
+            continue
+        if in_code:
+            out.append(line)
+            continue
+
+        # Close table if line doesn't start with |
+        if in_table and not line.strip().startswith("|"):
+            out.append("</tbody></table></div>")
+            in_table = False
+
+        stripped = line.strip()
+
+        # Skip table separator rows
+        if re.match(r"^\|[\s\-:|]+\|$", stripped):
+            continue
+
+        # Table rows
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if not in_table:
+                out.append('<div class="table-wrap"><table class="table"><thead><tr>')
+                out.append("".join(f"<th>{c}</th>" for c in cells))
+                out.append("</tr></thead><tbody>")
+                in_table = True
+            else:
+                out.append("<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
+            continue
+
+        # Headers
+        if stripped.startswith("### "):
+            out.append(f"<h4>{stripped[4:]}</h4>")
+            continue
+        if stripped.startswith("## "):
+            out.append(f"<h3>{stripped[3:]}</h3>")
+            continue
+        if stripped.startswith("# "):
+            out.append(f"<h2>{stripped[2:]}</h2>")
+            continue
+
+        # Horizontal rule
+        if stripped == "---":
+            out.append("<hr>")
+            continue
+
+        # List items
+        if stripped.startswith("- "):
+            content = stripped[2:]
+            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
+            out.append(f"<li>{content}</li>")
+            continue
+
+        # Bold/inline code
+        line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
+        line = re.sub(r"`([^`]+)`", r"<code>\1</code>", line)
+
+        if stripped:
+            out.append(f"<p>{line}</p>")
+        else:
+            out.append("")
+
+    if in_code:
+        out.append("</code></pre>")
+    if in_table:
+        out.append("</tbody></table></div>")
+
+    return "\n".join(out)
+
+
 @router.get("/reports/{report_id}", response_class=HTMLResponse)
 async def report_detail(report_id: str, request: Request):
     store = request.app.state.store
@@ -168,8 +257,11 @@ async def report_detail(report_id: str, request: Request):
     resource = store.get_resource(report.resource_id)
     resource_name = resource.name if resource else report.resource_id
 
+    report_html = _md_to_html(report.content or "")
+
     return templates.TemplateResponse(request, "report_detail.html", {
         "report": report,
+        "report_html": report_html,
         "evaluation": evaluation,
         "resource_name": resource_name,
     })

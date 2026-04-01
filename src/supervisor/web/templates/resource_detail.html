@@ -37,7 +37,7 @@
 {% if context %}
 <details open>
   <summary>Baseline (v{{ context.version }})</summary>
-  <pre class="report-view">{{ context.content }}</pre>
+  <div class="report-content">{{ context_html | safe }}</div>
 </details>
 {% else %}
 <div class="empty-state mb-6">
