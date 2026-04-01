@@ -275,6 +275,17 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
     discovery_cron = resource.discovery_schedule.cron if resource.discovery_schedule else ""
     slack_webhook = resource.config.get("slack_webhook", "")
 
+    # Next scheduled run
+    next_health_check = None
+    if health_cron and resource.enabled:
+        try:
+            from croniter import croniter
+
+            c = croniter(health_cron, datetime.now(timezone.utc))
+            next_health_check = c.get_next(datetime).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            pass
+
     return templates.TemplateResponse(request, "resource_detail.html", {
         "resource": resource,
         "context": context,
@@ -285,6 +296,7 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
         "health_cron": health_cron,
         "discovery_cron": discovery_cron,
         "slack_webhook": slack_webhook,
+        "next_health_check": next_health_check,
         "page": page,
         "has_more_runs": has_more,
         "is_new": bool(new),

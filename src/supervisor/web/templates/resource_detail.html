@@ -70,6 +70,9 @@
 
 <div class="settings-section">
   <h4>Schedule</h4>
+  {% if next_health_check %}
+  <p class="text-sm text-muted mb-4">Next health check: <span data-timestamp="{{ next_health_check }}">{{ next_health_check }}</span></p>
+  {% endif %}
   <form hx-post="/resources/{{ resource.id }}/schedule" hx-swap="none"
         data-action="schedule" data-success-msg="Schedule updated" data-error-msg="Failed to update schedule">
     <div class="settings-row">
