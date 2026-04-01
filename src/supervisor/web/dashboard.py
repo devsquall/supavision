@@ -472,6 +472,13 @@ async def resource_run_status(resource_id: str, request: Request):
     return {"running": is_running, "severity": severity, "status": str(latest.status)}
 
 
+def _inline(text: str) -> str:
+    """Apply inline markdown: **bold** and `code`."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    return text
+
+
 def _md_to_html(text: str) -> str:
     """Minimal markdown to HTML. Handles headers, bold, code blocks, tables, lists."""
     lines = html_mod.escape(text).split("\n")
@@ -506,7 +513,7 @@ def _md_to_html(text: str) -> str:
 
         # Table rows
         if stripped.startswith("|") and stripped.endswith("|"):
-            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            cells = [_inline(c.strip()) for c in stripped.strip("|").split("|")]
             if not in_table:
                 out.append('<div class="table-wrap"><table class="table"><thead><tr>')
                 out.append("".join(f"<th>{c}</th>" for c in cells))
@@ -518,13 +525,13 @@ def _md_to_html(text: str) -> str:
 
         # Headers
         if stripped.startswith("### "):
-            out.append(f"<h4>{stripped[4:]}</h4>")
+            out.append(f"<h4>{_inline(stripped[4:])}</h4>")
             continue
         if stripped.startswith("## "):
-            out.append(f"<h3>{stripped[3:]}</h3>")
+            out.append(f"<h3>{_inline(stripped[3:])}</h3>")
             continue
         if stripped.startswith("# "):
-            out.append(f"<h2>{stripped[2:]}</h2>")
+            out.append(f"<h2>{_inline(stripped[2:])}</h2>")
             continue
 
         # Horizontal rule
@@ -534,14 +541,11 @@ def _md_to_html(text: str) -> str:
 
         # List items
         if stripped.startswith("- "):
-            content = stripped[2:]
-            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
-            out.append(f"<li>{content}</li>")
+            out.append(f"<li>{_inline(stripped[2:])}</li>")
             continue
 
-        # Bold/inline code
-        line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
-        line = re.sub(r"`([^`]+)`", r"<code>\1</code>", line)
+        # Inline formatting
+        line = _inline(line)
 
         if stripped:
             out.append(f"<p>{line}</p>")
