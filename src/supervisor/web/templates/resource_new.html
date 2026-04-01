@@ -13,6 +13,12 @@
 
 <h2>{{ "Edit" if editing else "Add" }} Resource</h2>
 
+{% if error %}
+<div class="resource-card resource-card--critical mb-4">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
 {% if not editing and not selected_type %}
 {# ── Step 0: Type Selection ── #}
 <p class="text-muted mb-4">What would you like to monitor?</p>

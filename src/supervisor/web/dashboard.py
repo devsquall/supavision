@@ -180,9 +180,17 @@ async def resource_new_submit(request: Request):
     resource_type = form.get("resource_type", "server")
 
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
+        return templates.TemplateResponse(request, "resource_new.html", {
+            "resource": None, "editing": False,
+            "selected_type": resource_type, "resource_types": RESOURCE_TYPES,
+            "error": "Name is required.",
+        }, status_code=400)
     if resource_type not in RESOURCE_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid resource type")
+        return templates.TemplateResponse(request, "resource_new.html", {
+            "resource": None, "editing": False,
+            "selected_type": "", "resource_types": RESOURCE_TYPES,
+            "error": "Please select a resource type.",
+        }, status_code=400)
 
     config: dict[str, str] = {}
     rtype = RESOURCE_TYPES[resource_type]

@@ -146,7 +146,8 @@
 </details>
 {% else %}
 <div class="empty-state mb-6">
-  <p>No discovery baseline yet. Run discovery first.</p>
+  <p>No discovery baseline yet.</p>
+  <p class="text-sm mt-4">Click <strong>Run Discovery</strong> above — the AI will explore this server and build a baseline of what's running (takes 1-3 minutes).</p>
 </div>
 {% endif %}
 
@@ -221,13 +222,9 @@
 <div class="settings-section danger-zone mt-6">
   <h4>Danger Zone</h4>
   <p class="text-muted text-sm mb-4">Deleting a resource removes all its reports, baselines, and run history.</p>
-  <button class="btn btn-danger"
-          hx-post="/resources/{{ resource.id }}/delete"
-          hx-confirm="Delete {{ resource.name }}? This cannot be undone."
-          hx-swap="none"
-          data-action="delete"
-          data-success-msg="Resource deleted">
-    Delete Resource
-  </button>
+  <form method="post" action="/resources/{{ resource.id }}/delete"
+        onsubmit="return confirm('Delete {{ resource.name }}? This cannot be undone.');">
+    <button type="submit" class="btn btn-danger">Delete Resource</button>
+  </form>
 </div>
 {% endblock %}
