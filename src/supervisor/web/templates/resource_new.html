@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Add Resource - Supervisor{% endblock %}
+{% block content %}
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Dashboard</a></li>
+  <li>Add Resource</li>
+</ul>
+
+<h2>Add Resource</h2>
+
+<form method="post" action="/resources/new" style="max-width:600px;">
+  <div class="form-group">
+    <label class="form-label" for="name">Name</label>
+    <input class="form-input" type="text" id="name" name="name" required
+           placeholder="e.g. prod-web-01">
+  </div>
+
+  <div class="form-group">
+    <label class="form-label" for="resource_type">Type</label>
+    <select class="form-select" id="resource_type" name="resource_type" required>
+      <option value="server">Server</option>
+      <option value="aws_account">AWS Account</option>
+      <option value="database">Database</option>
+      <option value="github_org">GitHub Organization</option>
+    </select>
+  </div>
+
+  <fieldset id="server-fields" style="border:none; padding:0; margin:0;">
+    <legend class="form-label" style="margin-bottom:var(--sp-2);">Connection (for remote servers)</legend>
+    <p class="form-hint mb-4">Leave empty for local monitoring (this server).</p>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="ssh_host">SSH Host</label>
+        <input class="form-input" type="text" id="ssh_host" name="ssh_host"
+               placeholder="10.0.1.5 or hostname">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ssh_port">Port</label>
+        <input class="form-input" type="text" id="ssh_port" name="ssh_port"
+               placeholder="22" value="22">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="ssh_user">SSH User</label>
+        <input class="form-input" type="text" id="ssh_user" name="ssh_user"
+               placeholder="ubuntu">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ssh_key_path">Key Path</label>
+        <input class="form-input" type="text" id="ssh_key_path" name="ssh_key_path"
+               placeholder="~/.ssh/id_ed25519">
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="actions mt-6">
+    <button type="submit" class="btn">Create Resource</button>
+    <a href="/" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

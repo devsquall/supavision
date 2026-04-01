@@ -75,6 +75,39 @@ async def resources_page(request: Request):
     return await dashboard(request)
 
 
+@router.get("/resources/new", response_class=HTMLResponse)
+async def resource_new_form(request: Request):
+    return templates.TemplateResponse(request, "resource_new.html", {})
+
+
+@router.post("/resources/new")
+async def resource_new_submit(request: Request):
+    from ..models import Resource
+
+    store = request.app.state.store
+    form = await request.form()
+    name = form.get("name", "").strip()
+    resource_type = form.get("resource_type", "server")
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    config: dict[str, str] = {}
+    ssh_host = form.get("ssh_host", "").strip()
+    if ssh_host:
+        config["ssh_host"] = ssh_host
+        config["ssh_user"] = form.get("ssh_user", "").strip() or "ubuntu"
+        config["ssh_key_path"] = form.get("ssh_key_path", "").strip()
+        config["ssh_port"] = form.get("ssh_port", "").strip() or "22"
+
+    resource = Resource(name=name, resource_type=resource_type, config=config)
+    store.save_resource(resource)
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url=f"/resources/{resource.id}", status_code=303)
+
+
 @router.get("/resources/{resource_id}", response_class=HTMLResponse)
 async def resource_detail(resource_id: str, request: Request):
     store = request.app.state.store
@@ -112,6 +145,11 @@ async def resource_detail(resource_id: str, request: Request):
 
     context_html = _md_to_html(context.content) if context else ""
 
+    # Current schedule values for form
+    health_cron = resource.health_check_schedule.cron if resource.health_check_schedule else ""
+    discovery_cron = resource.discovery_schedule.cron if resource.discovery_schedule else ""
+    slack_webhook = resource.config.get("slack_webhook", "")
+
     return templates.TemplateResponse(request, "resource_detail.html", {
         "resource": resource,
         "context": context,
@@ -119,6 +157,9 @@ async def resource_detail(resource_id: str, request: Request):
         "checklist": checklist,
         "runs": runs_data,
         "severity": severity,
+        "health_cron": health_cron,
+        "discovery_cron": discovery_cron,
+        "slack_webhook": slack_webhook,
     })
 
 
@@ -154,6 +195,102 @@ async def trigger_health_check(resource_id: str, request: Request):
 
     asyncio.create_task(_run())
     return Response(status_code=204)
+
+
+@router.post("/resources/{resource_id}/schedule")
+async def update_schedule(resource_id: str, request: Request):
+    from ..models import Schedule
+
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    form = await request.form()
+    health_cron = form.get("health_cron", "").strip()
+    discovery_cron = form.get("discovery_cron", "").strip()
+
+    resource.health_check_schedule = Schedule(cron=health_cron, enabled=True) if health_cron else None
+    resource.discovery_schedule = Schedule(cron=discovery_cron, enabled=True) if discovery_cron else None
+    store.save_resource(resource)
+    return Response(status_code=204)
+
+
+@router.post("/resources/{resource_id}/notifications")
+async def update_notifications(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    form = await request.form()
+    webhook = form.get("slack_webhook", "").strip()
+    if webhook:
+        resource.config["slack_webhook"] = webhook
+    else:
+        resource.config.pop("slack_webhook", None)
+    store.save_resource(resource)
+    return Response(status_code=204)
+
+
+@router.post("/resources/{resource_id}/notify-test")
+async def test_notification(resource_id: str, request: Request):
+    from ..models import Evaluation, Report, Severity
+    from ..notifications import send_alert
+
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    test_report = Report(
+        resource_id=resource.id,
+        run_type="health_check",
+        content="Test notification from Supervisor dashboard.",
+    )
+    test_eval = Evaluation(
+        report_id=test_report.id,
+        resource_id=resource.id,
+        severity=Severity.WARNING,
+        summary="Test notification — verifying webhook configuration",
+        should_alert=True,
+    )
+    channels, _ = await send_alert(resource, test_report, test_eval, skip_dedup=True)
+    if channels:
+        return Response(status_code=204)
+    raise HTTPException(status_code=400, detail="No notification channels configured or all failed")
+
+
+@router.post("/resources/{resource_id}/checklist")
+async def add_checklist_item(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    form = await request.form()
+    item_text = form.get("request", "").strip()
+    if not item_text:
+        raise HTTPException(status_code=400, detail="Check description required")
+
+    if not resource.monitoring_requests:
+        resource.monitoring_requests = []
+    resource.monitoring_requests.append(item_text)
+    store.save_resource(resource)
+    return Response(status_code=204)
+
+
+@router.post("/resources/{resource_id}/delete")
+async def delete_resource(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    store.delete_resource(resource_id)
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/", status_code=303)
 
 
 def _md_to_html(text: str) -> str:
