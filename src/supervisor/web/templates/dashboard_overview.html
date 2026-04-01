@@ -1,3 +1,22 @@
+<div class="stats-grid" role="region" aria-label="Status summary">
+  <div class="stat-card">
+    <div class="stat-number">{{ total_resources }}</div>
+    <div class="stat-label">Resources</div>
+  </div>
+  <div class="stat-card stat-card--critical">
+    <div class="stat-number">{{ critical_count }}</div>
+    <div class="stat-label">Critical</div>
+  </div>
+  <div class="stat-card stat-card--warning">
+    <div class="stat-number">{{ warning_count }}</div>
+    <div class="stat-label">Warning</div>
+  </div>
+  <div class="stat-card stat-card--healthy">
+    <div class="stat-number">{{ healthy_count }}</div>
+    <div class="stat-label">Healthy</div>
+  </div>
+</div>
+
 {% for r in resources %}
 <div class="resource-card resource-card--{{ r.severity or 'unknown' }}" data-resource-id="{{ r.id }}">
   <div class="resource-card-header">

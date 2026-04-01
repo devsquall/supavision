@@ -113,6 +113,8 @@ class Scheduler:
         latest_runs = self.store.get_latest_runs_batch()
 
         for resource in resources:
+            if not resource.enabled:
+                continue
             for run_type, schedule in [
                 (RunType.DISCOVERY, resource.discovery_schedule),
                 (RunType.HEALTH_CHECK, resource.health_check_schedule),

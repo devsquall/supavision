@@ -1,20 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Add Resource - Supervisor{% endblock %}
+{% block title %}{{ "Edit" if editing else "Add" }} Resource - Supervisor{% endblock %}
 {% block content %}
 <ul class="breadcrumb" aria-label="Breadcrumb">
   <li><a href="/">Dashboard</a></li>
+  {% if editing %}
+  <li><a href="/resources/{{ resource.id }}">{{ resource.name }}</a></li>
+  <li>Edit</li>
+  {% else %}
   <li>Add Resource</li>
+  {% endif %}
 </ul>
 
-<h2>Add Resource</h2>
+<h2>{{ "Edit" if editing else "Add" }} Resource</h2>
 
-<form method="post" action="/resources/new" style="max-width:600px;">
+<form method="post" action="{{ '/resources/' + resource.id + '/edit' if editing else '/resources/new' }}" style="max-width:600px;">
   <div class="form-group">
     <label class="form-label" for="name">Name</label>
     <input class="form-input" type="text" id="name" name="name" required
-           placeholder="e.g. prod-web-01">
+           value="{{ resource.name if resource else '' }}"
+           placeholder="e.g. prod-web-01" maxlength="100">
   </div>
 
+  {% if not editing %}
   <div class="form-group">
     <label class="form-label" for="resource_type">Type</label>
     <select class="form-select" id="resource_type" name="resource_type" required>
@@ -24,8 +31,9 @@
       <option value="github_org">GitHub Organization</option>
     </select>
   </div>
+  {% endif %}
 
-  <fieldset id="server-fields" style="border:none; padding:0; margin:0;">
+  <fieldset style="border:none; padding:0; margin:0;">
     <legend class="form-label" style="margin-bottom:var(--sp-2);">Connection (for remote servers)</legend>
     <p class="form-hint mb-4">Leave empty for local monitoring (this server).</p>
 
@@ -33,12 +41,14 @@
       <div class="form-group">
         <label class="form-label" for="ssh_host">SSH Host</label>
         <input class="form-input" type="text" id="ssh_host" name="ssh_host"
+               value="{{ resource.config.ssh_host if resource else '' }}"
                placeholder="10.0.1.5 or hostname">
       </div>
       <div class="form-group">
         <label class="form-label" for="ssh_port">Port</label>
-        <input class="form-input" type="text" id="ssh_port" name="ssh_port"
-               placeholder="22" value="22">
+        <input class="form-input" type="number" id="ssh_port" name="ssh_port"
+               value="{{ resource.config.ssh_port if resource and resource.config.ssh_port else '22' }}"
+               min="1" max="65535">
       </div>
     </div>
 
@@ -46,19 +56,21 @@
       <div class="form-group">
         <label class="form-label" for="ssh_user">SSH User</label>
         <input class="form-input" type="text" id="ssh_user" name="ssh_user"
+               value="{{ resource.config.ssh_user if resource else '' }}"
                placeholder="ubuntu">
       </div>
       <div class="form-group">
         <label class="form-label" for="ssh_key_path">Key Path</label>
         <input class="form-input" type="text" id="ssh_key_path" name="ssh_key_path"
+               value="{{ resource.config.ssh_key_path if resource else '' }}"
                placeholder="~/.ssh/id_ed25519">
       </div>
     </div>
   </fieldset>
 
   <div class="actions mt-6">
-    <button type="submit" class="btn">Create Resource</button>
-    <a href="/" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn">{{ "Save Changes" if editing else "Create Resource" }}</button>
+    <a href="{{ '/resources/' + resource.id if editing else '/' }}" class="btn btn-outline">Cancel</a>
   </div>
 </form>
 {% endblock %}

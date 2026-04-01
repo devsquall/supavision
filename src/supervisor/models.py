@@ -129,6 +129,7 @@ class Resource(BaseModel):
         default_factory=list,
         description="Plain-language monitoring requests from team members",
     )
+    enabled: bool = Field(default=True, description="Whether scheduled monitoring is active")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

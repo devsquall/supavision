@@ -6,7 +6,7 @@
   <li>{{ resource.name }}</li>
 </ul>
 
-<div class="page-header">
+<div class="page-header" data-resource-id="{{ resource.id }}">
   <h2>
     {{ resource.name }}
     <span class="badge badge--type">{{ resource.resource_type }}</span>
@@ -15,6 +15,7 @@
     {% endif %}
   </h2>
   <div class="actions">
+    <a href="/resources/{{ resource.id }}/edit" class="btn btn-outline">Edit</a>
     <button class="btn btn-outline"
             hx-post="/resources/{{ resource.id }}/discover"
             hx-swap="none"
@@ -35,6 +36,30 @@
 </div>
 
 <h3>Settings</h3>
+
+<div class="settings-section">
+  <h4>Monitoring</h4>
+  <div class="settings-row">
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      {% if resource.enabled %}
+      <span class="badge badge--healthy">Active</span>
+      <button class="btn btn-outline" style="margin-left:var(--sp-2);"
+              hx-post="/resources/{{ resource.id }}/toggle" hx-swap="none"
+              data-action="toggle" data-success-msg="Monitoring paused">
+        Pause
+      </button>
+      {% else %}
+      <span class="badge badge--unknown">Paused</span>
+      <button class="btn btn-outline" style="margin-left:var(--sp-2);"
+              hx-post="/resources/{{ resource.id }}/toggle" hx-swap="none"
+              data-action="toggle" data-success-msg="Monitoring resumed">
+        Resume
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
 
 <div class="settings-section">
   <h4>Schedule</h4>
@@ -151,7 +176,7 @@
         <span class="text-muted">-</span>
         {% endif %}
       </td>
-      <td class="text-muted">{{ run.started_at }}</td>
+      <td class="text-muted"><span data-timestamp="{{ run.started_at }}">{{ run.started_at }}</span></td>
       <td class="text-muted">{{ run.duration or '-' }}</td>
       <td>
         {% if run.report_id %}

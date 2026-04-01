@@ -40,6 +40,46 @@ async def dashboard(request: Request):
     })
 
 
+@router.get("/dashboard/overview", response_class=HTMLResponse)
+async def dashboard_overview(request: Request, q: str = ""):
+    """Combined stats + resource list fragment for HTMX refresh."""
+    store = request.app.state.store
+    resources = store.list_resources()
+    if q:
+        q_lower = q.lower()
+        resources = [r for r in resources if q_lower in r.name.lower() or q_lower in r.resource_type.lower()]
+    latest_runs = store.get_latest_runs_batch()
+    latest_evals = store.get_latest_evaluations_batch()
+
+    resource_data = []
+    for r in resources:
+        ev = latest_evals.get(r.id)
+        run = latest_runs.get((r.id, str(RunType.HEALTH_CHECK)))
+        resource_data.append({
+            "id": r.id,
+            "name": r.name,
+            "resource_type": r.resource_type,
+            "severity": str(ev.severity) if ev else None,
+            "summary": ev.summary if ev else None,
+            "last_run_at": run.completed_at.isoformat() if run and run.completed_at else None,
+        })
+
+    order = {"critical": 0, "warning": 1, "healthy": 2, None: 3}
+    resource_data.sort(key=lambda x: order.get(x["severity"], 3))
+
+    critical = sum(1 for r in resources if str(getattr(latest_evals.get(r.id), "severity", "")) == "critical")
+    warning = sum(1 for r in resources if str(getattr(latest_evals.get(r.id), "severity", "")) == "warning")
+    healthy = sum(1 for r in resources if str(getattr(latest_evals.get(r.id), "severity", "")) == "healthy")
+
+    return templates.TemplateResponse(request, "dashboard_overview.html", {
+        "resources": resource_data,
+        "total_resources": len(resources),
+        "critical_count": critical,
+        "warning_count": warning,
+        "healthy_count": healthy,
+    })
+
+
 @router.get("/dashboard/resources", response_class=HTMLResponse)
 async def dashboard_resources(request: Request):
     store = request.app.state.store
@@ -77,7 +117,45 @@ async def resources_page(request: Request):
 
 @router.get("/resources/new", response_class=HTMLResponse)
 async def resource_new_form(request: Request):
-    return templates.TemplateResponse(request, "resource_new.html", {})
+    return templates.TemplateResponse(request, "resource_new.html", {"resource": None, "editing": False})
+
+
+@router.get("/resources/{resource_id}/edit", response_class=HTMLResponse)
+async def resource_edit_form(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    return templates.TemplateResponse(request, "resource_new.html", {"resource": resource, "editing": True})
+
+
+@router.post("/resources/{resource_id}/edit")
+async def resource_edit_submit(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    form = await request.form()
+    name = form.get("name", "").strip()
+    if name:
+        resource.name = name
+
+    ssh_host = form.get("ssh_host", "").strip()
+    if ssh_host:
+        resource.config["ssh_host"] = ssh_host
+        resource.config["ssh_user"] = form.get("ssh_user", "").strip() or "ubuntu"
+        resource.config["ssh_key_path"] = form.get("ssh_key_path", "").strip()
+        resource.config["ssh_port"] = form.get("ssh_port", "").strip() or "22"
+    else:
+        for k in ("ssh_host", "ssh_user", "ssh_key_path", "ssh_port"):
+            resource.config.pop(k, None)
+
+    store.save_resource(resource)
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url=f"/resources/{resource.id}", status_code=303)
 
 
 @router.post("/resources/new")
@@ -197,6 +275,17 @@ async def trigger_health_check(resource_id: str, request: Request):
     return Response(status_code=204)
 
 
+@router.post("/resources/{resource_id}/toggle")
+async def toggle_resource(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    resource.enabled = not resource.enabled
+    store.save_resource(resource)
+    return Response(status_code=204)
+
+
 @router.post("/resources/{resource_id}/schedule")
 async def update_schedule(resource_id: str, request: Request):
     from ..models import Schedule
@@ -291,6 +380,28 @@ async def delete_resource(resource_id: str, request: Request):
     from fastapi.responses import RedirectResponse
 
     return RedirectResponse(url="/", status_code=303)
+
+
+@router.get("/dashboard/resources-status/{resource_id}")
+async def resource_run_status(resource_id: str, request: Request):
+    """JSON endpoint for run status polling from JS."""
+    store = request.app.state.store
+    from ..models import RunStatus
+
+    runs = store.get_runs(resource_id, limit=1)
+    if not runs:
+        return {"running": False, "severity": None}
+
+    latest = runs[0]
+    is_running = latest.status in (RunStatus.PENDING, RunStatus.RUNNING)
+
+    severity = None
+    if not is_running and latest.evaluation_id:
+        ev = store.get_evaluation(latest.evaluation_id)
+        if ev:
+            severity = str(ev.severity)
+
+    return {"running": is_running, "severity": severity, "status": str(latest.status)}
 
 
 def _md_to_html(text: str) -> str:
