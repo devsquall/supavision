@@ -34,9 +34,9 @@ dependencies = [
 supervisor = "supervisor.cli:main"
 
 [project.urls]
-Repository = "https://github.com/yourusername/supervisor-ai"
-Documentation = "https://github.com/yourusername/supervisor-ai#readme"
-Issues = "https://github.com/yourusername/supervisor-ai/issues"
+Repository = "https://github.com/your-org/supervisor-ai-ai"
+Documentation = "https://github.com/your-org/supervisor-ai-ai#readme"
+Issues = "https://github.com/your-org/supervisor-ai-ai/issues"
 
 [project.optional-dependencies]
 dev = [

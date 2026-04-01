@@ -27,7 +27,7 @@ Unlike traditional monitoring tools that require you to define what to check, Su
 **Prerequisites:** [Claude Code CLI](https://claude.ai/code) (included with Claude subscription)
 
 ```bash
-git clone https://github.com/yourusername/supervisor.git
+git clone https://github.com/your-org/supervisor-ai.git
 cd supervisor
 python -m venv .venv && source .venv/bin/activate
 pip install -e .

@@ -436,7 +436,8 @@ async def remove_checklist_item(resource_id: str, request: Request):
     if 0 <= index < len(resource.monitoring_requests):
         resource.monitoring_requests.pop(index)
         store.save_resource(resource)
-    return Response(status_code=204)
+        return Response(status_code=204)
+    raise HTTPException(status_code=400, detail="Invalid checklist index")
 
 
 @router.post("/resources/{resource_id}/delete")

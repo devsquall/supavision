@@ -3,13 +3,15 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/yourusername/supervisor.git
-cd supervisor
+git clone https://github.com/your-org/supervisor-ai.git
+cd supervisor-ai
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env
-# Add your OpenRouter API key to .env
 ```
+
+The default backend (`claude_cli`) requires [Claude Code](https://claude.ai/code) installed. No API keys needed.
+
+To use OpenRouter instead, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`.
 
 ## Running Tests
 

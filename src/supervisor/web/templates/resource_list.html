@@ -21,7 +21,7 @@
   </div>
   {% if r.last_run_at %}
   <div class="resource-card-meta">
-    Last check: <span data-timestamp="{{ r.last_run_at }}">{{ r.last_run_at }}</span>{% if r.summary %} &middot; {{ r.summary }}{% endif %}
+    Last check: <span data-timestamp="{{ r.last_run_at }}">{{ r.last_run_at }}</span>{% if r.summary %} &middot; {{ r.summary[:120] }}{% if r.summary|length > 120 %}...{% endif %}{% endif %}
   </div>
   {% endif %}
 </div>

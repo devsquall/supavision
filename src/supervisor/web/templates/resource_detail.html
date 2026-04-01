@@ -134,6 +134,7 @@
   </ul>
   {% endif %}
   <form hx-post="/resources/{{ resource.id }}/checklist" hx-swap="none"
+        hx-on::after-request="if(event.detail.successful) this.reset();"
         data-action="checklist" data-success-msg="Checklist item added" data-error-msg="Failed to add">
     <div class="settings-row">
       <div class="form-group">
@@ -230,7 +231,8 @@
   <h4>Danger Zone</h4>
   <p class="text-muted text-sm mb-4">Deleting a resource removes all its reports, baselines, and run history.</p>
   <form method="post" action="/resources/{{ resource.id }}/delete"
-        onsubmit="return confirm('Delete {{ resource.name }}? This cannot be undone.');">
+        onsubmit="return confirm(this.dataset.msg);"
+        data-msg="Delete {{ resource.name | e }}? This cannot be undone.">
     <button type="submit" class="btn btn-danger">Delete Resource</button>
   </form>
 </div>
