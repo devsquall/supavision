@@ -34,72 +34,7 @@
   </div>
 </div>
 
-{% if context %}
-<details open>
-  <summary>Baseline (v{{ context.version }})</summary>
-  <div class="report-content">{{ context_html | safe }}</div>
-</details>
-{% else %}
-<div class="empty-state mb-6">
-  <p>No discovery baseline yet. Run discovery first.</p>
-</div>
-{% endif %}
-
-{% if checklist %}
-<details>
-  <summary>Checklist ({{ checklist.items | length }} items)</summary>
-  <ul>
-  {% for item in checklist.items %}
-    <li>{{ item.description }}{% if item.source != 'discovery' %} <span class="text-muted text-sm">({{ item.source }})</span>{% endif %}</li>
-  {% endfor %}
-  </ul>
-</details>
-{% endif %}
-
-<h3 class="mt-6">Recent Reports</h3>
-
-{% if runs %}
-<div class="table-wrap">
-<table class="table">
-  <thead>
-    <tr>
-      <th scope="col">Type</th>
-      <th scope="col">Status</th>
-      <th scope="col">Severity</th>
-      <th scope="col">Started</th>
-      <th scope="col">Duration</th>
-      <th scope="col"><span class="sr-only">Actions</span></th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for run in runs %}
-    <tr>
-      <td>{{ run.run_type }}</td>
-      <td>{{ run.status }}</td>
-      <td>
-        {% if run.severity %}
-        <span class="badge badge--{{ run.severity }}">{{ run.severity }}</span>
-        {% else %}
-        <span class="text-muted">-</span>
-        {% endif %}
-      </td>
-      <td class="text-muted">{{ run.started_at }}</td>
-      <td class="text-muted">{{ run.duration or '-' }}</td>
-      <td>
-        {% if run.report_id %}
-        <a href="/reports/{{ run.report_id }}">View</a>
-        {% endif %}
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="text-muted">No runs yet.</p>
-{% endif %}
-
-<h3 class="mt-6">Settings</h3>
+<h3>Settings</h3>
 
 <div class="settings-section">
   <h4>Schedule</h4>
@@ -165,7 +100,74 @@
   </form>
 </div>
 
-<div class="settings-section danger-zone">
+{% if context %}
+<details open>
+  <summary>Baseline (v{{ context.version }})</summary>
+  <div class="report-content">{{ context_html | safe }}</div>
+</details>
+{% else %}
+<div class="empty-state mb-6">
+  <p>No discovery baseline yet. Run discovery first.</p>
+</div>
+{% endif %}
+
+{% if checklist %}
+<details>
+  <summary>Checklist ({{ checklist.items | length }} items)</summary>
+  <div class="report-content">
+    <ul>
+    {% for item in checklist.items %}
+      <li>{{ item.description | replace('**', '') }}{% if item.source != 'discovery' %} <span class="text-muted text-sm">({{ item.source }})</span>{% endif %}</li>
+    {% endfor %}
+    </ul>
+  </div>
+</details>
+{% endif %}
+
+<h3 class="mt-6">Recent Reports</h3>
+
+{% if runs %}
+<div class="table-wrap">
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">Type</th>
+      <th scope="col">Status</th>
+      <th scope="col">Severity</th>
+      <th scope="col">Started</th>
+      <th scope="col">Duration</th>
+      <th scope="col"><span class="sr-only">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for run in runs %}
+    <tr>
+      <td>{{ run.run_type }}</td>
+      <td>{{ run.status }}</td>
+      <td>
+        {% if run.severity %}
+        <span class="badge badge--{{ run.severity }}">{{ run.severity }}</span>
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+      </td>
+      <td class="text-muted">{{ run.started_at }}</td>
+      <td class="text-muted">{{ run.duration or '-' }}</td>
+      <td>
+        {% if run.report_id %}
+        <a href="/reports/{{ run.report_id }}">View</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="text-muted">No runs yet.</p>
+{% endif %}
+
+<div class="settings-section danger-zone mt-6">
   <h4>Danger Zone</h4>
   <p class="text-muted text-sm mb-4">Deleting a resource removes all its reports, baselines, and run history.</p>
   <button class="btn btn-danger"
