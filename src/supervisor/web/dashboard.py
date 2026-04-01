@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from ..models import RunType
+from ..resource_types import RESOURCE_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +117,13 @@ async def resources_page(request: Request):
 
 
 @router.get("/resources/new", response_class=HTMLResponse)
-async def resource_new_form(request: Request):
-    return templates.TemplateResponse(request, "resource_new.html", {"resource": None, "editing": False})
+async def resource_new_form(request: Request, type: str = ""):
+    return templates.TemplateResponse(request, "resource_new.html", {
+        "resource": None,
+        "editing": False,
+        "selected_type": type if type in RESOURCE_TYPES else "",
+        "resource_types": RESOURCE_TYPES,
+    })
 
 
 @router.get("/resources/{resource_id}/edit", response_class=HTMLResponse)
@@ -126,7 +132,12 @@ async def resource_edit_form(resource_id: str, request: Request):
     resource = store.get_resource(resource_id)
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
-    return templates.TemplateResponse(request, "resource_new.html", {"resource": resource, "editing": True})
+    return templates.TemplateResponse(request, "resource_new.html", {
+        "resource": resource,
+        "editing": True,
+        "selected_type": resource.resource_type,
+        "resource_types": RESOURCE_TYPES,
+    })
 
 
 @router.post("/resources/{resource_id}/edit")
@@ -160,7 +171,7 @@ async def resource_edit_submit(resource_id: str, request: Request):
 
 @router.post("/resources/new")
 async def resource_new_submit(request: Request):
-    from ..models import Resource
+    from ..models import Resource, Schedule
 
     store = request.app.state.store
     form = await request.form()
@@ -169,16 +180,37 @@ async def resource_new_submit(request: Request):
 
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
+    if resource_type not in RESOURCE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid resource type")
 
     config: dict[str, str] = {}
-    ssh_host = form.get("ssh_host", "").strip()
-    if ssh_host:
-        config["ssh_host"] = ssh_host
-        config["ssh_user"] = form.get("ssh_user", "").strip() or "ubuntu"
-        config["ssh_key_path"] = form.get("ssh_key_path", "").strip()
-        config["ssh_port"] = form.get("ssh_port", "").strip() or "22"
+    rtype = RESOURCE_TYPES[resource_type]
 
-    resource = Resource(name=name, resource_type=resource_type, config=config)
+    # SSH fields (only for SSH-based types)
+    if rtype["connection"] == "ssh":
+        ssh_host = form.get("ssh_host", "").strip()
+        if ssh_host:
+            config["ssh_host"] = ssh_host
+            config["ssh_user"] = form.get("ssh_user", "").strip() or "ubuntu"
+            config["ssh_key_path"] = form.get("ssh_key_path", "").strip()
+            config["ssh_port"] = form.get("ssh_port", "").strip() or "22"
+
+    # Slack webhook
+    slack = form.get("slack_webhook", "").strip()
+    if slack:
+        config["slack_webhook"] = slack
+
+    # Schedules
+    health_cron = form.get("health_cron", "").strip()
+    discovery_cron = form.get("discovery_cron", "").strip()
+
+    resource = Resource(
+        name=name,
+        resource_type=resource_type,
+        config=config,
+        health_check_schedule=Schedule(cron=health_cron, enabled=True) if health_cron else None,
+        discovery_schedule=Schedule(cron=discovery_cron, enabled=True) if discovery_cron else None,
+    )
     store.save_resource(resource)
 
     from fastapi.responses import RedirectResponse

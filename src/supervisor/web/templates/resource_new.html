@@ -13,64 +13,110 @@
 
 <h2>{{ "Edit" if editing else "Add" }} Resource</h2>
 
-<form method="post" action="{{ '/resources/' + resource.id + '/edit' if editing else '/resources/new' }}" style="max-width:600px;">
-  <div class="form-group">
-    <label class="form-label" for="name">Name</label>
-    <input class="form-input" type="text" id="name" name="name" required
-           value="{{ resource.name if resource else '' }}"
-           placeholder="e.g. prod-web-01" maxlength="100">
-  </div>
+{% if not editing and not selected_type %}
+{# ── Step 0: Type Selection ── #}
+<p class="text-muted mb-4">What would you like to monitor?</p>
+<div class="type-grid">
+  {% for slug, t in resource_types.items() %}
+  <a href="/resources/new?type={{ slug }}" class="type-card">
+    <strong>{{ t.label }}</strong>
+    <span class="text-muted text-sm">{{ t.description }}</span>
+  </a>
+  {% endfor %}
+</div>
 
+{% else %}
+{# ── Step 1: Resource Config (type-specific) ── #}
+{% set rtype = resource_types[selected_type] if selected_type else resource_types[resource.resource_type] %}
+
+{% if not editing %}
+<div class="wizard-info mb-4">
+  <strong>{{ rtype.label }}</strong> &mdash; {{ rtype.how_it_works }}
+</div>
+{% endif %}
+
+<form method="post" action="{{ '/resources/' + resource.id + '/edit' if editing else '/resources/new' }}" style="max-width:640px;">
   {% if not editing %}
-  <div class="form-group">
-    <label class="form-label" for="resource_type">Type</label>
-    <select class="form-select" id="resource_type" name="resource_type" required>
-      <option value="server">Server</option>
-      <option value="aws_account">AWS Account</option>
-      <option value="database">Database</option>
-      <option value="github_org">GitHub Organization</option>
-    </select>
-  </div>
+  <input type="hidden" name="resource_type" value="{{ selected_type }}">
   {% endif %}
 
-  <fieldset style="border:none; padding:0; margin:0;">
-    <legend class="form-label" style="margin-bottom:var(--sp-2);">Connection (for remote servers)</legend>
-    <p class="form-hint mb-4">Leave empty for local monitoring (this server).</p>
+  <div class="form-group">
+    <label class="form-label" for="name">Display Name <span class="text-muted">*</span></label>
+    <input class="form-input" type="text" id="name" name="name" required
+           value="{{ resource.name if resource else '' }}"
+           placeholder="e.g. {{ rtype.label }} Production" maxlength="100">
+    <span class="form-hint">A friendly name. Used in alerts and dashboards.</span>
+  </div>
 
+  {% if rtype.connection == 'ssh' %}
+  {# ── SSH fields (Server, Database) ── #}
+  <fieldset style="border:none; padding:0; margin:0;">
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label" for="ssh_host">SSH Host</label>
+      <div class="form-group" style="flex:3;">
+        <label class="form-label" for="ssh_host">SSH Host / IP</label>
         <input class="form-input" type="text" id="ssh_host" name="ssh_host"
                value="{{ resource.config.ssh_host if resource else '' }}"
                placeholder="10.0.1.5 or hostname">
+        <span class="form-hint">Leave empty for local monitoring (this server).</span>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="flex:1;">
         <label class="form-label" for="ssh_port">Port</label>
         <input class="form-input" type="number" id="ssh_port" name="ssh_port"
                value="{{ resource.config.ssh_port if resource and resource.config.ssh_port else '22' }}"
                min="1" max="65535">
       </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" style="flex:2;">
         <label class="form-label" for="ssh_user">SSH User</label>
         <input class="form-input" type="text" id="ssh_user" name="ssh_user"
                value="{{ resource.config.ssh_user if resource else '' }}"
                placeholder="ubuntu">
       </div>
-      <div class="form-group">
-        <label class="form-label" for="ssh_key_path">Key Path</label>
-        <input class="form-input" type="text" id="ssh_key_path" name="ssh_key_path"
-               value="{{ resource.config.ssh_key_path if resource else '' }}"
-               placeholder="~/.ssh/id_ed25519">
-      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="ssh_key_path">SSH Key Path</label>
+      <input class="form-input" type="text" id="ssh_key_path" name="ssh_key_path"
+             value="{{ resource.config.ssh_key_path if resource else '' }}"
+             placeholder="~/.ssh/id_ed25519">
+      <span class="form-hint">Path to private key on this server.</span>
     </div>
   </fieldset>
+  {% endif %}
+
+  {# ── Schedule (inline for simplicity) ── #}
+  {% if not editing %}
+  <div class="form-row mt-4">
+    <div class="form-group">
+      <label class="form-label" for="health_cron">Health Check Schedule</label>
+      <select class="form-select" id="health_cron" name="health_cron">
+        <option value="">Disabled</option>
+        <option value="0 */6 * * *">Every 6 hours</option>
+        <option value="0 */12 * * *">Every 12 hours</option>
+        <option value="0 0 * * *">Daily</option>
+        <option value="0 0 * * 0">Weekly</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="discovery_cron">Discovery Schedule</label>
+      <select class="form-select" id="discovery_cron" name="discovery_cron">
+        <option value="">Disabled</option>
+        <option value="0 0 * * 0">Weekly</option>
+        <option value="0 0 1 * *">Monthly</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label" for="slack_webhook">Slack Webhook <span class="text-muted">(optional)</span></label>
+    <input class="form-input" type="url" id="slack_webhook" name="slack_webhook"
+           placeholder="https://hooks.slack.com/services/...">
+    <span class="form-hint">Optional. Overrides the global webhook for this resource's alerts.</span>
+  </div>
+  {% endif %}
 
   <div class="actions mt-6">
     <button type="submit" class="btn">{{ "Save Changes" if editing else "Create Resource" }}</button>
     <a href="{{ '/resources/' + resource.id if editing else '/' }}" class="btn btn-outline">Cancel</a>
   </div>
 </form>
+{% endif %}
 {% endblock %}
