@@ -3,8 +3,7 @@
 {% block content %}
 <div class="page-header">
   <h2>Dashboard</h2>
-  <input type="search" class="form-input" placeholder="Search resources..."
-         style="max-width:240px; height:32px;"
+  <input type="search" class="form-input search-input" placeholder="Search resources..."
          hx-get="/dashboard/overview" hx-trigger="input changed delay:300ms, search"
          hx-target="#overview" hx-include="this" name="q">
 </div>
