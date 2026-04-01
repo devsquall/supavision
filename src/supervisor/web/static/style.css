@@ -97,7 +97,7 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
   border-top: 3px solid var(--color-border); border-radius: var(--radius-md);
   padding: var(--sp-4); text-align: center;
 }
-.stat-card--critical { border-top-color: var(--color-critical); }
+.stat-card--critical { border-top-color: var(--color-critical); background: rgba(248, 81, 73, 0.04); }
 .stat-card--warning  { border-top-color: var(--color-warning); }
 .stat-card--healthy  { border-top-color: var(--color-healthy); }
 
@@ -115,7 +115,7 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 }
 .resource-card--healthy  { border-left-color: var(--color-healthy); }
 .resource-card--warning  { border-left-color: var(--color-warning); }
-.resource-card--critical { border-left-color: var(--color-critical); }
+.resource-card--critical { border-left-color: var(--color-critical); background: rgba(248, 81, 73, 0.04); }
 
 .resource-card-header {
   display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
@@ -269,6 +269,13 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 .mt-6 { margin-top: var(--sp-6); }
 .mb-4 { margin-bottom: var(--sp-4); }
 .mb-6 { margin-bottom: var(--sp-6); }
+/* Accessibility: respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  .toast { animation: none; opacity: 1; }
+  .toast.hiding { animation: none; display: none; }
+}
+
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); border: 0;

@@ -84,10 +84,14 @@
             setTimeout(check, 2000);
           } else {
             clearInterval(interval);
-            btn.textContent = "Done!";
-            showToast(data.severity ? "Completed: " + data.severity.toUpperCase() : "Completed", "success");
-            reEnableButton(btn, 2000);
-            // Trigger HTMX refresh of resource list
+            if (data.status === "failed") {
+              btn.textContent = "Failed";
+              showToast(data.error || "Run failed. Check the resource page for details.", "error");
+            } else {
+              btn.textContent = "Done!";
+              showToast(data.severity ? "Completed: " + data.severity.toUpperCase() : "Completed", "success");
+            }
+            reEnableButton(btn, 3000);
             htmx.trigger(document.body, "refreshResources");
           }
         })

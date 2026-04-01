@@ -57,12 +57,19 @@ def _extract_status_line(content: str) -> str | None:
 
 
 def _count_matches(content: str, patterns: list[re.Pattern]) -> list[str]:
-    """Return list of unique matched pattern descriptions."""
+    """Return list of unique matched context lines (not just the keyword)."""
     matches = []
+    seen = set()
+    lines = content.split("\n")
     for pattern in patterns:
-        found = pattern.search(content)
-        if found:
-            matches.append(found.group(0).strip())
+        for line in lines:
+            if pattern.search(line):
+                # Use the line as context (cleaned up, truncated)
+                ctx = line.strip().lstrip("-*# ").strip()
+                if ctx and ctx not in seen:
+                    seen.add(ctx)
+                    matches.append(ctx[:80])
+                break  # One match per pattern is enough
     return matches
 
 

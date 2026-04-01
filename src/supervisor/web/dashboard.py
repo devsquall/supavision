@@ -224,11 +224,11 @@ async def resource_new_submit(request: Request):
 
     from fastapi.responses import RedirectResponse
 
-    return RedirectResponse(url=f"/resources/{resource.id}", status_code=303)
+    return RedirectResponse(url=f"/resources/{resource.id}?new=1", status_code=303)
 
 
 @router.get("/resources/{resource_id}", response_class=HTMLResponse)
-async def resource_detail(resource_id: str, request: Request, page: int = 1):
+async def resource_detail(resource_id: str, request: Request, page: int = 1, new: int = 0):
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -259,9 +259,10 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1):
             "run_type": str(run.run_type),
             "status": str(run.status),
             "severity": severity,
-            "started_at": run.started_at.strftime("%Y-%m-%d %H:%M") if run.started_at else "-",
+            "started_at": run.started_at.isoformat() if run.started_at else "-",
             "duration": duration,
             "report_id": run.report_id,
+            "error": (run.error[:150] + "...") if run.error and len(run.error) > 150 else run.error,
         })
 
     latest_eval = store.get_recent_evaluations(resource_id, limit=1)
@@ -286,6 +287,7 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1):
         "slack_webhook": slack_webhook,
         "page": page,
         "has_more_runs": has_more,
+        "is_new": bool(new),
         "now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
 
@@ -469,13 +471,25 @@ async def resource_run_status(resource_id: str, request: Request):
         if ev:
             severity = str(ev.severity)
 
-    return {"running": is_running, "severity": severity, "status": str(latest.status)}
+    error = None
+    if latest.status == RunStatus.FAILED and latest.error:
+        error = latest.error[:200]  # Truncate long tracebacks
+
+    return {"running": is_running, "severity": severity, "status": str(latest.status), "error": error}
 
 
 def _inline(text: str) -> str:
-    """Apply inline markdown: **bold** and `code`."""
+    """Apply inline markdown: **bold**, `code`, and [links](url)."""
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+
+    def _link(m):
+        label, url = m.group(1), m.group(2)
+        if url.startswith(("http://", "https://", "http%3A", "https%3A")):
+            return f'<a href="{url}" rel="noopener" target="_blank">{label}</a>'
+        return m.group(0)
+
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, text)
     return text
 
 

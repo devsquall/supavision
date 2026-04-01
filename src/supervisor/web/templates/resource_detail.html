@@ -35,6 +35,13 @@
   </div>
 </div>
 
+{% if is_new and not context %}
+<div class="wizard-info mb-4">
+  <strong>Resource created!</strong> Click <strong>Run Discovery</strong> above to explore this
+  {{ resource.resource_type }}. Claude will map services, databases, and configurations (takes 1-3 minutes).
+</div>
+{% endif %}
+
 <h3>Settings</h3>
 
 <div class="settings-section">
@@ -187,7 +194,7 @@
   {% for run in runs %}
     <tr>
       <td>{{ run.run_type }}</td>
-      <td>{{ run.status }}</td>
+      <td{% if run.error %} title="{{ run.error }}" style="cursor:help;"{% endif %}>{{ run.status }}{% if run.error %} <span class="text-muted text-sm">&#9432;</span>{% endif %}</td>
       <td>
         {% if run.severity %}
         <span class="badge badge--{{ run.severity }}">{{ run.severity }}</span>
