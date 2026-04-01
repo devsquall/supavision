@@ -6,6 +6,7 @@ import asyncio
 import html as html_mod
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -219,15 +220,20 @@ async def resource_new_submit(request: Request):
 
 
 @router.get("/resources/{resource_id}", response_class=HTMLResponse)
-async def resource_detail(resource_id: str, request: Request):
+async def resource_detail(resource_id: str, request: Request, page: int = 1):
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
 
+    page = max(1, page)
+    per_page = 10
     context = store.get_latest_context(resource_id)
     checklist = store.get_latest_checklist(resource_id)
-    recent_runs = store.get_runs(resource_id, limit=10)
+    # Fetch one extra to detect if there are more
+    recent_runs = store.get_runs(resource_id, limit=per_page + 1, offset=(page - 1) * per_page)
+    has_more = len(recent_runs) > per_page
+    recent_runs = recent_runs[:per_page]
 
     # Attach severity to runs
     runs_data = []
@@ -270,6 +276,9 @@ async def resource_detail(resource_id: str, request: Request):
         "health_cron": health_cron,
         "discovery_cron": discovery_cron,
         "slack_webhook": slack_webhook,
+        "page": page,
+        "has_more_runs": has_more,
+        "now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
 
 
@@ -398,6 +407,25 @@ async def add_checklist_item(resource_id: str, request: Request):
         resource.monitoring_requests = []
     resource.monitoring_requests.append(item_text)
     store.save_resource(resource)
+    return Response(status_code=204)
+
+
+@router.post("/resources/{resource_id}/checklist-remove")
+async def remove_checklist_item(resource_id: str, request: Request):
+    store = request.app.state.store
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    form = await request.form()
+    try:
+        index = int(form.get("index", "-1"))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid index")
+
+    if 0 <= index < len(resource.monitoring_requests):
+        resource.monitoring_requests.pop(index)
+        store.save_resource(resource)
     return Response(status_code=204)
 
 

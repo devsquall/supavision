@@ -6,45 +6,21 @@ Unlike traditional monitoring tools that require you to define what to check, Su
 
 ## How It Works
 
-```
-You → supervisor resource-add prod-server --type server
-    → supervisor run-discovery <id>          # AI explores the server
-    → supervisor set-schedule <id> --health-check "0 */6 * * *"
-    → supervisor notify-configure <id> --slack-webhook <url>
-    → supervisor run-scheduler               # Runs health checks every 6h
-```
+1. **Add a resource** — point Supervisor at a server, AWS account, database, or GitHub org
+2. **Discovery** — Claude investigates using scoped, read-only tools. Produces a structured baseline of what "normal" looks like
+3. **Health checks** — on schedule, compares current state against the baseline. Detects new issues, tracks trends
+4. **Alerts** — sends Slack notifications when something is wrong. Smart dedup prevents spam
 
-**Discovery:** Claude investigates your server using scoped, read-only tools — gets system metrics, checks services, reads configs, tails logs. Produces a structured baseline of what "normal" looks like.
+## Features
 
-**Health checks:** Compares current state against the baseline. Detects new issues, tracks trends across runs, and evaluates severity (healthy/warning/critical).
-
-**Alerts:** Sends Slack or webhook notifications when issues are found. Smart dedup prevents alert spam — same recurring issue only re-alerts once per day.
-
-## Architecture
-
-```
-CLI / API → Engine (agentic tool_use loop)
-                ↓
-          OpenRouter API (Claude)
-                ↓
-          7 Scoped Tools → SSH or Local Executor
-                ↓
-          Report → Evaluator (keyword/LLM/hybrid)
-                ↓
-          Slack / Webhook Alert (if needed)
-```
-
-**Security model:** The AI agent cannot run arbitrary commands. It has access to 7 read-only tools with strict validation:
-
-| Tool | What It Does | Safety |
-|------|-------------|--------|
-| `get_system_metrics` | CPU, memory, disk, processes, ports | No args needed |
-| `check_service_status` | systemctl status for a service | Name validated |
-| `read_file` | Read file contents (max 1000 lines) | Path validated, no `..` |
-| `list_directory` | List files in a directory | Path validated |
-| `check_logs` | journalctl for a service (max 500 lines) | Name validated |
-| `run_diagnostic` | Allowlisted commands only | Hard allowlist |
-| `query_database` | Read-only SQL queries | Write keywords blocked |
+- **Web dashboard** at `https://your-domain.com` — status overview, resource management, reports
+- **5 resource types** — Server, AWS Account, Database, GitHub Organization, custom
+- **REST API** with API key auth and OpenAPI docs at `/docs`
+- **CLI** for scripting and automation
+- **Zero LLM cost** — uses Claude Code CLI (covered by Claude subscription)
+- **Rule-based evaluation** — no additional API calls for severity assessment
+- **Slack notifications** with smart dedup (same issue re-alerts once per day)
+- **Responsive dashboard** — works on desktop and mobile
 
 ## Installation
 
@@ -67,68 +43,44 @@ supervisor doctor
 
 ## Quickstart
 
-### 1. Add a resource
+### Web UI
 
 ```bash
-# Monitor this server (local)
-supervisor resource-add my-server --type server
+supervisor serve --port 8080
+```
 
-# Monitor a remote server via SSH
+Open `http://localhost:8080` → Click **Add Resource** → choose type → fill in details → Create.
+
+Then click **Run Discovery** on the resource page. Claude will explore the server (1-3 min) and produce a baseline. Set a schedule and Slack webhook in the Settings section.
+
+### CLI
+
+```bash
+# Add a server
 supervisor resource-add prod-web --type server \
   --config ssh_host=10.0.1.5 ssh_user=ubuntu ssh_key_path=~/.ssh/id_ed25519
-```
 
-### 2. Run discovery
-
-```bash
+# Discover what's running
 supervisor run-discovery <resource_id>
-```
 
-This takes 1-3 minutes. Claude investigates the server and produces:
-- **System context** — structured baseline (services, apps, databases, ports, disk usage)
-- **Checklist** — specific items to verify on every health check
-
-View the baseline:
-
-```bash
-supervisor context-show <resource_id>
-supervisor checklist-show <resource_id>
-```
-
-### 3. Run a health check
-
-```bash
+# Run a health check
 supervisor run-health-check <resource_id>
-```
 
-View the report:
-
-```bash
-supervisor report-list <resource_id>
-supervisor report-show <report_id>
-```
-
-### 4. Set up alerts
-
-```bash
-# Configure Slack webhook
+# Set schedule + alerts
+supervisor set-schedule <resource_id> --health-check "0 */6 * * *"
 supervisor notify-configure <resource_id> --slack-webhook https://hooks.slack.com/services/xxx
-
-# Test it
-supervisor notify-test <resource_id>
-```
-
-### 5. Schedule automated checks
-
-```bash
-# Health check every 6 hours, discovery weekly
-supervisor set-schedule <resource_id> \
-  --health-check "0 */6 * * *" \
-  --discovery "0 3 * * 0"
 
 # Start the scheduler
 supervisor run-scheduler
 ```
+
+### Docker
+
+```bash
+docker compose up -d
+```
+
+Dashboard at `http://localhost:8080`. Data persists in the `supervisor-data` volume.
 
 ## CLI Reference
 

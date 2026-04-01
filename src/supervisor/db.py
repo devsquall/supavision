@@ -324,10 +324,10 @@ class Store:
         ).fetchall()
         return [Run.model_validate(json.loads(r[0])) for r in rows]
 
-    def get_runs(self, resource_id: str, limit: int = 10) -> list[Run]:
+    def get_runs(self, resource_id: str, limit: int = 10, offset: int = 0) -> list[Run]:
         rows = self._execute(
-            "SELECT data FROM runs WHERE resource_id = ? ORDER BY created_at DESC LIMIT ?",
-            (resource_id, limit),
+            "SELECT data FROM runs WHERE resource_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (resource_id, limit, offset),
         ).fetchall()
         return [Run.model_validate(json.loads(r[0])) for r in rows]
 

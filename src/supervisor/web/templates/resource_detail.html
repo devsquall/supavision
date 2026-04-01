@@ -112,6 +112,20 @@
 
 <div class="settings-section">
   <h4>Monitoring Requests</h4>
+  {% if resource.monitoring_requests %}
+  <ul class="mb-4" style="list-style:none; padding:0;">
+    {% for req in resource.monitoring_requests %}
+    <li style="display:flex; justify-content:space-between; align-items:center; padding:var(--sp-2) 0; border-bottom:1px solid var(--color-border);">
+      <span class="text-sm">{{ req }}</span>
+      <button class="btn btn-outline" style="height:24px; padding:0 var(--sp-2); font-size:var(--text-xs);"
+              hx-post="/resources/{{ resource.id }}/checklist-remove"
+              hx-vals='{"index": "{{ loop.index0 }}"}'
+              hx-swap="none" hx-confirm="Remove this monitoring request?"
+              data-action="remove-check" data-success-msg="Removed">x</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   <form hx-post="/resources/{{ resource.id }}/checklist" hx-swap="none"
         data-action="checklist" data-success-msg="Checklist item added" data-error-msg="Failed to add">
     <div class="settings-row">
@@ -150,6 +164,10 @@
 {% endif %}
 
 <h3 class="mt-6">Recent Reports</h3>
+<p class="text-muted text-sm mb-4" id="last-updated">
+  <span data-timestamp="{{ now }}">{{ now }}</span>
+  &middot; <a href="/resources/{{ resource.id }}" style="font-size:var(--text-xs);">Refresh</a>
+</p>
 
 {% if runs %}
 <div class="table-wrap">
@@ -188,6 +206,14 @@
   </tbody>
 </table>
 </div>
+{% if has_more_runs %}
+<div class="actions mt-4">
+  <a href="/resources/{{ resource.id }}?page={{ page + 1 }}" class="btn btn-outline">Older runs</a>
+  {% if page > 1 %}
+  <a href="/resources/{{ resource.id }}?page={{ page - 1 }}" class="btn btn-outline">Newer runs</a>
+  {% endif %}
+</div>
+{% endif %}
 {% else %}
 <p class="text-muted">No runs yet.</p>
 {% endif %}

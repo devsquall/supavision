@@ -2,14 +2,20 @@ services:
   supervisor:
     build: .
     ports:
-      - "8080:8080"
+      - "${SUPERVISOR_PORT:-8080}:8080"
     volumes:
       - supervisor-data:/app/.supervisor
-      - ${HOME}/.ssh:/root/.ssh:ro  # For SSH-based remote monitoring
+      - ${HOME}/.ssh:/root/.ssh:ro
     environment:
       - SUPERVISOR_BACKEND=${SUPERVISOR_BACKEND:-claude_cli}
       - SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
 
 volumes:
   supervisor-data:
