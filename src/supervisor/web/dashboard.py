@@ -286,12 +286,25 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
         except Exception:
             pass
 
+    # Alert history from evaluations where should_alert=True
+    all_evals = store.get_recent_evaluations(resource_id, limit=30)
+    alert_evals = [
+        {
+            "severity": str(e.severity),
+            "summary": e.summary[:120] + ("..." if len(e.summary) > 120 else ""),
+            "created_at": e.created_at.isoformat() if e.created_at else "",
+        }
+        for e in all_evals
+        if e.should_alert
+    ][:10]
+
     return templates.TemplateResponse(request, "resource_detail.html", {
         "resource": resource,
         "context": context,
         "context_html": context_html,
         "checklist": checklist,
         "runs": runs_data,
+        "alert_history": alert_evals,
         "severity": severity,
         "health_cron": health_cron,
         "discovery_cron": discovery_cron,
@@ -492,8 +505,9 @@ async def resource_run_status(resource_id: str, request: Request):
 
 
 def _inline(text: str) -> str:
-    """Apply inline markdown: **bold**, `code`, and [links](url)."""
+    """Apply inline markdown: **bold**, *italic*, `code`, and [links](url)."""
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", text)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
 
     def _link(m):
@@ -512,15 +526,27 @@ def _md_to_html(text: str) -> str:
     out = []
     in_code = False
     in_table = False
+    in_ul = False
+    in_ol = False
+
+    def _close_list():
+        nonlocal in_ul, in_ol
+        if in_ul:
+            out.append("</ul>")
+            in_ul = False
+        if in_ol:
+            out.append("</ol>")
+            in_ol = False
 
     for line in lines:
         # Code blocks
         if line.strip().startswith("```"):
+            _close_list()
             if in_code:
                 out.append("</code></pre>")
                 in_code = False
             else:
-                out.append("<pre class=\"report-view\"><code>")
+                out.append('<pre class="report-view"><code>')
                 in_code = True
             continue
         if in_code:
@@ -540,6 +566,7 @@ def _md_to_html(text: str) -> str:
 
         # Table rows
         if stripped.startswith("|") and stripped.endswith("|"):
+            _close_list()
             cells = [_inline(c.strip()) for c in stripped.strip("|").split("|")]
             if not in_table:
                 out.append('<div class="table-wrap"><table class="table"><thead><tr>')
@@ -552,24 +579,49 @@ def _md_to_html(text: str) -> str:
 
         # Headers
         if stripped.startswith("### "):
+            _close_list()
             out.append(f"<h4>{_inline(stripped[4:])}</h4>")
             continue
         if stripped.startswith("## "):
+            _close_list()
             out.append(f"<h3>{_inline(stripped[3:])}</h3>")
             continue
         if stripped.startswith("# "):
+            _close_list()
             out.append(f"<h2>{_inline(stripped[2:])}</h2>")
             continue
 
         # Horizontal rule
         if stripped == "---":
+            _close_list()
             out.append("<hr>")
             continue
 
-        # List items
+        # Numbered list items (1. 2. 3.)
+        ol_match = re.match(r"^(\d+)\.\s+(.+)$", stripped)
+        if ol_match:
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+            if not in_ol:
+                out.append("<ol>")
+                in_ol = True
+            out.append(f"<li>{_inline(ol_match.group(2))}</li>")
+            continue
+
+        # Unordered list items (- )
         if stripped.startswith("- "):
+            if in_ol:
+                out.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                out.append("<ul>")
+                in_ul = True
             out.append(f"<li>{_inline(stripped[2:])}</li>")
             continue
+
+        # Non-list line: close any open list
+        _close_list()
 
         # Inline formatting
         line = _inline(line)
@@ -579,6 +631,7 @@ def _md_to_html(text: str) -> str:
         else:
             out.append("")
 
+    _close_list()
     if in_code:
         out.append("</code></pre>")
     if in_table:

@@ -150,6 +150,28 @@
   </form>
 </div>
 
+<details>
+  <summary>Alert History ({{ alert_history | length }} recent)</summary>
+  {% if alert_history %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Time</th><th>Severity</th><th>Summary</th></tr></thead>
+    <tbody>
+    {% for a in alert_history %}
+    <tr>
+      <td class="text-muted"><span data-timestamp="{{ a.created_at }}">{{ a.created_at }}</span></td>
+      <td><span class="badge badge--{{ a.severity }}">{{ a.severity }}</span></td>
+      <td class="text-sm">{{ a.summary }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted text-sm">No alerts triggered yet.</p>
+  {% endif %}
+</details>
+
 {% if context %}
 <details open>
   <summary>Baseline (v{{ context.version }})</summary>

@@ -71,6 +71,41 @@ class TestMdToHtml:
     def test_empty_input(self):
         assert _md_to_html("") == ""
 
+    def test_numbered_list(self):
+        md = "1. First\n2. Second\n3. Third"
+        html = _md_to_html(md)
+        assert "<ol>" in html
+        assert "</ol>" in html
+        assert html.count("<li>") == 3
+
+    def test_unordered_list_wrapping(self):
+        md = "- Alpha\n- Beta"
+        html = _md_to_html(md)
+        assert "<ul>" in html
+        assert "</ul>" in html
+
+    def test_mixed_list_types(self):
+        md = "- Bullet\n\n1. Number"
+        html = _md_to_html(md)
+        assert "<ul>" in html
+        assert "</ul>" in html
+        assert "<ol>" in html
+        assert "</ol>" in html
+
+    def test_list_closes_before_header(self):
+        md = "- Item\n## Header"
+        html = _md_to_html(md)
+        assert html.index("</ul>") < html.index("<h3>")
+
+    def test_italics(self):
+        html = _md_to_html("This is *italic* text")
+        assert "<em>italic</em>" in html
+
+    def test_bold_and_italic_coexist(self):
+        html = _md_to_html("**bold** and *italic*")
+        assert "<strong>bold</strong>" in html
+        assert "<em>italic</em>" in html
+
     def test_bold_in_table_cell(self):
         md = "| Status |\n|---|\n| **OK** |"
         html = _md_to_html(md)

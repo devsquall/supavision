@@ -8,6 +8,17 @@ AI-powered infrastructure monitoring that discovers what's running on your serve
 
 Unlike traditional monitoring tools that require you to define what to check, Supervisor uses an LLM agent with security-hardened tools to explore your infrastructure, establish baselines, and detect changes — then alerts you when something is wrong.
 
+## Dashboard
+
+> **Live demo:** [supervisor.devsquall.com](https://supervisor.devsquall.com)
+
+The web dashboard shows real-time health status for all monitored resources. Add resources, configure schedules, and view reports — all from the browser.
+
+<!-- Screenshots: dashboard overview, resource detail, report view, add resource wizard -->
+<!-- To add: save screenshots to docs/screenshots/ and uncomment the images below -->
+<!-- ![Dashboard](docs/screenshots/dashboard.webp) -->
+<!-- ![Resource Detail](docs/screenshots/resource-detail.webp) -->
+
 ## How It Works
 
 1. **Add a resource** — point Supervisor at a server, AWS account, database, or GitHub org
