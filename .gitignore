@@ -25,11 +25,12 @@ htmlcov/
 
 # Supervisor runtime
 .env
+.supavision/
 .supervisor/
 
 # Internal planning
 .review-loop/
-SUPERVISOR_NEXT_DIRECTION.md
+SUPAVISION_NEXT_DIRECTION.md
 
 # Logs
 *.log

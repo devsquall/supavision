@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ job.job_type }} Job - Supavision{% endblock %}
+{% block content %}
+
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Resources</a></li>
+  {% if item %}
+  <li><a href="/findings/{{ item.id }}">{{ item.display_title }}</a></li>
+  {% endif %}
+  <li>Job {{ job.id[:8] }}</li>
+</ul>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>{{ job.job_type | capitalize }} Job</h2>
+    <span class="page-subtitle">
+      <span class="badge badge--{{ 'healthy' if job.status.value == 'completed' else 'critical' if job.status.value == 'failed' else 'warning' }}">
+        {{ job.status.value }}
+      </span>
+      {% if duration %}
+      &mdash; {{ duration }}
+      {% endif %}
+      {% if job.started_at %}
+      &mdash; <span data-timestamp="{{ job.started_at.isoformat() }}">{{ job.started_at }}</span>
+      {% endif %}
+    </span>
+  </div>
+</div>
+
+{# ── Error (if failed) ── #}
+{% if job.error %}
+<div class="alert alert--danger">
+  <strong>Job failed:</strong> {{ job.error }}
+</div>
+{% endif %}
+
+{# ── Agent Transcript ── #}
+{% if job.output %}
+<div class="settings-section">
+  <h4>Agent Transcript</h4>
+  <pre class="live-output-pre scroll-panel">{% for line in output_lines %}<span class="{{ 'text-muted' if line.startswith('[TOOL]') else '' }}">{{ line }}</span>
+{% endfor %}</pre>
+</div>
+{% endif %}
+
+{# ── Git Diff (for implementation jobs) ── #}
+{% if git_diff %}
+<div class="settings-section">
+  <h4>Code Changes</h4>
+  {% if git_data.before and git_data.after and git_data.before != git_data.after %}
+  <p class="text-sm text-muted mb-2">
+    Commit: <code>{{ git_data.before[:8] }}</code> &rarr; <code>{{ git_data.after[:8] }}</code>
+  </p>
+  {% endif %}
+  <div class="diff">
+    {% for line in diff_lines %}
+    {% if line.startswith('+') and not line.startswith('+++') %}
+    <div class="diff-line diff-add">{{ line }}</div>
+    {% elif line.startswith('-') and not line.startswith('---') %}
+    <div class="diff-line diff-remove">{{ line }}</div>
+    {% elif line.startswith('@@') %}
+    <div class="diff-header">{{ line }}</div>
+    {% else %}
+    <div class="diff-line diff-context">{{ line }}</div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Result JSON (collapsed) ── #}
+{% if job.result %}
+<details class="settings-section">
+  <summary>Raw Result</summary>
+  <pre class="code-block whitespace-pre-wrap mt-2">{{ job.result[:5000] }}</pre>
+</details>
+{% endif %}
+
+{% endblock %}

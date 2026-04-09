@@ -8,8 +8,9 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from supervisor.models import Credential, Resource, RunType
-from supervisor.templates import (
+from supavision.models import Credential, Resource, RunType
+from supavision.templates import (
+    TEMPLATE_DIR_DEFAULT,
     list_templates,
     load_template,
     resolve_credentials,
@@ -32,7 +33,7 @@ class TestLoadTemplate:
     def test_load_existing_discovery_template(self):
         """Load the real server/discovery.md template."""
         content = load_template(
-            "server", RunType.DISCOVERY, template_dir="templates"
+            "server", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT
         )
         assert "discovery" in content.lower() or "Discovery" in content
         assert len(content) > 100
@@ -40,24 +41,24 @@ class TestLoadTemplate:
     def test_load_existing_health_check_template(self):
         """Load the real server/health_check.md template."""
         content = load_template(
-            "server", RunType.HEALTH_CHECK, template_dir="templates"
+            "server", RunType.HEALTH_CHECK, template_dir=TEMPLATE_DIR_DEFAULT
         )
         assert len(content) > 100
 
     def test_missing_template_raises_file_not_found(self):
         with pytest.raises(FileNotFoundError, match="Template not found"):
-            load_template("nonexistent_type", RunType.DISCOVERY, template_dir="templates")
+            load_template("nonexistent_type", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT)
 
     def test_path_traversal_in_resource_type_blocked(self):
         """resource_type like '../secret' should be caught by path resolution check."""
         # Note: The Pydantic validator on Resource.resource_type blocks this at the model
         # level, but load_template also has its own path traversal check.
         with pytest.raises(ValueError, match="[Pp]ath traversal"):
-            load_template("../secret", RunType.DISCOVERY, template_dir="templates")
+            load_template("../secret", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT)
 
     def test_path_traversal_deeper(self):
         with pytest.raises(ValueError, match="[Pp]ath traversal"):
-            load_template("../../etc", RunType.DISCOVERY, template_dir="templates")
+            load_template("../../etc", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT)
 
     def test_load_from_custom_template_dir(self, tmp_path):
         """Create a temp template and load it."""
@@ -242,13 +243,13 @@ class TestResolveTemplate:
 
 class TestListTemplates:
     def test_lists_real_templates(self):
-        results = list_templates("templates")
+        results = list_templates(TEMPLATE_DIR_DEFAULT)
         assert len(results) >= 1
         types = {r["resource_type"] for r in results}
         assert "server" in types
 
     def test_structure_of_results(self):
-        results = list_templates("templates")
+        results = list_templates(TEMPLATE_DIR_DEFAULT)
         for entry in results:
             assert "resource_type" in entry
             assert "discovery" in entry
@@ -257,7 +258,7 @@ class TestListTemplates:
             assert entry["health_check"] in ("yes", "no")
 
     def test_server_has_both_templates(self):
-        results = list_templates("templates")
+        results = list_templates(TEMPLATE_DIR_DEFAULT)
         server = next(r for r in results if r["resource_type"] == "server")
         assert server["discovery"] == "yes"
         assert server["health_check"] == "yes"

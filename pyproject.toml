@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "supervisor-ai"
-version = "0.1.0"
+name = "supavision"
+version = "0.3.0"
 description = "AI-powered infrastructure monitoring that discovers and watches your servers intelligently"
 readme = "README.md"
 license = "MIT"
@@ -31,13 +31,16 @@ dependencies = [
     "python-multipart>=0.0.9",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/supavision"]
+
 [project.scripts]
-supervisor = "supervisor.cli:main"
+supavision = "supavision.cli:main"
 
 [project.urls]
-Repository = "https://github.com/your-org/supervisor-ai-ai"
-Documentation = "https://github.com/your-org/supervisor-ai-ai#readme"
-Issues = "https://github.com/your-org/supervisor-ai-ai/issues"
+Repository = "https://github.com/devsquall/supavision"
+Documentation = "https://github.com/devsquall/supavision#readme"
+Issues = "https://github.com/devsquall/supavision/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -58,4 +61,4 @@ line-length = 120
 select = ["E", "F", "I", "W"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/supervisor/cli.py" = ["E402"]  # _load_dotenv() must run before imports
+"src/supavision/cli.py" = ["E402"]  # _load_dotenv() must run before imports

@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+{% from '_glossary.html' import cron_friendly %}
+{% block title %}{{ resource.name }} - Supavision{% endblock %}
+{% block content %}
+
+{# ── Breadcrumb ── #}
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Resources</a></li>
+  <li>{{ resource.name }}</li>
+</ul>
+
+{# ── Header ── #}
+<div class="page-header" data-resource-id="{{ resource.id }}">
+  <div class="page-header-left">
+    <h2>
+      {{ resource.name }}
+      <span class="badge badge--type">{{ resource.resource_type }}</span>
+      {% if severity %}
+      <span class="badge badge--{{ severity }}">{{ severity }}</span>
+      {% endif %}
+      {% if not resource.enabled %}
+      <span class="badge badge--unknown">Paused</span>
+      {% endif %}
+    </h2>
+  </div>
+  <div class="page-header-right">
+    {% if resource.resource_type == 'codebase' %}
+    <div class="btn-group">
+      <button class="btn"
+              hx-post="/resources/{{ resource.id }}/scan"
+              hx-swap="none"
+              title="Run pattern scan to find security and quality issues in this codebase">
+        Scan for Issues
+      </button>
+      <div class="btn-dropdown">
+        <button class="btn btn-outline btn-dropdown-toggle" onclick="this.parentElement.classList.toggle('open')"
+                title="Launch AI agent to deeply analyze this codebase">
+          Scout ▾
+        </button>
+        <div class="btn-dropdown-menu">
+          <button hx-post="/resources/{{ resource.id }}/scout?focus=general" hx-swap="none"
+                  class="btn-dropdown-item" title="Broad review of code quality, architecture, and improvements">General Improvements</button>
+          <button hx-post="/resources/{{ resource.id }}/scout?focus=security" hx-swap="none"
+                  class="btn-dropdown-item" title="Focused analysis of security vulnerabilities and hardening">Security Audit</button>
+          <button hx-post="/resources/{{ resource.id }}/scout?focus=performance" hx-swap="none"
+                  class="btn-dropdown-item" title="Analysis of performance bottlenecks and optimization opportunities">Performance Review</button>
+          <button hx-post="/resources/{{ resource.id }}/scout?focus=quality" hx-swap="none"
+                  class="btn-dropdown-item" title="Code style, testing gaps, and maintainability review">Code Quality</button>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div>
+      {% if active_run %}
+      <button class="btn" disabled title="A run is already in progress">Diagnose</button>
+      {% else %}
+      <button class="btn"
+              hx-post="/resources/{{ resource.id }}/health-check"
+              hx-swap="none"
+              data-action="check"
+              data-success-msg="Health check started"
+              title="Connect to this resource and run a live diagnostic check">
+        Diagnose
+      </button>
+      {% endif %}
+    </div>
+    {% endif %}
+    <a href="/resources/{{ resource.id }}/edit" class="btn btn-outline">Edit</a>
+  </div>
+</div>
+
+{# ── Live Output Terminal ── #}
+{% if active_run %}
+{# STATE: RUNNING or PENDING — live SSE stream #}
+<div id="live-output" class="settings-section">
+  <div class="terminal-header">
+    <h4>Live Output</h4>
+    <span class="badge badge--warning">{{ active_run.status }}</span>
+    {% if active_run.started_at %}
+    <span class="terminal-status" data-elapsed-since="{{ active_run.started_at.isoformat() }}">0s</span>
+    {% endif %}
+  </div>
+  <div id="terminal-container" class="terminal-container"></div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      initLiveTerminal("{{ resource.id }}", "{{ active_run.id }}");
+    });
+  </script>
+</div>
+
+{% elif last_run and last_run.status.value == 'failed' and (last_run.output or last_run.error) %}
+{# STATE: FAILED — frozen output with error #}
+<div class="settings-section">
+  <div class="terminal-header">
+    <h4>Last Run</h4>
+    <span class="badge badge--critical">Failed</span>
+    {% if last_run.completed_at and last_run.started_at %}
+    <span class="terminal-status">{{ ((last_run.completed_at - last_run.started_at).total_seconds() | int) }}s</span>
+    {% endif %}
+  </div>
+  {% if last_run.recording %}
+  <div id="terminal-container" class="terminal-container"></div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      initReplayTerminal({{ last_run.recording | safe }});
+    });
+  </script>
+  {% elif last_run.output %}
+  <pre class="live-output-pre">{{ last_run.output[-3000:] }}</pre>
+  {% endif %}
+  {% if last_run.error %}
+  <div class="alert alert--danger mt-2">{{ last_run.error }}</div>
+  {% endif %}
+</div>
+
+{% elif last_run and last_run.status.value == 'completed' and last_run.recording %}
+{# STATE: COMPLETED — replay terminal #}
+<details class="settings-section">
+  <summary>
+    <div class="terminal-header" style="display:inline-flex;">
+      <h4>Last Run</h4>
+      <span class="badge badge--healthy">Completed</span>
+      {% if last_run.completed_at and last_run.started_at %}
+      <span class="terminal-status">{{ ((last_run.completed_at - last_run.started_at).total_seconds() | int) }}s</span>
+      {% endif %}
+    </div>
+  </summary>
+  <div id="terminal-container" class="terminal-container" style="margin-top:var(--sp-2);"></div>
+  <script>
+    document.querySelector("details.settings-section").addEventListener("toggle", function(e) {
+      if (e.target.open && !window._replayInitialized) {
+        window._replayInitialized = true;
+        initReplayTerminal({{ last_run.recording | safe }});
+      }
+    });
+  </script>
+</details>
+{% endif %}
+{# IDLE: no live output section rendered #}
+
+{# ── Action Card (shown when something needs attention) ── #}
+{% if severity == 'critical' and latest_eval %}
+<div class="action-card">
+  <div class="action-card-header">
+    <div class="form-col">
+      <div class="action-card-title">{{ latest_eval.summary }}</div>
+      <div class="text-sm text-muted mt-2">
+        Investigate and resolve the issue, then click <strong>Verify Fix</strong> to confirm.
+        {% if runs and runs[0].started_at %}
+        Detected <span data-timestamp="{{ runs[0].started_at }}">{{ runs[0].started_at }}</span>.
+        {% endif %}
+      </div>
+    </div>
+    <div class="action-card-actions">
+      {% if runs and runs[0].report_id %}
+      <a href="/reports/{{ runs[0].report_id }}" class="btn btn-sm btn-outline">Read Report</a>
+      {% endif %}
+      <button class="btn btn-sm"
+              hx-post="/resources/{{ resource.id }}/health-check"
+              hx-swap="none"
+              data-action="check"
+              data-success-msg="Health check started">
+        Verify Fix
+      </button>
+    </div>
+  </div>
+</div>
+{% elif severity == 'warning' and latest_eval %}
+<div class="action-card action-card--warning">
+  <div class="action-card-header">
+    <div class="form-col">
+      <div class="action-card-title">{{ latest_eval.summary }}</div>
+      <div class="text-sm text-muted mt-2">
+        This may resolve on its own or escalate. Review the report for details.
+      </div>
+    </div>
+    <div class="action-card-actions">
+      {% if runs and runs[0].report_id %}
+      <a href="/reports/{{ runs[0].report_id }}" class="btn btn-sm btn-outline">Read Report</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Claude CLI warning (SSH resources without engine) ── #}
+{% if resource.resource_type in ('server', 'database') and not engine_available %}
+<div class="alert alert--warning">
+  <strong>Infrastructure monitoring unavailable</strong> &mdash; Claude CLI is not installed.
+  Discovery and health checks require Claude Code CLI.
+  <a href="/settings" class="ml-2">Install it in Settings &rarr;</a>
+</div>
+{% endif %}
+
+{# ── Setup prompt (new resource, no data yet) ── #}
+{% if is_new and not context and not findings_summary %}
+<div class="alert alert--info">
+  <strong>Resource created!</strong>
+  {% if resource.resource_type == 'codebase' %}
+  Click <strong>Scan for Issues</strong> for a quick regex analysis, or use <strong>Scout</strong> to have Claude deeply analyze your codebase for improvements, security issues, and new features.
+  {% else %}
+  Click <strong>Diagnose</strong> above to explore this {{ resource.resource_type }}.
+  Claude will map services, databases, and configurations (1-3 minutes).
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Overview ── #}
+<div class="settings-section">
+  <div class="info-grid">
+    {% if resource.config.path %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Path</span>
+      <code>{{ resource.config.path }}</code>
+    </div>
+    {% elif resource.config.ssh_host %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Host</span>
+      <code>{{ resource.config.ssh_user or 'ubuntu' }}@{{ resource.config.ssh_host }}:{{ resource.config.ssh_port or '22' }}</code>
+    </div>
+    {% endif %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Last Check</span>
+      {% if runs %}
+      <span data-timestamp="{{ runs[0].started_at }}">{{ runs[0].started_at }}</span>
+      {% else %}
+      <span class="text-muted">Never</span>
+      {% endif %}
+    </div>
+    {% if findings_summary %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Findings</span>
+      <span>{{ findings_summary.total }}</span>
+    </div>
+    {% endif %}
+    {% if health_cron %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Schedule</span>
+      <span>{{ cron_friendly(health_cron) }}{% if next_health_check %} &middot; next: <span data-timestamp="{{ next_health_check }}">{{ next_health_check }}</span>{% endif %}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Findings Section (codebase resources) ── #}
+{% if resource.resource_type == 'codebase' %}
+<div id="findings-section" class="settings-section">
+  <h4>Findings
+    {% if findings_summary and findings_summary.total > 0 %}
+    <span class="tab-count">{{ findings_summary.total }}</span>
+    {% endif %}
+  </h4>
+  <p class="text-muted text-sm mb-2">Security and quality issues discovered by scanning this codebase.</p>
+
+  {% if findings_summary and findings_summary.stage_counts %}
+  <div class="stage-bar mb-4">
+    {% for stage, count in findings_summary.stage_counts.items() %}
+    {% if stage not in ('approved', 'implementing', 'completed') %}
+    <span class="stage-pill stage-pill--{{ stage }}">{{ stage }} <strong>{{ count }}</strong></span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if findings_summary and findings_summary.recent %}
+  <table class="table">
+    <thead>
+      <tr><th>Severity</th><th>Finding</th><th>Stage</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for f in findings_summary.recent %}
+      <tr>
+        <td><span class="badge badge--{{ f.severity }}">{{ f.severity }}</span></td>
+        <td><a href="/findings/{{ f.id }}">{{ f.title }}</a></td>
+        <td><span class="badge badge--stage-{{ f.stage }}">{{ f.stage }}</span></td>
+        <td>
+          {% if f.stage == 'scanned' %}
+          <a href="/findings/{{ f.id }}" class="btn btn-sm" title="Queue AI to assess severity and impact">AI Evaluate</a>
+          {% elif f.stage == 'evaluated' %}
+          <a href="/findings/{{ f.id }}" class="btn btn-sm btn-outline" title="Review the AI assessment of this finding">Review</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if findings_summary.total > 5 %}
+  <a href="/findings?resource_id={{ resource.id }}" class="text-sm">All {{ findings_summary.total }} findings &rarr;</a>
+  {% endif %}
+  {% else %}
+  <div class="cc-empty-panel">
+    No findings yet &mdash; run a scan to discover security and quality issues.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Recent Activity ── #}
+{% if runs %}
+<div class="settings-section">
+  <h4>Recent Activity <a href="/resources/{{ resource.id }}/history" class="text-sm font-normal ml-2">Full history &rarr;</a></h4>
+  <p class="text-muted text-sm mb-2">Health checks, scans, and discoveries for this resource.</p>
+  <div class="timeline">
+    {% for run in runs[:5] %}
+    <div class="timeline-item">
+      <div class="timeline-dot timeline-dot--{{ run.severity or 'info' }}"></div>
+      <div class="timeline-content">
+        <div class="timeline-time" data-timestamp="{{ run.started_at }}">{{ run.started_at }}</div>
+        <div class="timeline-title">
+          {{ run.run_type }}
+          {% if run.severity %}
+          <span class="badge badge--{{ run.severity }} text-xs">{{ run.severity }}</span>
+          {% else %}
+          <span class="badge badge--unknown text-xs">{{ run.status }}</span>
+          {% endif %}
+          {% if run.report_id %}
+          <a href="/reports/{{ run.report_id }}" class="text-sm ml-2">Read report</a>
+          {% endif %}
+        </div>
+        {% if run.error %}
+        <div class="timeline-meta text-critical">{{ run.error[:100] }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if has_more_runs %}
+  <a href="/resources/{{ resource.id }}?page={{ page + 1 }}" class="text-sm">Older activity &rarr;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Details (collapsed) ── #}
+{% if context or checklist or alert_history %}
+<details class="settings-section">
+  <summary>Details</summary>
+
+  {% if context %}
+  <details class="detail-section">
+    <summary class="text-sm">Baseline (v{{ context.version }})</summary>
+    <div class="report-content detail-content">{{ context_html | safe }}</div>
+  </details>
+  {% endif %}
+
+  {% if checklist %}
+  <details class="mt-3">
+    <summary class="text-sm">Checklist ({{ checklist.items | length }} items)</summary>
+    <ul class="detail-content">
+      {% for item in checklist.items %}
+      <li class="text-sm">{{ item.description }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {% if alert_history %}
+  <details class="mt-3">
+    <summary class="text-sm">Alert History ({{ alert_history | length }})</summary>
+    <table class="table detail-content">
+      <thead><tr><th>Time</th><th>Severity</th><th>Summary</th></tr></thead>
+      <tbody>
+        {% for a in alert_history %}
+        <tr>
+          <td class="text-muted text-sm"><span data-timestamp="{{ a.created_at }}">{{ a.created_at }}</span></td>
+          <td><span class="badge badge--{{ a.severity }}">{{ a.severity }}</span></td>
+          <td class="text-sm">{{ a.summary }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</details>
+{% endif %}
+
+{% endblock %}

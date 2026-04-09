@@ -1,0 +1,22 @@
+<tr id="finding-{{ item.id }}">
+  <td><span class="badge badge--{{ item.severity }}">{{ item.severity }}</span></td>
+  <td>
+    <a href="/findings/{{ item.id }}">{{ item.title }}</a>
+  </td>
+  <td class="text-muted text-sm">{{ item.file_path }}</td>
+  <td><span class="badge badge--stage-{{ item.stage }}">{{ item.stage }}</span></td>
+  <td class="text-muted text-sm">{{ item.source }}</td>
+  <td>
+    {% if item.stage == 'scanned' or item.stage == 'created' %}
+    <a href="/findings/{{ item.id }}/evaluate" class="btn btn-sm"
+       hx-post="/findings/{{ item.id }}/evaluate"
+       hx-push-url="true">AI Evaluate</a>
+    {% elif item.stage == 'evaluated' %}
+    <a href="/findings/{{ item.id }}" class="btn btn-sm btn-outline">Review</a>
+    {% elif item.stage in ('approved', 'implementing', 'completed') %}
+    <span class="text-muted text-sm">{{ item.stage }}</span>
+    {% elif item.stage == 'rejected' or item.stage == 'dismissed' %}
+    <span class="text-muted text-sm">Closed</span>
+    {% endif %}
+  </td>
+</tr>

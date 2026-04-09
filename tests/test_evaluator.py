@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from supervisor.evaluator import (
+from supavision.evaluator import (
     _CRITICAL_PATTERNS,
     _HEALTHY_PATTERNS,
     _WARNING_PATTERNS,
@@ -11,7 +11,7 @@ from supervisor.evaluator import (
     _count_matches,
     _extract_status_line,
 )
-from supervisor.models import EvalStrategy, Report, RunType, Severity
+from supavision.models import EvalStrategy, Report, RunType, Severity
 
 
 def _report(content: str) -> Report:

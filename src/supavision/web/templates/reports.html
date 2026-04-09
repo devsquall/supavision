@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from '_glossary.html' import run_type_label %}
+{% block title %}Reports - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Reports</h2>
+    <span class="page-subtitle">Health check and discovery reports</span>
+  </div>
+</div>
+
+{# ── Filters ── #}
+<div class="filter-bar mb-4">
+  <form method="get" action="/reports" class="filter-form">
+    <select name="resource_id" class="form-select">
+      <option value="">All Resources</option>
+      {% for r in resources %}
+      <option value="{{ r.id }}" {{ 'selected' if filters.resource_id == r.id }}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="run_type" class="form-select">
+      <option value="">All Types</option>
+      {% for t in run_types %}
+      <option value="{{ t }}" {{ 'selected' if filters.run_type == t }}>{{ t | replace('_', ' ') | title }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline">Filter</button>
+    {% if filters.resource_id or filters.run_type %}
+    <a href="/reports" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{# ── Reports Table ── #}
+{% if items %}
+<div class="table-wrap">
+<table class="table">
+  <thead>
+    <tr>
+      <th>Resource</th>
+      <th>Type</th>
+      <th>Date</th>
+      <th>Preview</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>{{ item.resource_name }}</td>
+      <td>
+        {% if item.run_type == 'discovery' %}
+        <span class="badge badge--info" title="Initial scan to map system configuration">Discovery</span>
+        {% elif item.run_type == 'health_check' %}
+        <span class="badge badge--healthy" title="Periodic evaluation of system state">Health Check</span>
+        {% else %}
+        <span class="badge">{{ run_type_label(item.run_type) }}</span>
+        {% endif %}
+      </td>
+      <td data-timestamp="{{ item.created_at }}">{{ item.created_at }}</td>
+      <td class="text-muted text-sm">{{ item.preview | truncate(120) if item.preview else '—' }}</td>
+      <td><a href="/reports/{{ item.id }}" class="btn btn-outline btn-sm">View</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# ── Pagination ── #}
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&resource_id={{ filters.resource_id }}&run_type={{ filters.run_type }}" class="btn btn-outline btn-sm">&laquo; Prev</a>
+  {% endif %}
+  <span class="text-muted text-sm">Page {{ page }} of {{ (total + per_page - 1) // per_page }}</span>
+  {% if page * per_page < total %}
+  <a href="?page={{ page + 1 }}&resource_id={{ filters.resource_id }}&run_type={{ filters.run_type }}" class="btn btn-outline btn-sm">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="4" width="32" height="40" rx="3"/><path d="M16 14h16M16 22h16M16 30h10"/></svg>
+  <h3>No reports yet</h3>
+  <p class="text-muted">Reports are generated when you run discovery or health checks on your resources.</p>
+  <div class="mt-4"><a href="/resources" class="btn">View Resources</a></div>
+</div>
+{% endif %}
+{% endblock %}

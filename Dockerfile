@@ -10,7 +10,7 @@ RUN apt-get update && \
 # Install Node.js + Claude Code CLI
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    npm install -g @anthropic-ai/claude-code && \
+    npm install -g @anthropic-ai/claude-code@latest && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -18,17 +18,14 @@ COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN pip install --no-cache-dir -e .
 
-# Copy templates
-COPY templates/ templates/
+# Data directory (templates + scanner patterns are inside the package)
+VOLUME /app/.supavision
 
-# Data directory
-VOLUME /app/.supervisor
-
-ENV SUPERVISOR_BACKEND=claude_cli
+ENV SUPAVISION_BACKEND=claude_cli
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
-ENTRYPOINT ["supervisor"]
+ENTRYPOINT ["supavision"]
 CMD ["serve", "--port", "8080"]

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AI-powered infrastructure monitoring and codebase scanning">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="csrf-token" content="{{ csrf_token | default('') }}">
+  <title>{% block title %}Supavision{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+  <script>
+    // Restore theme before paint to avoid flash
+    (function() {
+      var t = localStorage.getItem('supavision-theme');
+      if (t) document.documentElement.dataset.theme = t;
+      var s = localStorage.getItem('supavision-sidebar');
+      if (s === 'collapsed') document.body.classList.add('sidebar-collapsed');
+    })();
+  </script>
+</head>
+<body>
+  {% set path = request.url.path if request else '' %}
+
+  {# ── Sidebar ── #}
+  <aside class="sidebar" role="navigation" aria-label="Main navigation">
+    <div class="sidebar-header">
+      <a href="/" class="sidebar-brand">
+        <span class="sidebar-logo">S</span>
+        <span class="sidebar-brand-text">Supavision</span>
+      </a>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Overview</div>
+      <a href="/" class="sidebar-item {{ 'sidebar-item--active' if path == '/' and not path.startswith('/resources') }}" title="System overview and quick actions">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <span class="sidebar-item-text">Dashboard</span>
+      </a>
+
+      <div class="sidebar-section-label">Monitor</div>
+      <a href="/resources" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/resources') }}" title="Servers, databases, and codebases">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm0 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V8zm0 5a1 1 0 011-1h10a1 1 0 011 1v.5a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5V13z"/></svg>
+        <span class="sidebar-item-text">Resources</span>
+      </a>
+      <a href="/findings" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/findings') }}" title="Code issues found by scanning">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 01.5.5v5.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 7.793V2a.5.5 0 01.5-.5zM1.5 10a.5.5 0 01.5.5v2a1 1 0 001 1h10a1 1 0 001-1v-2a.5.5 0 011 0v2a2 2 0 01-2 2H3a2 2 0 01-2-2v-2a.5.5 0 01.5-.5z"/><circle cx="12" cy="11.5" r="1"/></svg>
+        <span class="sidebar-item-text">Findings</span>
+      </a>
+      <a href="/reports" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/reports') }}" title="Health check and discovery reports">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 2v2h6V3H5zm0 4v1h6V7H5zm0 3v1h4v-1H5z"/></svg>
+        <span class="sidebar-item-text">Reports</span>
+      </a>
+      <a href="/alerts" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/alerts') }}" title="Notification delivery history">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 01.993.883L9 2v.5A4.5 4.5 0 0112.5 7v3l1.354 1.354A.5.5 0 0113.5 12H2.5a.5.5 0 01-.354-.854L3.5 10V7A4.5 4.5 0 017 2.5V2a1 1 0 011-1zM6.5 13a1.5 1.5 0 003 0h-3z"/></svg>
+        <span class="sidebar-item-text">Alerts</span>
+      </a>
+
+      <div class="sidebar-section-label">Observe</div>
+      <a href="/sessions" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/sessions') }}" title="AI run transcripts and job logs">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v9a1 1 0 01-1 1H2a1 1 0 01-1-1V3zm1.5 1v7h11V4h-11zM5 14h6v1H5v-1z"/><path d="M4 6h1v1H4V6zm2 0h1v1H6V6zm2 0h4v1H8V6zM4 8h4v1H4V8z" opacity=".5"/></svg>
+        <span class="sidebar-item-text">Sessions</span>
+      </a>
+      <a href="/activity" class="sidebar-item {{ 'sidebar-item--active' if path == '/activity' }}" title="Event timeline across all resources">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4v4l3 1.5"/></svg>
+        <span class="sidebar-item-text">Activity</span>
+      </a>
+      <a href="/activity/live" class="sidebar-item {{ 'sidebar-item--active' if path == '/activity/live' }}" title="Real-time job output stream">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M4.5 3.5a6.5 6.5 0 010 9M11.5 3.5a6.5 6.5 0 000 9"/></svg>
+        <span class="sidebar-item-text">Live</span>
+      </a>
+      <a href="/metrics" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/metrics') }}" title="Health metrics and finding stats">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 14V1h1v12h13v1H1zm3-7.5l3 3 2-2 4.5 4.5-.7.7L9 8.8 7 10.8l-3-3-.7.7z"/></svg>
+        <span class="sidebar-item-text">Metrics</span>
+      </a>
+      <a href="/schedules" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/schedules') }}" title="Automated monitoring frequency">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 0a.5.5 0 01.5.5V1h7V.5a.5.5 0 011 0V1H14a1 1 0 011 1v12a1 1 0 01-1 1H2a1 1 0 01-1-1V2a1 1 0 011-1h1.5V.5A.5.5 0 014 0zM2.5 5v9h11V5h-11zm2 1h2v2h-2V6zm4 0h2v2h-2V6zm-4 4h2v2h-2v-2z"/></svg>
+        <span class="sidebar-item-text">Schedules</span>
+      </a>
+
+      <div class="sidebar-section-label">System</div>
+      <a href="/command-center" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/command-center') }}" title="Structured queries about system state">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v10a1 1 0 01-1 1H2a1 1 0 01-1-1V3zm2 1v2h4V4H3zm6 0v2h4V4H9zM3 8v2h4V8H3zm6 0v2h4V8H9z"/></svg>
+        <span class="sidebar-item-text">Command Center</span>
+      </a>
+      <a href="/ask" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/ask') }}" title="Query your data using natural language">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1C4.13 1 1 3.58 1 6.75c0 1.83 1.12 3.45 2.84 4.48L3 14l3.23-1.62C6.81 12.46 7.39 12.5 8 12.5c3.87 0 7-2.58 7-5.75S11.87 1 8 1z"/></svg>
+        <span class="sidebar-item-text">Ask Supavision</span>
+      </a>
+      <a href="/settings" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/settings') }}" title="API keys, notifications, and system config">
+        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM6 8a2 2 0 114 0 2 2 0 01-4 0z"/><path d="M7 1h2l.35 1.76.94.34 1.53-.88 1.41 1.41-.88 1.53.34.94L14.5 7v2l-1.76.35-.34.94.88 1.53-1.41 1.41-1.53-.88-.94.34L8 14.5H6l-.35-1.76-.94-.34-1.53.88-1.41-1.41.88-1.53-.34-.94L.5 9V7l1.76-.35.34-.94-.88-1.53L3.13 2.77l1.53.88.94-.34z"/></svg>
+        <span class="sidebar-item-text">Settings</span>
+      </a>
+    </nav>
+
+    {# ── Sidebar user (pinned to bottom) ── #}
+    {% if current_user %}
+    {% set initials = (current_user.name or current_user.email)[:1] | upper + ((current_user.name or '').split(' ')[-1][:1] | upper if ' ' in (current_user.name or '') else '') %}
+    <div class="sidebar-footer">
+      <a href="/profile" class="sidebar-user-card" title="My Account">
+        <span class="avatar avatar--sm">{{ initials }}</span>
+        <div class="sidebar-user-meta">
+          <span class="sidebar-user-name">{{ current_user.name or current_user.email.split('@')[0] }}</span>
+          <span class="sidebar-user-role">{{ current_user.role | capitalize }}</span>
+        </div>
+        <form method="post" action="/logout" class="sidebar-logout-form" onclick="event.stopPropagation();">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="sidebar-logout-btn" hx-post="/logout" hx-swap="none" title="Log out">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M6 8h8"/></svg>
+          </button>
+        </form>
+      </a>
+    </div>
+    {% endif %}
+
+    {# ── Floating collapse toggle (top-right edge of sidebar) ── #}
+    <button class="sidebar-collapse-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
+    </button>
+  </aside>
+
+  {# ── Main area ── #}
+  <div class="main-wrapper">
+    {# ── Topbar ── #}
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="topbar-hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M1 3h14M1 8h14M1 13h14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </button>
+      </div>
+      <div class="topbar-right">
+        <a href="/resources/new" class="btn btn-sm">+ Add Resource</a>
+        <button class="topbar-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme">
+          <svg class="theme-icon-light" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+          <svg class="theme-icon-dark" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6 1a7 7 0 009 9A7 7 0 116 1z"/></svg>
+        </button>
+        {% if current_user %}
+        {% set initials = (current_user.name or current_user.email)[:1] | upper + ((current_user.name or '').split(' ')[-1][:1] | upper if ' ' in (current_user.name or '') else '') %}
+        <div class="topbar-user-menu">
+          <button class="avatar avatar--topbar" onclick="this.parentElement.classList.toggle('open')" title="{{ current_user.email }}">{{ initials }}</button>
+          <div class="topbar-dropdown">
+            <div class="topbar-dropdown-header">
+              <span class="topbar-dropdown-name">{{ current_user.name or current_user.email.split('@')[0] }}</span>
+              <span class="topbar-dropdown-email">{{ current_user.email }}</span>
+            </div>
+            <div class="topbar-dropdown-divider"></div>
+            <a href="/profile" class="topbar-dropdown-item">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+              Profile
+            </a>
+            <a href="/settings" class="topbar-dropdown-item">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M7 1h2l.3 1.5.8.3 1.3-.8 1.4 1.4-.8 1.3.3.8L14 7v2l-1.5.3-.3.8.8 1.3-1.4 1.4-1.3-.8-.8.3L9 14H7l-.3-1.5-.8-.3-1.3.8-1.4-1.4.8-1.3-.3-.8L2 9V7l1.5-.3.3-.8-.8-1.3L4.4 3.2l1.3.8.8-.3z"/></svg>
+              Settings
+            </a>
+            <div class="topbar-dropdown-divider"></div>
+            <form method="post" action="/logout" class="topbar-dropdown-logout">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="topbar-dropdown-item topbar-dropdown-item--logout" hx-post="/logout" hx-swap="none">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M6 8h8"/></svg>
+                Log out
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </header>
+
+    {# ── Content ── #}
+    <main class="content" role="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="/static/supavision.js"></script>
+</body>
+</html>

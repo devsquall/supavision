@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Live Activity - Supavision{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Live Activity</h2>
+    <span class="page-subtitle">Real-time system activity and job output</span>
+  </div>
+  <div class="page-header-right">
+    <span id="live-status" class="live-indicator">
+      <span class="live-dot"></span> Connecting...
+    </span>
+    <a href="/activity" class="btn btn-outline btn-sm">History</a>
+  </div>
+</div>
+
+{# ── Active Jobs Panel ── #}
+<div class="settings-section" id="active-jobs-panel">
+  <h4>Active Jobs <span id="active-count" class="tab-count">{{ active_items | length }}</span></h4>
+
+  <div id="active-jobs-list">
+    {% if active_items %}
+    <table class="table" id="active-jobs-table">
+      <thead>
+        <tr><th>Type</th><th>Resource</th><th>Status</th><th>Elapsed</th></tr>
+      </thead>
+      <tbody>
+        {% for item in active_items %}
+        <tr data-job-id="{{ item.id }}">
+          <td><span class="badge badge--type">{{ item.type }}</span></td>
+          <td>{{ item.resource }}</td>
+          <td><span class="badge badge--{{ 'warning' if item.status == 'running' else 'unknown' }}">{{ item.status }}</span></td>
+          <td class="text-muted text-sm job-elapsed" data-started="{{ item.started_at or '' }}">{{ item.elapsed or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state p-6" id="no-jobs-msg">
+      <p class="text-muted">No active jobs. The system is idle.</p>
+      <p class="text-sm text-muted">Start a scan or scout from a resource page to see live output here.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Log Stream Panel ── #}
+<div class="settings-section">
+  <h4>Log Stream
+    <label class="text-sm text-muted font-normal ml-3">
+      <input type="checkbox" id="show-timestamps" class="mr-1"> Timestamps
+    </label>
+    <button class="btn btn-sm btn-outline ml-auto" onclick="document.getElementById('log-output').textContent = ''; logLineCount = 0; document.getElementById('log-line-count').textContent = '0';">
+      Clear
+    </button>
+  </h4>
+  <div class="log-stream-container">
+    <pre id="log-output" class="log-stream-pre"></pre>
+  </div>
+  <div class="log-stream-footer">
+    <span class="text-sm text-muted"><span id="log-line-count">0</span> lines</span>
+    <label class="text-sm text-muted">
+      <input type="checkbox" id="auto-scroll" checked class="mr-1"> Auto-scroll
+    </label>
+  </div>
+</div>
+
+<script>
+(function() {
+  var logOutput = document.getElementById("log-output");
+  var liveStatus = document.getElementById("live-status");
+  var activeCount = document.getElementById("active-count");
+  var logLineCount = document.getElementById("log-line-count");
+  var autoScroll = document.getElementById("auto-scroll");
+  var showTimestamps = document.getElementById("show-timestamps");
+  var noJobsMsg = document.getElementById("no-jobs-msg");
+  var activeJobsList = document.getElementById("active-jobs-list");
+  window.logLineCount = 0;
+
+  var MAX_LOG_LINES = 2000;
+  var source = null;
+  var reconnectAttempts = 0;
+  var activeJobs = {};
+
+  function setStatus(text, connected) {
+    liveStatus.innerHTML = connected
+      ? '<span class="live-dot"></span> ' + text
+      : '<span class="live-dot live-dot--disconnected"></span> ' + text;
+  }
+
+  function appendLog(text, jobId) {
+    var line = document.createElement("div");
+    line.className = "log-line";
+
+    if (showTimestamps.checked) {
+      var ts = document.createElement("span");
+      ts.className = "log-ts";
+      ts.textContent = new Date().toLocaleTimeString();
+      line.appendChild(ts);
+    }
+
+    if (jobId && activeJobs[jobId]) {
+      var tag = document.createElement("span");
+      tag.className = "log-tag";
+      tag.textContent = "[" + activeJobs[jobId].type + "]";
+      line.appendChild(tag);
+    }
+
+    var msg = document.createElement("span");
+    msg.textContent = text;
+    line.appendChild(msg);
+
+    logOutput.appendChild(line);
+    window.logLineCount++;
+
+    // Trim old lines
+    while (logOutput.childNodes.length > MAX_LOG_LINES) {
+      logOutput.removeChild(logOutput.firstChild);
+      window.logLineCount--;
+    }
+
+    logLineCount.textContent = window.logLineCount;
+
+    if (autoScroll.checked) {
+      var container = logOutput.parentElement;
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  function updateJobsTable() {
+    var keys = Object.keys(activeJobs);
+    activeCount.textContent = keys.length;
+
+    if (keys.length === 0) {
+      activeJobsList.innerHTML =
+        '<div class="empty-state p-6">' +
+        '<p class="text-muted">No active jobs. The system is idle.</p>' +
+        '<p class="text-sm text-muted">Start a scan or scout from a resource page to see live output here.</p>' +
+        '</div>';
+      return;
+    }
+
+    var html = '<table class="table"><thead><tr><th>Type</th><th>Resource</th><th>Status</th><th>Elapsed</th></tr></thead><tbody>';
+    keys.forEach(function(id) {
+      var j = activeJobs[id];
+      var elapsed = "—";
+      if (j.startedAt) {
+        var secs = Math.floor((Date.now() - new Date(j.startedAt).getTime()) / 1000);
+        elapsed = secs < 60 ? secs + "s" : Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+      }
+      html += '<tr>' +
+        '<td><span class="badge badge--type">' + j.type + '</span></td>' +
+        '<td>' + j.resource + '</td>' +
+        '<td><span class="badge badge--warning">' + j.status + '</span></td>' +
+        '<td class="text-muted text-sm">' + elapsed + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    activeJobsList.innerHTML = html;
+  }
+
+  function connect() {
+    if (source) { source.close(); }
+
+    source = new EventSource("/api/activity/stream");
+    setStatus("Live", true);
+    reconnectAttempts = 0;
+
+    source.onmessage = function(e) {
+      try {
+        var data = JSON.parse(e.data);
+
+        if (data.type === "job_start") {
+          activeJobs[data.id] = {
+            type: data.job_type,
+            resource: data.resource,
+            status: data.status,
+            startedAt: new Date().toISOString(),
+          };
+          appendLog("Started: " + data.job_type + " on " + data.resource, data.id);
+          updateJobsTable();
+        }
+        else if (data.type === "log") {
+          appendLog(data.text, data.id);
+        }
+        else if (data.type === "job_done") {
+          appendLog("Completed: " + (activeJobs[data.id] ? activeJobs[data.id].type : data.id), data.id);
+          delete activeJobs[data.id];
+          updateJobsTable();
+        }
+        else if (data.type === "heartbeat") {
+          activeCount.textContent = data.active;
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    source.onerror = function() {
+      source.close();
+      source = null;
+      reconnectAttempts++;
+      var delay = Math.min(reconnectAttempts * 2000, 10000);
+      setStatus("Reconnecting...", false);
+      setTimeout(connect, delay);
+    };
+  }
+
+  // Update elapsed times every second
+  setInterval(updateJobsTable, 5000);
+
+  // Start SSE connection
+  connect();
+
+  // Cleanup on page leave
+  window.addEventListener("beforeunload", function() {
+    if (source) source.close();
+  });
+})();
+</script>
+
+{% endblock %}

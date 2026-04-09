@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Sessions - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Sessions</h2>
+    <span class="page-subtitle">Transcripts from health checks, scans, and AI evaluations</span>
+  </div>
+</div>
+
+{# ── Tab bar ── #}
+<div class="tab-bar mb-4">
+  <a href="?tab=runs" class="tab-btn {{ 'tab-btn--active' if tab == 'runs' }}" title="Health check and discovery runs">
+    Infrastructure Runs
+    {% if runs_total %}<span class="badge badge--unknown ml-1">{{ runs_total }}</span>{% endif %}
+  </a>
+  <a href="?tab=jobs" class="tab-btn {{ 'tab-btn--active' if tab == 'jobs' }}" title="AI evaluation, fix, and scout jobs">
+    Agent Jobs
+    {% if jobs_total %}<span class="badge badge--unknown ml-1">{{ jobs_total }}</span>{% endif %}
+  </a>
+</div>
+
+{# ════════ Infrastructure Runs ════════ #}
+{% if tab == "runs" %}
+
+<div class="filter-bar mb-4">
+  <form method="get" action="/sessions" class="filter-form">
+    <input type="hidden" name="tab" value="runs">
+    <select name="status" class="form-select">
+      <option value="">All statuses</option>
+      {% for s in run_statuses %}
+      <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select name="run_type" class="form-select">
+      <option value="">All types</option>
+      {% for t in run_types %}
+      <option value="{{ t }}" {{ 'selected' if run_type_filter == t }}>{{ t | replace('_', ' ') | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+    {% if status_filter or run_type_filter %}
+    <a href="?tab=runs" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if run_rows %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Resource</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Duration</th>
+        <th>Tokens</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in run_rows %}
+      <tr>
+        <td><a href="/resources/{{ row.resource_id }}">{{ row.resource_name }}</a></td>
+        <td><span class="badge badge--{{ row.run_type }}">{{ row.run_type | replace('_', ' ') }}</span></td>
+        <td><span class="badge badge--{{ row.status }}">{{ row.status }}</span></td>
+        <td><span data-timestamp="{{ row.started_at }}">{{ row.started_at }}</span></td>
+        <td>{{ row.duration or "&mdash;" }}</td>
+        <td>{{ "{:,}".format(row.tokens) if row.tokens else "&mdash;" }}</td>
+        <td>
+          {% if row.status == "running" %}
+          <a href="/sessions/run/{{ row.id }}" class="btn btn-sm">Watch</a>
+          {% else %}
+          <a href="/sessions/run/{{ row.id }}" class="btn btn-sm btn-outline">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>No infrastructure runs</h3>
+  <p class="text-muted">Runs appear here after you run health checks or discoveries on your resources.</p>
+</div>
+{% endif %}
+{% endif %}
+
+{# ════════ Agent Jobs ════════ #}
+{% if tab == "jobs" %}
+
+<div class="filter-bar mb-4">
+  <form method="get" action="/sessions" class="filter-form">
+    <input type="hidden" name="tab" value="jobs">
+    <select name="status" class="form-select">
+      <option value="">All statuses</option>
+      {% for s in job_statuses %}
+      <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select name="job_type" class="form-select">
+      <option value="">All types</option>
+      {% for t in ["evaluate", "scout"] %}
+      <option value="{{ t }}" {{ 'selected' if job_type_filter == t }}>{{ t | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+    {% if status_filter or job_type_filter %}
+    <a href="?tab=jobs" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if job_rows %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Resource</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Work Item</th>
+        <th>Started</th>
+        <th>Duration</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in job_rows %}
+      <tr>
+        <td><a href="/resources/{{ row.resource_id }}">{{ row.resource_name }}</a></td>
+        <td><span class="badge badge--{{ row.job_type }}">{{ row.job_type }}</span></td>
+        <td><span class="badge badge--{{ row.status }}">{{ row.status }}</span></td>
+        <td>
+          {% if row.work_item_id and not row.work_item_id.startswith('scout-') %}
+          <a href="/findings/{{ row.work_item_id }}">{{ row.work_item_title | truncate(50) }}</a>
+          {% else %}
+          <span class="text-muted">&mdash;</span>
+          {% endif %}
+        </td>
+        <td><span data-timestamp="{{ row.started_at }}">{{ row.started_at }}</span></td>
+        <td>{{ row.duration or "&mdash;" }}</td>
+        <td>
+          {% if row.status == "running" %}
+          <a href="/sessions/job/{{ row.id }}" class="btn btn-sm">Watch</a>
+          {% else %}
+          <a href="/sessions/job/{{ row.id }}" class="btn btn-sm btn-outline">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>No agent jobs</h3>
+  <p class="text-muted">Jobs appear here after AI evaluations and scout analyses run on codebase findings.</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

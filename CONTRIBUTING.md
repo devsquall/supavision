@@ -1,10 +1,10 @@
-# Contributing to Supervisor
+# Contributing to Supavision
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/your-org/supervisor-ai.git
-cd supervisor-ai
+git clone https://github.com/devsquall/supavision.git
+cd supavision
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -33,7 +33,7 @@ ruff format src/ tests/
 1. Create a directory under `templates/` (e.g., `templates/my_type/`)
 2. Add `discovery.md` — instructions for initial exploration
 3. Add `health_check.md` — instructions for recurring health checks
-4. If your type needs new tools, add them to `src/supervisor/tools.py`:
+4. If your type needs new tools, add them to `src/supavision/tools.py`:
    - Define the tool in `TOOL_DEFINITIONS`
    - Add a `_tool_<name>` method to `ToolDispatcher`
    - Include input validation (never trust LLM-generated arguments)

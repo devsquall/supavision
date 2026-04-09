@@ -1,0 +1,57 @@
+{# Shared definitions for Supavision UI guidance.
+   Import macros: {% from '_glossary.html' import severity_legend, stage_pipeline, concept %} #}
+
+{% macro severity_legend() %}
+<div class="glossary-legend">
+  <span class="badge badge--critical">critical</span> Immediate action needed
+  <span class="badge badge--warning">warning</span> Degraded, not urgent
+  <span class="badge badge--healthy">healthy</span> All checks passing
+</div>
+{% endmacro %}
+
+{% macro stage_pipeline() %}
+<div class="glossary-pipeline text-muted text-xs">
+  <strong>scanned</strong> found by scanner &rarr;
+  <strong>evaluated</strong> AI assessed severity and impact
+</div>
+{% endmacro %}
+
+{% macro concept(term) -%}
+{%- if term == "discovery" -%}initial scan to map system configuration
+{%- elif term == "health_check" -%}periodic evaluation of system state
+{%- elif term == "baseline" -%}snapshot from the last discovery
+{%- elif term == "scout" -%}AI agent that searches for improvements
+{%- elif term == "blocklist" -%}patterns skipped during scanning
+{%- elif term == "evaluate" -%}AI assesses severity and impact
+{%- endif -%}
+{%- endmacro %}
+
+{% macro run_type_label(rtype) -%}
+{%- if rtype == "discovery" -%}Initial scan
+{%- elif rtype == "health_check" -%}Health check
+{%- elif rtype == "scan" -%}Code scan
+{%- elif rtype == "evaluate" -%}AI evaluation
+{%- elif rtype == "implement" -%}AI fix (legacy)
+{%- elif rtype == "scout" -%}Scout
+{%- else -%}{{ rtype }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro cron_friendly(expr) -%}
+{%- if not expr or expr == "—" -%}Not scheduled
+{%- elif "*/5 " in expr -%}Every 5 minutes
+{%- elif "*/15 " in expr -%}Every 15 minutes
+{%- elif "*/30 " in expr -%}Every 30 minutes
+{%- elif "0 * " in expr -%}Every hour
+{%- elif "0 */2 " in expr -%}Every 2 hours
+{%- elif "0 */4 " in expr -%}Every 4 hours
+{%- elif "0 */6 " in expr -%}Every 6 hours
+{%- elif "0 */8 " in expr -%}Every 8 hours
+{%- elif "0 */12 " in expr -%}Every 12 hours
+{%- elif "0 0 " in expr -%}Daily at midnight
+{%- elif "0 0 * * 0" in expr -%}Weekly on Sunday
+{%- elif "0 0 * * 1" in expr -%}Weekly on Monday
+{%- elif "0 0 1 " in expr -%}Monthly on the 1st
+{%- else -%}{{ expr }}
+{%- endif -%}
+{%- endmacro %}

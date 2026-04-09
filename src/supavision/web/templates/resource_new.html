@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if editing else "Add" }} Resource - Supavision{% endblock %}
+{% block content %}
+
+{% if error %}
+<div class="alert alert--danger mb-4">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
+{% if not editing and not selected_type %}
+{# ══════════════════════════════════════════════════════════════
+   TYPE SELECTOR
+   ══════════════════════════════════════════════════════════════ #}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Add Resource</h2>
+    <span class="page-subtitle">What would you like to monitor?</span>
+  </div>
+</div>
+
+<div class="type-grid">
+  {% for slug, t in resource_types.items() %}
+  <a href="/resources/new?type={{ slug }}" class="type-card">
+    <strong>{{ t.label }}</strong>
+    <span class="text-muted text-sm">{{ t.description }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="mt-4">
+  <a href="/resources" class="btn btn-outline">Cancel</a>
+</div>
+
+{% elif not editing %}
+{# ══════════════════════════════════════════════════════════════
+   WIZARD: Multi-step flow with HTMX content swaps
+   ══════════════════════════════════════════════════════════════ #}
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Resources</a></li>
+  <li>Add {{ type_label }}</li>
+</ul>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Add {{ type_label }}</h2>
+    <span class="page-subtitle">{{ how_it_works }}</span>
+  </div>
+</div>
+
+<div class="wizard">
+  <div class="wizard-steps" id="wizard-steps">
+    {% for step_label, step_suffix in wizard_flow %}
+    {% if not loop.first %}
+    <span class="wizard-step-separator">&rarr;</span>
+    {% endif %}
+    <span class="wizard-step {{ 'wizard-step--active' if loop.index == current_wizard_step else 'wizard-step--done' if loop.index < current_wizard_step else '' }}">
+      {{ step_label }}
+    </span>
+    {% endfor %}
+  </div>
+
+  <div id="wizard-content">
+    {% include "_wizard_resource_info.html" %}
+  </div>
+</div>
+
+{% else %}
+{# ══════════════════════════════════════════════════════════════
+   EDIT MODE (existing resource — simple form)
+   ══════════════════════════════════════════════════════════════ #}
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Resources</a></li>
+  <li><a href="/resources/{{ resource.id }}">{{ resource.name }}</a></li>
+  <li>Edit</li>
+</ul>
+
+{% set rtype = resource_types.get(resource.resource_type, {}) %}
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Edit Resource</h2>
+    <span class="page-subtitle">{{ resource.name }}</span>
+  </div>
+</div>
+
+<div class="wizard-card constrained-md">
+  <form method="post" action="/resources/{{ resource.id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-group">
+      <label class="form-label" for="name">Display Name</label>
+      <input class="form-input" type="text" id="name" name="name" value="{{ resource.name }}" required>
+    </div>
+
+    {% if resource.resource_type == 'codebase' %}
+    <div class="form-group mt-4">
+      <label class="form-label" for="path">Project Path</label>
+      <input class="form-input" type="text" id="path" name="path"
+             value="{{ resource.config.path or '' }}" required>
+    </div>
+    <div class="form-group mt-4">
+      <label class="form-label" for="language_hint">Language Hint</label>
+      <input class="form-input" type="text" id="language_hint" name="language_hint"
+             value="{{ resource.config.language_hint or '' }}">
+    </div>
+    {% elif rtype.get('connection') == 'ssh' %}
+    <div class="form-group mt-4">
+      <label class="form-label" for="ssh_host">SSH Host</label>
+      <input class="form-input" type="text" id="ssh_host" name="ssh_host"
+             value="{{ resource.config.ssh_host or '' }}">
+    </div>
+    {% endif %}
+
+    <div class="wizard-footer">
+      <a href="/resources/{{ resource.id }}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn">Save Changes</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

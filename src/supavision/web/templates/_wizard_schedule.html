@@ -1,0 +1,63 @@
+<div class="wizard-card">
+  <h3>Step {{ current_wizard_step }}: Schedule</h3>
+  <p class="text-muted mb-4">Supavision runs checks on this schedule. You can also trigger them manually anytime from the resource page.</p>
+
+  {% if errors %}
+  <div class="alert alert--danger mb-4">
+    {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form hx-post="/resources/wizard/next" hx-target="#wizard-content" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+    <input type="hidden" name="resource_type" value="{{ resource_type }}">
+    {% for key, val in data.items() %}
+    {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+    <input type="hidden" name="{{ key }}" value="{{ val }}">
+    {% endif %}
+    {% endfor %}
+
+    <div class="form-row">
+      <div class="form-col">
+        <div class="form-group">
+          <label class="form-label" for="health_cron">Health Check Frequency</label>
+          <select class="form-select" id="health_cron" name="health_cron">
+            <option value="" {{ 'selected' if not data.get('health_cron') }}>Disabled</option>
+            <option value="0 */6 * * *" {{ 'selected' if data.get('health_cron') == '0 */6 * * *' }}>Every 6 hours</option>
+            <option value="0 */12 * * *" {{ 'selected' if data.get('health_cron') == '0 */12 * * *' }}>Every 12 hours</option>
+            <option value="0 0 * * *" {{ 'selected' if data.get('health_cron') == '0 0 * * *' }}>Daily</option>
+            <option value="0 0 * * 0" {{ 'selected' if data.get('health_cron') == '0 0 * * 0' }}>Weekly</option>
+          </select>
+          <span class="form-hint">How often to run automated health checks.</span>
+        </div>
+      </div>
+      <div class="form-col">
+        <div class="form-group">
+          <label class="form-label" for="discovery_cron">Discovery Frequency</label>
+          <select class="form-select" id="discovery_cron" name="discovery_cron">
+            <option value="" {{ 'selected' if not data.get('discovery_cron') }}>Disabled</option>
+            <option value="0 0 * * 0" {{ 'selected' if data.get('discovery_cron') == '0 0 * * 0' }}>Weekly</option>
+            <option value="0 0 1 * *" {{ 'selected' if data.get('discovery_cron') == '0 0 1 * *' }}>Monthly</option>
+          </select>
+          <span class="form-hint">How often to re-discover the full system baseline.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group mt-4">
+      <label class="form-label">Slack Webhook URL</label>
+      <input class="form-input" type="url" name="slack_webhook" value="{{ data.get('slack_webhook', '') }}" placeholder="https://hooks.slack.com/services/...">
+      <span class="form-hint">Optional. Receive alerts when health issues are detected.</span>
+    </div>
+
+    <div class="wizard-footer">
+      <button type="button" class="btn btn-outline"
+              hx-post="/resources/wizard/back" hx-target="#wizard-content" hx-swap="innerHTML"
+              hx-include="closest form">
+        &larr; Back
+      </button>
+      <button type="submit" class="btn">Next: {{ next_step_label or 'Review & Confirm' }}</button>
+    </div>
+  </form>
+</div>

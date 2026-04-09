@@ -9,10 +9,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from supervisor.db import Store
-from supervisor.models import Resource, RunStatus, RunType
-from supervisor.web.auth import generate_api_key, hash_api_key
-from supervisor.web.routes import router
+from supavision.db import Store
+from supavision.models import Resource, RunStatus, RunType
+from supavision.web.auth import generate_api_key, hash_api_key
+from supavision.web.routes import health_router, router
 
 # ── Fixtures ─────────────────────────────────────────────────────
 
@@ -30,6 +30,7 @@ def store(tmp_path):
 def app(store):
     """Create a FastAPI app wired to the test store."""
     app = FastAPI()
+    app.include_router(health_router)
     app.include_router(router)
     app.state.store = store
     # Provide a mock engine so route handlers don't fail
@@ -62,19 +63,24 @@ def unauth_client(app) -> TestClient:
 
 
 class TestAuth:
-    def test_missing_api_key_returns_401(self, unauth_client):
+    def test_health_no_auth_required(self, unauth_client):
         resp = unauth_client.get("/api/v1/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_missing_api_key_returns_401(self, unauth_client):
+        resp = unauth_client.get("/api/v1/resources")
         assert resp.status_code == 401
         assert "Missing" in resp.json()["detail"]
 
     def test_invalid_api_key_returns_401(self, app):
         client = TestClient(app, headers={"x-api-key": "invalid-key-12345"})
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/v1/resources")
         assert resp.status_code == 401
         assert "Invalid" in resp.json()["detail"]
 
     def test_valid_api_key_returns_200(self, client):
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/v1/resources")
         assert resp.status_code == 200
 
     def test_revoked_key_returns_401(self, app, store):
@@ -83,13 +89,13 @@ class TestAuth:
         store.revoke_api_key(key_id)
 
         client = TestClient(app, headers={"x-api-key": raw_key})
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/v1/resources")
         assert resp.status_code == 401
         assert "Invalid or revoked" in resp.json()["detail"]
 
     def test_empty_api_key_header_returns_401(self, app):
         client = TestClient(app, headers={"x-api-key": ""})
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/v1/resources")
         assert resp.status_code == 401
 
 
@@ -102,7 +108,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["service"] == "supervisor"
+        assert data["service"] == "supavision"
 
 
 # ── Resource CRUD ────────────────────────────────────────────────
@@ -234,7 +240,7 @@ class TestRunsAndReports:
         assert resp.status_code == 404
 
     def test_get_run_returns_data(self, client, store):
-        from supervisor.models import Run
+        from supavision.models import Run
 
         resource = Resource(name="test", resource_type="server")
         store.save_resource(resource)
@@ -257,7 +263,7 @@ class TestRunsAndReports:
         assert resp.status_code == 400
 
     def test_list_reports_for_resource(self, client, store):
-        from supervisor.models import Report
+        from supavision.models import Report
 
         resource = Resource(name="test", resource_type="server")
         store.save_resource(resource)
@@ -280,7 +286,7 @@ class TestRunsAndReports:
 
     def test_get_run_with_report_and_evaluation(self, client, store):
         """Run endpoint attaches report and evaluation when present."""
-        from supervisor.models import Evaluation, Report, Run, Severity
+        from supavision.models import Evaluation, Report, Run, Severity
 
         resource = Resource(name="test", resource_type="server")
         store.save_resource(resource)
@@ -319,7 +325,7 @@ class TestRunsAndReports:
 
     def test_resource_list_with_latest_severity(self, client, store):
         """List resources shows latest severity when evaluations exist."""
-        from supervisor.models import Evaluation, Run, Severity
+        from supavision.models import Evaluation, Run, Severity
 
         resource = Resource(name="sev-test", resource_type="server")
         store.save_resource(resource)
@@ -410,7 +416,7 @@ class TestNotifyTest:
         store.save_resource(resource)
 
         with patch(
-            "supervisor.notifications.SlackChannel.send",
+            "supavision.notifications.SlackChannel.send",
             new_callable=AsyncMock,
             return_value=True,
         ):

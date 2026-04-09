@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ type_label | replace('_',' ') | capitalize }} — {{ resource_name }} - Supavision{% endblock %}
+{% block content %}
+
+{# ── Header ── #}
+<div class="session-header">
+  <a href="/sessions?tab={{ 'runs' if session_type == 'run' else 'jobs' }}" class="session-header-back">&larr; Back to Sessions</a>
+  <h2>{{ resource_name }}</h2>
+  <span class="badge badge--{{ type_label }}">{{ type_label | replace('_', ' ') }}</span>
+  <span class="badge badge--{{ status }}">{{ status }}</span>
+</div>
+
+<div class="session-meta mb-4">
+  {% if started_at %}
+  <span>Started <span data-timestamp="{{ started_at }}">{{ started_at }}</span></span>
+  {% endif %}
+  <span>Duration: <strong>{{ duration }}</strong></span>
+  {% if tokens %}
+  <span>Tokens: <strong>{{ "{:,}".format(tokens) }}</strong></span>
+  {% endif %}
+  {% if work_item_title is defined and work_item_title %}
+  <span>Item: <a href="/findings/{{ work_item_id }}">{{ work_item_title | truncate(40) }}</a></span>
+  {% endif %}
+</div>
+
+{# ── Terminal Pane ── #}
+<div id="terminal" class="terminal-pane">{% if not is_running and output %}{{ output }}{% elif not is_running and error %}<span class="error-line">{{ error }}</span>{% elif not is_running %}<span class="thinking">No output recorded for this session.</span>{% else %}<span class="thinking">Connecting to live stream...</span>{% endif %}</div>
+
+{% if is_running %}
+<script>
+(function() {
+  var terminal = document.getElementById('terminal');
+  var url = '{{ sse_url }}';
+  var source = new EventSource(url);
+  var firstEvent = true;
+
+  source.onmessage = function(event) {
+    if (firstEvent) { terminal.textContent = ''; firstEvent = false; }
+    terminal.textContent += event.data + '\n';
+    terminal.scrollTop = terminal.scrollHeight;
+  };
+
+  source.addEventListener('done', function() {
+    source.close();
+    setTimeout(function() { window.location.reload(); }, 1000);
+  });
+
+  source.onerror = function() {
+    source.close();
+    if (firstEvent) {
+      terminal.innerHTML = '<span class="thinking">Stream ended or unavailable.</span>';
+    } else {
+      terminal.textContent += '\n[Stream ended]\n';
+    }
+  };
+})();
+</script>
+{% endif %}
+{% endblock %}

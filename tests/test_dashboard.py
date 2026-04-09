@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from supervisor.web.dashboard import _inline, _md_to_html
+from supavision.web.dashboard import _inline, _md_to_html
 
 # ── Markdown renderer ───────────────────────────────────────────
 
@@ -117,7 +117,7 @@ class TestMdToHtml:
 
 class TestResourceTypes:
     def test_all_types_defined(self):
-        from supervisor.resource_types import RESOURCE_TYPES
+        from supavision.resource_types import RESOURCE_TYPES
 
         assert "server" in RESOURCE_TYPES
         assert "aws_account" in RESOURCE_TYPES
@@ -125,17 +125,17 @@ class TestResourceTypes:
         assert "github_org" in RESOURCE_TYPES
 
     def test_server_is_ssh(self):
-        from supervisor.resource_types import RESOURCE_TYPES
+        from supavision.resource_types import RESOURCE_TYPES
 
         assert RESOURCE_TYPES["server"]["connection"] == "ssh"
 
     def test_aws_is_local(self):
-        from supervisor.resource_types import RESOURCE_TYPES
+        from supavision.resource_types import RESOURCE_TYPES
 
-        assert RESOURCE_TYPES["aws_account"]["connection"] == "local"
+        assert RESOURCE_TYPES["aws_account"]["connection"] == "credentials"
 
     def test_all_have_required_fields(self):
-        from supervisor.resource_types import RESOURCE_TYPES
+        from supavision.resource_types import RESOURCE_TYPES
 
         for slug, rt in RESOURCE_TYPES.items():
             assert "label" in rt, f"{slug} missing label"

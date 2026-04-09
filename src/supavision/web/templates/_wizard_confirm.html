@@ -1,0 +1,69 @@
+<div class="wizard-card">
+  <h3>Step {{ current_wizard_step }}: Confirm</h3>
+  <p class="text-muted mb-4">Review the details below and create your resource.</p>
+
+  {% set cron_labels = {'0 */6 * * *': 'Every 6 hours', '0 */12 * * *': 'Every 12 hours', '0 0 * * *': 'Daily', '0 0 * * 0': 'Weekly', '0 0 1 * *': 'Monthly'} %}
+
+  <table class="review-table mb-4">
+    <tr><td>Resource Type</td><td><span class="badge badge--type">{{ type_label }}</span></td></tr>
+    <tr><td>Display Name</td><td><strong>{{ data.name }}</strong></td></tr>
+    {% if data.host %}
+    <tr><td>SSH Host</td><td><code>{{ data.user or 'ubuntu' }}@{{ data.host }}:{{ data.port or '22' }}</code></td></tr>
+    {% endif %}
+    {% if data.target_directory %}
+    <tr><td>Target Directory</td><td><code>{{ data.target_directory }}</code></td></tr>
+    {% endif %}
+    {% if data.github_org %}
+    <tr><td>Organization</td><td>{{ data.github_org }}</td></tr>
+    {% endif %}
+    {% if data.db_engine %}
+    <tr><td>Database</td><td>{{ data.db_engine }}</td></tr>
+    {% endif %}
+    {% if data.db_host %}
+    <tr><td>DB Host</td><td><code>{{ data.db_host }}:{{ data.db_port or '5432' }}</code></td></tr>
+    {% endif %}
+    {% if data.db_name %}
+    <tr><td>DB Name</td><td>{{ data.db_name }}</td></tr>
+    {% endif %}
+    {# Masked secrets #}
+    {% if data.aws_access_key %}
+    <tr><td>AWS Access Key</td><td><code>{{ data.aws_access_key[:4] }}...{{ data.aws_access_key[-4:] }}</code></td></tr>
+    <tr><td>AWS Secret Key</td><td><code>••••••••</code></td></tr>
+    {% endif %}
+    {% if data.github_token %}
+    <tr><td>GitHub Token</td><td><code>{{ data.github_token[:8] }}...••••</code></td></tr>
+    {% endif %}
+    {# Schedule #}
+    <tr><td>Health Check</td><td>{{ cron_labels.get(data.health_cron, 'Disabled') }}</td></tr>
+    <tr><td>Discovery</td><td>{{ cron_labels.get(data.discovery_cron, 'Disabled') }}</td></tr>
+    {% if data.slack_webhook %}
+    <tr><td>Notifications</td><td><span class="badge badge--healthy">Slack configured</span></td></tr>
+    {% else %}
+    <tr><td>Notifications</td><td class="text-muted">None</td></tr>
+    {% endif %}
+    {% if data.notes %}
+    <tr><td>Notes</td><td class="text-sm">{{ data.notes }}</td></tr>
+    {% endif %}
+  </table>
+
+  <div class="alert alert--info mb-4">
+    After creation, Supavision will run an initial discovery to map your {{ type_label | lower }} and establish a monitoring baseline.
+  </div>
+
+  <form method="post" action="/resources/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% for key, val in data.items() %}
+    {% if key not in ('_step', 'csrf_token') %}
+    <input type="hidden" name="{{ key }}" value="{{ val }}">
+    {% endif %}
+    {% endfor %}
+    <div class="wizard-footer">
+      <button type="button" class="btn btn-outline"
+              hx-post="/resources/wizard/back" hx-target="#wizard-content" hx-swap="innerHTML"
+              hx-include="closest form">
+        &larr; Back
+      </button>
+      <button type="submit" class="btn">Create Resource</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,11 @@
+.venv
+.git
+.pytest_cache
+.ruff_cache
+.supavision
+__pycache__
+*.pyc
+tests/
+.env
+.coverage
+.review-loop

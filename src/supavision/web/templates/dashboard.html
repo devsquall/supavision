@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Control Center - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Control Center</h2>
+    <span class="page-subtitle">System overview and quick actions</span>
+  </div>
+</div>
+
+<div id="cc-overview"
+     hx-get="/dashboard/overview"
+     hx-trigger="load, every 30s, refreshResources from:body"
+     hx-swap="innerHTML"
+     role="region" aria-label="Control center" aria-live="polite">
+  <div class="cc-status-strip skeleton-pulse skeleton-sm"></div>
+  <div class="cc-columns mt-4">
+    <div class="cc-col-left">
+      <div class="skeleton-lg skeleton-pulse mb-4"></div>
+      <div class="skeleton-md skeleton-pulse"></div>
+    </div>
+    <div class="cc-col-right">
+      <div class="skeleton-xl skeleton-pulse mb-4"></div>
+      <div class="skeleton-lg skeleton-pulse"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

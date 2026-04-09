@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from supervisor.executor import (
+from supavision.executor import (
     MAX_OUTPUT_BYTES,
     MULTIPLEX_DIR,
     CommandResult,

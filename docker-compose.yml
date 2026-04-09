@@ -1,13 +1,13 @@
 services:
-  supervisor:
+  supavision:
     build: .
     ports:
-      - "${SUPERVISOR_PORT:-8080}:8080"
+      - "${SUPAVISION_PORT:-8080}:8080"
     volumes:
-      - supervisor-data:/app/.supervisor
+      - supavision-data:/app/.supavision
       - ${HOME}/.ssh:/root/.ssh:ro
     environment:
-      - SUPERVISOR_BACKEND=${SUPERVISOR_BACKEND:-claude_cli}
+      - SUPAVISION_BACKEND=${SUPAVISION_BACKEND:-claude_cli}
       - SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
     restart: unless-stopped
     healthcheck:
@@ -18,4 +18,4 @@ services:
       retries: 3
 
 volumes:
-  supervisor-data:
+  supavision-data:

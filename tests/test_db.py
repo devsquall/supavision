@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from supervisor.db import Store
-from supervisor.models import (
+from supavision.db import Store
+from supavision.models import (
     Checklist,
     ChecklistItem,
     Evaluation,

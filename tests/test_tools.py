@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from supervisor.executor import CommandResult, Executor
-from supervisor.tools import (
+from supavision.executor import CommandResult, Executor
+from supavision.tools import (
     TOOL_DEFINITIONS,
     ToolDispatcher,
     _is_diagnostic_allowed,

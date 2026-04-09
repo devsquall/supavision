@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from supervisor.discovery_diff import (
+from supavision.discovery_diff import (
     ContextDiff,
     SectionDiff,
     compute_diff,
     format_drift_summary,
     should_alert_on_drift,
 )
-from supervisor.models import Evaluation, Report, Resource, RunType, Severity
-from supervisor.notifications import (
+from supavision.models import Evaluation, Report, Resource, RunType, Severity
+from supavision.notifications import (
     SlackChannel,
     WebhookChannel,
     _dedup_key,
@@ -97,6 +97,69 @@ class TestSSRF:
                 result = validate_webhook_url("https://hooks.slack.com/services/xxx")
                 assert "hooks.slack.com" in result
 
+    def test_dns_rebinding_attack_scenario(self):
+        """Test that DNS rebinding is prevented by re-validation at send time."""
+        # First validation: domain resolves to public IP (passes)
+        with patch("socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("104.18.0.1", 443)),
+        ]):
+            result = validate_webhook_url("https://attacker.example.com/hook")
+            assert result == "https://attacker.example.com/hook"
+
+        # Second validation: domain now resolves to AWS metadata (blocked)
+        with patch("socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("169.254.169.254", 80)),
+        ]):
+            with pytest.raises(ValueError, match="blocked IP range.*169.254.169.254"):
+                validate_webhook_url("https://attacker.example.com/hook")
+
+    def test_slack_channel_validates_on_init(self):
+        """Test that SlackChannel validates webhook URL on initialization."""
+        with patch("socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("10.0.0.1", 443)),
+        ]):
+            with pytest.raises(ValueError, match="blocked IP"):
+                SlackChannel("https://internal.attacker.com/hook")
+
+    def test_slack_channel_blocks_internal_ips(self):
+        """Test that SlackChannel blocks internal IPs via dashboard/CLI."""
+        # Test various internal IP ranges
+        test_cases = [
+            ("127.0.0.1", "loopback"),
+            ("10.0.0.1", "private 10.x"),
+            ("172.16.0.1", "private 172.16-31.x"),
+            ("192.168.1.1", "private 192.168.x"),
+            ("169.254.169.254", "AWS metadata"),
+        ]
+        for ip, desc in test_cases:
+            with patch("socket.getaddrinfo", return_value=[
+                (2, 1, 6, "", (ip, 443)),
+            ]):
+                with pytest.raises(ValueError, match="blocked IP"):
+                    SlackChannel("https://internal.example.com/hook")
+
+    @pytest.mark.asyncio
+    async def test_post_with_retry_revalidates_dns(self):
+        """Test that _post_with_retry re-validates DNS before sending."""
+        from supavision.notifications import _post_with_retry
+
+        # DNS rebinding: first validation passes, second blocks
+        validation_count = [0]
+
+        def mock_getaddrinfo(hostname, port):
+            validation_count[0] += 1
+            if validation_count[0] == 1:
+                # Initial validation: public IP
+                return [(2, 1, 6, "", ("104.18.0.1", 443))]
+            else:
+                # Send-time validation: AWS metadata IP
+                return [(2, 1, 6, "", ("169.254.169.254", 80))]
+
+        with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+            # This should fail at send time (second validation)
+            result = await _post_with_retry("https://attacker.example.com/hook", {})
+            assert result is False
+
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -162,13 +225,13 @@ class TestSlackChannel:
     @pytest.mark.asyncio
     async def test_send_success(self):
         channel = SlackChannel("https://hooks.slack.com/test")
-        with patch("supervisor.notifications._post_with_retry", new_callable=AsyncMock, return_value=True):
+        with patch("supavision.notifications._post_with_retry", new_callable=AsyncMock, return_value=True):
             assert await channel.send(_make_resource(), _make_report(), _make_eval()) is True
 
     @pytest.mark.asyncio
     async def test_send_failure_returns_false(self):
         channel = SlackChannel("https://hooks.slack.com/test")
-        with patch("supervisor.notifications._post_with_retry", new_callable=AsyncMock, return_value=False):
+        with patch("supavision.notifications._post_with_retry", new_callable=AsyncMock, return_value=False):
             assert await channel.send(_make_resource(), _make_report(), _make_eval()) is False
 
 
@@ -190,13 +253,37 @@ class TestWebhookChannel:
         ]):
             channel = WebhookChannel("https://example.com/hook")
 
-        with patch("supervisor.notifications._post_with_retry", new_callable=AsyncMock, return_value=True) as mock_post:
+        with patch("supavision.notifications._post_with_retry", new_callable=AsyncMock, return_value=True) as mock_post:
             result = await channel.send(_make_resource(), _make_report(), _make_eval())
             assert result is True
             payload = mock_post.call_args[0][1]
             assert "resource_name" in payload
             assert "severity" in payload
             assert "timestamp" in payload
+
+    @pytest.mark.asyncio
+    async def test_dns_rebinding_blocked_at_send_time(self):
+        """Test that DNS rebinding attack is blocked when sending webhook."""
+        validation_count = [0]
+
+        def mock_getaddrinfo(hostname, port):
+            validation_count[0] += 1
+            if validation_count[0] == 1:
+                # Construction time: resolves to public IP
+                return [(2, 1, 6, "", ("104.18.0.1", 443))]
+            else:
+                # Send time: DNS has been rebound to internal IP
+                return [(2, 1, 6, "", ("169.254.169.254", 80))]
+
+        with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+            # Create channel - passes validation with public IP
+            channel = WebhookChannel("https://attacker.example.com/hook")
+
+            # Send - should fail validation with internal IP
+            result = await channel.send(_make_resource(), _make_report(), _make_eval())
+            assert result is False
+            # Should have validated twice: once at init, once at send
+            assert validation_count[0] == 2
 
 
 # ── Dedup ────────────────────────────────────────────────────────
@@ -269,14 +356,14 @@ class TestSendAlert:
     async def test_slack_from_env_fallback(self):
         resource = _make_resource(config={})
         with patch.dict(os.environ, {"SLACK_WEBHOOK": "https://hooks.slack.com/test"}):
-            with patch("supervisor.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
+            with patch("supavision.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
                 channels, key = await send_alert(resource, _make_report(), _make_eval(), skip_dedup=True)
                 assert "slack" in channels
 
     @pytest.mark.asyncio
     async def test_slack_from_resource_config(self):
         resource = _make_resource(config={"slack_webhook": "https://hooks.slack.com/resource"})
-        with patch("supervisor.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
+        with patch("supavision.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
             channels, key = await send_alert(resource, _make_report(), _make_eval(), skip_dedup=True)
             assert "slack" in channels
 
@@ -286,7 +373,7 @@ class TestSendAlert:
         report = _make_report()
         evaluation = _make_eval()
 
-        with patch("supervisor.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
+        with patch("supavision.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
             channels1, key1 = await send_alert(resource, report, evaluation)
             assert "slack" in channels1
             assert key1 is not None
@@ -301,7 +388,7 @@ class TestSendAlert:
         report = _make_report()
         evaluation = _make_eval()
 
-        with patch("supervisor.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
+        with patch("supavision.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
             await send_alert(resource, report, evaluation, skip_dedup=True)
             channels, _ = await send_alert(resource, report, evaluation, skip_dedup=True)
             assert "slack" in channels
@@ -311,7 +398,7 @@ class TestSendAlert:
         resource = _make_resource(config={"slack_webhook": "https://hooks.slack.com/test"})
         evaluation = _make_eval(summary="Disk critical")
 
-        with patch("supervisor.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
+        with patch("supavision.notifications.SlackChannel.send", new_callable=AsyncMock, return_value=True):
             channels, key = await send_alert(resource, _make_report(), evaluation, skip_dedup=True)
             assert key is not None
             assert len(key) == 16  # sha256[:16]
