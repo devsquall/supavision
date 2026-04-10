@@ -74,7 +74,9 @@ def _make_report(resource_id: str, run_type: RunType = RunType.HEALTH_CHECK, con
     return Report(resource_id=resource_id, run_type=run_type, content=content)
 
 
-def _make_evaluation(report_id: str, resource_id: str, severity: Severity = Severity.HEALTHY, summary: str = "All good") -> Evaluation:
+def _make_evaluation(
+    report_id: str, resource_id: str, severity: Severity = Severity.HEALTHY, summary: str = "All good",
+) -> Evaluation:
     return Evaluation(
         report_id=report_id,
         resource_id=resource_id,
@@ -384,3 +386,395 @@ class TestErrors:
     def test_malformed_json_raises_decode_error(self, ro_conn):
         with pytest.raises(json.JSONDecodeError):
             handle_jsonrpc(ro_conn, "this is not json{{{")
+
+
+# ── Lane 2 fixtures ──────────────────────────────────────────────
+
+from supavision.models.work import (  # noqa: E402
+    BlocklistEntry,
+    Finding,
+    FindingSeverity,
+)
+
+
+def _make_finding(resource_id: str, **kwargs) -> Finding:
+    defaults = {
+        "resource_id": resource_id,
+        "category": "sql-injection",
+        "severity": FindingSeverity.HIGH,
+        "language": "python",
+        "file_path": "src/db.py",
+        "line_number": 42,
+        "snippet": "cursor.execute(f'SELECT * FROM users WHERE id={user_id}')",
+    }
+    defaults.update(kwargs)
+    return Finding(**defaults)
+
+
+def _make_blocklist_entry(**kwargs) -> BlocklistEntry:
+    defaults = {
+        "pattern_signature": "test_pattern_sig",
+        "category": "false-positive",
+        "language": "python",
+        "description": "Test patterns that are not real vulnerabilities",
+    }
+    defaults.update(kwargs)
+    return BlocklistEntry(**defaults)
+
+
+# ── supavision_list_findings ──────────────────────────────────────
+
+
+class TestListFindings:
+    def test_list_findings_returns_data(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        f1 = _make_finding(resource.id, category="sql-injection", severity=FindingSeverity.HIGH)
+        f2 = _make_finding(
+            resource.id, category="xss", severity=FindingSeverity.MEDIUM,
+            file_path="src/web.py", line_number=10,
+        )
+        store.save_work_item(f1)
+        store.save_work_item(f2)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_findings",
+            "arguments": {},
+        }))
+        assert "error" not in resp
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) == 2
+
+    def test_list_findings_filter_by_resource(self, store, ro_conn):
+        r1 = _make_resource(name="server-a")
+        r2 = _make_resource(name="server-b")
+        store.save_resource(r1)
+        store.save_resource(r2)
+
+        store.save_work_item(_make_finding(r1.id))
+        store.save_work_item(_make_finding(r2.id))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_findings",
+            "arguments": {"resource_id": r1.id},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) == 1
+        assert items[0]["category"] == "sql-injection"
+
+    def test_list_findings_filter_by_severity(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        store.save_work_item(_make_finding(resource.id, severity=FindingSeverity.HIGH))
+        store.save_work_item(_make_finding(resource.id, severity=FindingSeverity.LOW, category="info-leak"))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_findings",
+            "arguments": {"severity": "low"},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) == 1
+        assert items[0]["severity"] == "low"
+
+    def test_list_findings_respects_limit(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        for i in range(5):
+            store.save_work_item(_make_finding(resource.id, category=f"cat-{i}", line_number=i))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_findings",
+            "arguments": {"limit": 2},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) == 2
+
+    def test_list_findings_empty(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_findings",
+            "arguments": {},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert items == []
+
+
+# ── supavision_get_finding ────────────────────────────────────────
+
+
+class TestGetFinding:
+    def test_get_finding_returns_full_data(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        finding = _make_finding(resource.id)
+        store.save_work_item(finding)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_finding",
+            "arguments": {"finding_id": finding.id},
+        }))
+        assert "error" not in resp
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert data["id"] == finding.id
+        assert data["category"] == "sql-injection"
+        assert data["severity"] == "high"
+        assert data["file_path"] == "src/db.py"
+        assert data["line_number"] == 42
+
+    def test_get_finding_not_found(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_finding",
+            "arguments": {"finding_id": "nonexistent"},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_get_finding_missing_param(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_finding",
+            "arguments": {},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+
+
+# ── supavision_get_project_stats ──────────────────────────────────
+
+
+class TestGetProjectStats:
+    def test_project_stats_counts_by_stage(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        # Create findings in different stages
+        f1 = _make_finding(resource.id, category="cat-1")
+        f2 = _make_finding(resource.id, category="cat-2")
+        f3 = _make_finding(resource.id, category="cat-3", severity=FindingSeverity.LOW)
+        store.save_work_item(f1)
+        store.save_work_item(f2)
+        store.save_work_item(f3)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_project_stats",
+            "arguments": {"resource_id": resource.id},
+        }))
+        assert "error" not in resp
+        stats = json.loads(resp["result"]["content"][0]["text"])
+        # All findings are in 'scanned' stage by default
+        assert stats.get("scanned", 0) == 3
+
+    def test_project_stats_empty(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_project_stats",
+            "arguments": {},
+        }))
+        stats = json.loads(resp["result"]["content"][0]["text"])
+        assert stats == {}
+
+
+# ── supavision_list_blocklist ─────────────────────────────────────
+
+
+class TestListBlocklist:
+    def test_list_blocklist_returns_entries(self, store, ro_conn):
+        e1 = _make_blocklist_entry(pattern_signature="sig-1", category="false-positive", description="FP pattern 1")
+        e2 = _make_blocklist_entry(pattern_signature="sig-2", category="test-code", description="Test code pattern")
+        store.save_blocklist_entry(e1)
+        store.save_blocklist_entry(e2)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_blocklist",
+            "arguments": {},
+        }))
+        assert "error" not in resp
+        entries = json.loads(resp["result"]["content"][0]["text"])
+        assert len(entries) == 2
+        sigs = {e["pattern_signature"] for e in entries}
+        assert sigs == {"sig-1", "sig-2"}
+
+    def test_list_blocklist_filter_by_category(self, store, ro_conn):
+        e1 = _make_blocklist_entry(pattern_signature="sig-a", category="false-positive")
+        e2 = _make_blocklist_entry(pattern_signature="sig-b", category="test-code")
+        store.save_blocklist_entry(e1)
+        store.save_blocklist_entry(e2)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_blocklist",
+            "arguments": {"category": "test-code"},
+        }))
+        entries = json.loads(resp["result"]["content"][0]["text"])
+        assert len(entries) == 1
+        assert entries[0]["category"] == "test-code"
+
+    def test_list_blocklist_empty(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_list_blocklist",
+            "arguments": {},
+        }))
+        entries = json.loads(resp["result"]["content"][0]["text"])
+        assert entries == []
+
+
+# ── supavision_search_findings ────────────────────────────────────
+
+
+class TestSearchFindings:
+    def test_search_by_category(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        store.save_work_item(_make_finding(resource.id, category="sql-injection"))
+        store.save_work_item(_make_finding(
+            resource.id, category="xss-reflected", file_path="src/views.py", line_number=99,
+        ))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_search_findings",
+            "arguments": {"query": "sql"},
+        }))
+        assert "error" not in resp
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) >= 1
+        assert any(i["category"] == "sql-injection" for i in items)
+
+    def test_search_by_file_path(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        store.save_work_item(_make_finding(resource.id, file_path="src/auth/login.py", line_number=5))
+        store.save_work_item(_make_finding(resource.id, file_path="src/db.py", line_number=10, category="xss"))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_search_findings",
+            "arguments": {"query": "login"},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) >= 1
+        assert any("login" in i["file_path"] for i in items)
+
+    def test_search_with_resource_filter(self, store, ro_conn):
+        r1 = _make_resource(name="proj-a")
+        r2 = _make_resource(name="proj-b")
+        store.save_resource(r1)
+        store.save_resource(r2)
+
+        store.save_work_item(_make_finding(r1.id, category="sql-injection"))
+        store.save_work_item(_make_finding(r2.id, category="sql-injection"))
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_search_findings",
+            "arguments": {"query": "sql", "resource_id": r1.id},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert len(items) == 1
+
+    def test_search_no_query_returns_error(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_search_findings",
+            "arguments": {},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+
+    def test_search_no_results(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_search_findings",
+            "arguments": {"query": "nonexistent-term-xyz"},
+        }))
+        items = json.loads(resp["result"]["content"][0]["text"])
+        assert items == []
+
+
+# ── supavision_get_metrics ────────────────────────────────────────
+
+
+class TestGetMetrics:
+    def test_get_metrics_returns_latest(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        store.save_metrics(resource.id, "report-1", [
+            {"name": "cpu_percent", "value": 45.2, "unit": "%"},
+            {"name": "disk_percent", "value": 72.0, "unit": "%"},
+        ])
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics",
+            "arguments": {"resource_id": resource.id},
+        }))
+        assert "error" not in resp
+        metrics = json.loads(resp["result"]["content"][0]["text"])
+        assert "cpu_percent" in metrics
+        assert metrics["cpu_percent"]["value"] == 45.2
+        assert metrics["cpu_percent"]["unit"] == "%"
+        assert "disk_percent" in metrics
+        assert metrics["disk_percent"]["value"] == 72.0
+
+    def test_get_metrics_no_data(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics",
+            "arguments": {"resource_id": resource.id},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+
+    def test_get_metrics_missing_resource_id(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics",
+            "arguments": {},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+
+
+# ── supavision_get_metrics_trend ──────────────────────────────────
+
+
+class TestGetMetricsTrend:
+    def test_get_trend_returns_data_points(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        # Save metrics across multiple "reports" to simulate time series
+        store.save_metrics(resource.id, "report-1", [
+            {"name": "cpu_percent", "value": 30.0, "unit": "%"},
+        ])
+        store.save_metrics(resource.id, "report-2", [
+            {"name": "cpu_percent", "value": 50.0, "unit": "%"},
+        ])
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics_trend",
+            "arguments": {"resource_id": resource.id, "metric_name": "cpu_percent"},
+        }))
+        assert "error" not in resp
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert data["metric"] == "cpu_percent"
+        assert data["points"] >= 2
+        assert len(data["data"]) >= 2
+
+    def test_get_trend_no_data(self, store, ro_conn):
+        resource = _make_resource()
+        store.save_resource(resource)
+
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics_trend",
+            "arguments": {"resource_id": resource.id, "metric_name": "nonexistent_metric"},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data
+
+    def test_get_trend_missing_params(self, store, ro_conn):
+        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
+            "name": "supavision_get_metrics_trend",
+            "arguments": {},
+        }))
+        data = json.loads(resp["result"]["content"][0]["text"])
+        assert "error" in data

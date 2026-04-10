@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,
     key_hash TEXT NOT NULL UNIQUE,
     label TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'admin',
     created_at TEXT NOT NULL,
     revoked_at TEXT
 );
@@ -254,6 +255,7 @@ class Store:
         self._execute("PRAGMA journal_mode=WAL")
         self._execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._migrate()
         try:
             os.chmod(self.db_path, 0o600)  # Owner read/write only
         except OSError:
@@ -262,6 +264,14 @@ class Store:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+    def _migrate(self) -> None:
+        """Apply incremental schema migrations for existing databases."""
+        # v0.3.1: Add role column to api_keys
+        cols = [r[1] for r in self._conn.execute("PRAGMA table_info(api_keys)").fetchall()]
+        if "role" not in cols:
+            self._conn.execute("ALTER TABLE api_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+            self._conn.commit()
 
     def _execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         """Thread-safe execute with lock."""
@@ -691,26 +701,26 @@ class Store:
 
     # ── API Keys ────────────────────────────────────────────────────
 
-    def save_api_key(self, key_id: str, key_hash: str, label: str = "") -> None:
+    def save_api_key(self, key_id: str, key_hash: str, label: str = "", role: str = "admin") -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._conn.execute(
-                "INSERT INTO api_keys (id, key_hash, label, created_at) VALUES (?, ?, ?, ?)",
-                (key_id, key_hash, label, now),
+                "INSERT INTO api_keys (id, key_hash, label, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                (key_id, key_hash, label, role, now),
             )
             self._conn.commit()
 
     def validate_api_key(self, key_hash: str) -> dict | None:
         """Returns key record if valid (exists and not revoked), else None."""
         row = self._execute(
-            "SELECT id, label, created_at, revoked_at FROM api_keys WHERE key_hash = ?",
+            "SELECT id, label, role, created_at, revoked_at FROM api_keys WHERE key_hash = ?",
             (key_hash,),
         ).fetchone()
         if not row:
             return None
-        if row[3]:  # revoked_at is set
+        if row[4]:  # revoked_at is set
             return None
-        return {"id": row[0], "label": row[1], "created_at": row[2]}
+        return {"id": row[0], "label": row[1], "role": row[2], "created_at": row[3]}
 
     def list_api_keys(self) -> list[dict]:
         rows = self._execute(
@@ -897,6 +907,18 @@ class Store:
                 "DELETE FROM work_items WHERE resource_id = ?", (resource_id,)
             )
             self._conn.commit()
+
+    def search_work_items(self, query: str, resource_id: str | None = None, limit: int = 20) -> list:
+        """Search work items by matching query against serialized JSON data."""
+        sql = "SELECT data, source FROM work_items WHERE data LIKE ?"
+        params: list = [f"%{query}%"]
+        if resource_id:
+            sql += " AND resource_id = ?"
+            params.append(resource_id)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._execute(sql, tuple(params)).fetchall()
+        return [self._deserialize_work_item(row[0], row[1]) for row in rows]
 
     # ── Agent Jobs ──────────────────────────────────────────────────
 

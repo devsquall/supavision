@@ -881,7 +881,10 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
 def cmd_implement(args: argparse.Namespace) -> None:
     """Create an implementation job for a work item."""
     from .codebase_engine import CodebaseEngine
+    from .config import EXECUTION_ENABLED
 
+    if not EXECUTION_ENABLED:
+        _error("Execution features are disabled. Set SUPAVISION_EXECUTION_ENABLED=true to enable.")
     store = _get_store(args)
     item = store.get_work_item(args.work_item_id)
     if not item:
@@ -914,8 +917,11 @@ def cmd_scout(args: argparse.Namespace) -> None:
 
 def cmd_approve(args: argparse.Namespace) -> None:
     """Approve a work item for implementation."""
+    from .config import EXECUTION_ENABLED
     from .models import FindingStage
 
+    if not EXECUTION_ENABLED:
+        _error("Execution features are disabled. Set SUPAVISION_EXECUTION_ENABLED=true to enable.")
     store = _get_store(args)
     item = store.transition_work_item(args.work_item_id, FindingStage.APPROVED)
     _json_out({
@@ -928,8 +934,11 @@ def cmd_approve(args: argparse.Namespace) -> None:
 
 def cmd_reject(args: argparse.Namespace) -> None:
     """Reject a work item."""
+    from .config import EXECUTION_ENABLED
     from .models import FindingStage
 
+    if not EXECUTION_ENABLED:
+        _error("Execution features are disabled. Set SUPAVISION_EXECUTION_ENABLED=true to enable.")
     store = _get_store(args)
     item = store.transition_work_item(args.work_item_id, FindingStage.REJECTED)
     _json_out({

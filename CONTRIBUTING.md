@@ -28,6 +28,26 @@ ruff check src/ tests/
 ruff format src/ tests/
 ```
 
+## Two-Lane Architecture
+
+Supavision uses a two-lane architecture to separate infrastructure monitoring from codebase scanning. This separation is enforced at the import level:
+
+- **Lane 1 (Health):** `engine.py`, `evaluator.py`, `executor.py`, `tools.py`, `discovery_diff.py` — import from `models.core` + `models.health` only
+- **Lane 2 (Work):** `scanner.py`, `blocklist.py`, `agent_runner.py`, `code_evaluator.py` — import from `models.core` + `models.work` only
+- **Shared:** `db.py`, `web/`, `cli.py`, `scheduler.py`, `mcp.py` — may import all models
+
+This is enforced by `tests/test_lane_boundary.py` (AST-based import verification). Always run it before submitting:
+
+```bash
+pytest tests/test_lane_boundary.py -v
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full rationale and anti-patterns to avoid.
+
+## Execution Gate
+
+Code modification features (approve, implement) are gated by `SUPAVISION_EXECUTION_ENABLED` (default: `false`). If you're working on these features, set it to `true` in your `.env` file. See [SECURITY.md](SECURITY.md) for details.
+
 ## Adding a Resource Type
 
 1. Create a directory under `templates/` (e.g., `templates/my_type/`)

@@ -8,7 +8,7 @@ from croniter import croniter
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
-from . import _render
+from . import _render, _require_admin
 
 router = APIRouter()
 
@@ -79,6 +79,7 @@ async def schedules_page(request: Request):
 @router.post("/schedules/{resource_id}/toggle")
 async def toggle_schedule(request: Request, resource_id: str):
     """Toggle a resource's enabled state."""
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:

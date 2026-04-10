@@ -1,9 +1,5 @@
 """Security tests — CSRF, DB permissions, rate limiting."""
 
-import os
-import time
-from pathlib import Path
-
 import pytest
 
 from supavision.db import Store
@@ -30,9 +26,7 @@ class TestRateLimiter:
     """Rate limiter should cap requests per IP."""
 
     def test_allows_under_limit(self):
-        from supavision.web.dashboard import _check_rate_limit
-        # Reset any shared state
-        from supavision.web.dashboard import _rate_limits
+        from supavision.web.dashboard import _check_rate_limit, _rate_limits
         _rate_limits.clear()
 
         for _ in range(10):
@@ -107,3 +101,153 @@ class TestAgentRunnerToolPolicy:
         assert "Edit" not in tools
         assert "Write" not in tools
         assert "Bash" not in tools
+
+
+class TestPasswordPolicy:
+    """Password strength validation boundary tests."""
+
+    def test_exactly_8_chars_passes(self):
+        from supavision.web.auth import validate_password_strength
+        assert validate_password_strength("abcd1234") is None
+
+    def test_7_chars_fails(self):
+        from supavision.web.auth import validate_password_strength
+        result = validate_password_strength("abc1234")
+        assert result is not None
+        assert "8 characters" in result
+
+    def test_common_password_rejected(self):
+        from supavision.web.auth import validate_password_strength
+        for pwd in ("password", "admin123", "changeme"):
+            result = validate_password_strength(pwd)
+            assert result is not None, f"'{pwd}' should be rejected"
+            assert "common" in result.lower()
+
+    def test_common_password_case_insensitive(self):
+        from supavision.web.auth import validate_password_strength
+        result = validate_password_strength("PASSWORD")
+        assert result is not None
+        assert "common" in result.lower()
+
+    def test_strong_password_passes(self):
+        from supavision.web.auth import validate_password_strength
+        assert validate_password_strength("xK9#mNp2qR") is None
+
+
+class TestSSRFProtection:
+    """Webhook URL validation blocks private/internal IPs."""
+
+    def test_blocks_private_10(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="blocked"):
+            validate_webhook_url("http://10.0.0.1/hook")
+
+    def test_blocks_private_172(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="blocked"):
+            validate_webhook_url("http://172.16.0.1/hook")
+
+    def test_blocks_private_192(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="blocked"):
+            validate_webhook_url("http://192.168.1.1/hook")
+
+    def test_blocks_loopback(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="blocked"):
+            validate_webhook_url("http://127.0.0.1/hook")
+
+    def test_blocks_link_local_aws_metadata(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="blocked"):
+            validate_webhook_url("http://169.254.169.254/hook")
+
+    def test_accepts_external_url(self):
+        from unittest.mock import patch
+
+        from supavision.notifications import validate_webhook_url
+
+        # Mock DNS resolution to return a public IP
+        fake_addrinfo = [(2, 1, 6, "", ("93.184.216.34", 443))]
+        with patch("supavision.notifications.socket.getaddrinfo", return_value=fake_addrinfo):
+            result = validate_webhook_url("https://hooks.slack.com/services/xxx")
+            assert result == "https://hooks.slack.com/services/xxx"
+
+    def test_rejects_non_http_scheme(self):
+        from supavision.notifications import validate_webhook_url
+        with pytest.raises(ValueError, match="http"):
+            validate_webhook_url("ftp://example.com/hook")
+
+
+class TestSessionTimeout:
+    """Session expiry and validity checks."""
+
+    def test_expired_session_returns_none(self, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        from supavision.db import Store
+        from supavision.models import Session, User
+        from supavision.web.auth import hash_password
+
+        store = Store(str(tmp_path / "session_test.db"))
+        user = User(email="test@example.com", password_hash=hash_password("xK9#mNp2qR"))
+        store.create_user(user)
+
+        # Create a session that expired 1 hour ago
+        expired_session = Session(
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+        store.create_session(expired_session)
+
+        result = store.get_session(expired_session.id)
+        assert result is None
+        store.close()
+
+    def test_valid_session_returns_session(self, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        from supavision.db import Store
+        from supavision.models import Session, User
+        from supavision.web.auth import hash_password
+
+        store = Store(str(tmp_path / "session_test.db"))
+        user = User(email="test2@example.com", password_hash=hash_password("xK9#mNp2qR"))
+        store.create_user(user)
+
+        # Create a session that expires in 4 hours
+        valid_session = Session(
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=4),
+        )
+        store.create_session(valid_session)
+
+        result = store.get_session(valid_session.id)
+        assert result is not None
+        assert result.id == valid_session.id
+        assert result.user_id == user.id
+        store.close()
+
+    def test_revoked_session_returns_none(self, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        from supavision.db import Store
+        from supavision.models import Session, User
+        from supavision.web.auth import hash_password
+
+        store = Store(str(tmp_path / "session_test.db"))
+        user = User(email="test3@example.com", password_hash=hash_password("xK9#mNp2qR"))
+        store.create_user(user)
+
+        session = Session(
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=4),
+        )
+        store.create_session(session)
+
+        # Revoke the session
+        store.revoke_session(session.id)
+
+        result = store.get_session(session.id)
+        assert result is None
+        store.close()

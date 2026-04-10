@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from . import _render
+from . import _render, _require_admin
 
 router = APIRouter()
 
@@ -69,6 +69,7 @@ async def settings_page(request: Request, new_key: str = ""):
 
 @router.post("/settings/api-keys")
 async def settings_create_api_key(request: Request):
+    _require_admin(request)
     from fastapi.responses import RedirectResponse
 
     from ..auth import generate_api_key
@@ -82,7 +83,9 @@ async def settings_create_api_key(request: Request):
         return RedirectResponse(url="/settings", status_code=303)
 
     key_id, raw_key, key_hash = generate_api_key()
-    store.save_api_key(key_id, key_hash, label=label)
+    user = getattr(request.state, "current_user", None)
+    role = user.role if user else "admin"
+    store.save_api_key(key_id, key_hash, label=label, role=role)
 
     # Redirect back to settings with the raw key displayed once
     return RedirectResponse(
@@ -92,6 +95,7 @@ async def settings_create_api_key(request: Request):
 
 @router.post("/settings/api-keys/{key_id}/revoke")
 async def settings_revoke_api_key(key_id: str, request: Request):
+    _require_admin(request)
     from fastapi.responses import HTMLResponse
 
     store = request.app.state.store
@@ -106,6 +110,7 @@ async def settings_revoke_api_key(key_id: str, request: Request):
 
 @router.delete("/settings/blocklist/{entry_id}")
 async def settings_blocklist_delete(entry_id: str, request: Request):
+    _require_admin(request)
     from fastapi.responses import HTMLResponse
 
     store = request.app.state.store
@@ -119,6 +124,7 @@ async def settings_blocklist_delete(entry_id: str, request: Request):
 @router.post("/settings/check-claude")
 async def settings_check_claude(request: Request):
     """Check if Claude CLI is now available and re-initialize engine if so."""
+    _require_admin(request)
     import shutil
 
     from ...engine import Engine

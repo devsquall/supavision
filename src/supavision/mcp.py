@@ -462,7 +462,8 @@ def _handle_get_metrics_trend(conn: sqlite3.Connection, args: dict) -> str:
         return json.dumps({"error": "resource_id and metric_name are required"})
 
     days = min(max(int(args.get("days", 30)), 1), 90)
-    cutoff = (datetime.now() - __import__("datetime").timedelta(days=days)).isoformat()
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
     rows = conn.execute(
         "SELECT value, created_at FROM metrics WHERE resource_id = ? AND name = ? AND created_at >= ? ORDER BY created_at",

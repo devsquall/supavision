@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
 import hmac
 import logging
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,8 +13,9 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import __version__
 from ..agent_runner import start_runner, stop_runner
-from ..config import DASHBOARD_PASSWORD, DASHBOARD_USER, SESSION_IDLE_MINUTES
+from ..config import DASHBOARD_PASSWORD, DASHBOARD_USER
 from ..db import Store
 from ..engine import Engine
 from ..models import User
@@ -25,7 +23,8 @@ from ..scheduler import Scheduler
 from ..templates import TEMPLATE_DIR_DEFAULT
 from ..web.auth import hash_password
 from .dashboard import router as dashboard_router
-from .routes import health_router, router as api_router
+from .routes import health_router
+from .routes import router as api_router
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,16 @@ def create_app(
                 role="admin",
             )
             store.create_user(admin)
-            store.log_auth_event("user_created", user_id=admin.id, email=admin_email, detail="auto-created from SUPAVISION_PASSWORD")
+            store.log_auth_event(
+                "user_created",
+                user_id=admin.id,
+                email=admin_email,
+                detail="auto-created from SUPAVISION_PASSWORD",
+            )
+            logger.warning(
+                "SUPAVISION_PASSWORD is deprecated. Use 'supavision create-admin' instead. "
+                "This auto-migration will be removed in a future version."
+            )
             logger.info("Auto-created admin user from SUPAVISION_PASSWORD (email=%s)", admin_email)
 
         # Start agent runner for codebase jobs
@@ -94,7 +102,7 @@ def create_app(
     app = FastAPI(
         title="Supavision API",
         description="AI-powered infrastructure monitoring",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
     # Static files (CSS, JS)
@@ -158,7 +166,7 @@ def create_app(
 
     app.include_router(health_router)     # /api/v1/health (no auth, for healthchecks)
     app.include_router(api_router)        # /api/v1/* (JSON, requires API key)
-    app.include_router(dashboard_router)  # /* (HTML, basic auth if configured)
+    app.include_router(dashboard_router)  # /* (HTML, session auth)
 
     # Custom error pages (branded, not default FastAPI JSON)
     _templates_dir = Path(__file__).parent / "templates"

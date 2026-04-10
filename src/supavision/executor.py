@@ -19,11 +19,13 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import SSH_MUX_DIR
+
 logger = logging.getLogger(__name__)
 
 MAX_OUTPUT_BYTES = 10_240  # 10KB per command
 DEFAULT_TIMEOUT = 30  # seconds
-MULTIPLEX_DIR = Path("/tmp/supavision-ssh-mux")
+MULTIPLEX_DIR = Path(SSH_MUX_DIR)
 
 
 @dataclass

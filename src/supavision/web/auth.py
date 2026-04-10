@@ -76,3 +76,11 @@ async def require_api_key(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or revoked API key")
 
     return key_record
+
+
+async def require_api_key_admin(request: Request) -> dict:
+    """FastAPI dependency: validate API key AND require admin role."""
+    key_record = await require_api_key(request)
+    if key_record.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin API key required")
+    return key_record
