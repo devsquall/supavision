@@ -82,8 +82,10 @@
 </div>
 {% else %}
 <div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64"><rect x="6" y="10" width="52" height="38" rx="4"/><path d="M14 22h8M14 30h20M14 38h14" opacity="0.5"/></svg>
   <h3>No infrastructure runs</h3>
   <p class="text-muted">Runs appear here after you run health checks or discoveries on your resources.</p>
+  <a href="/resources" class="btn mt-3">View Resources</a>
 </div>
 {% endif %}
 {% endif %}
@@ -156,8 +158,10 @@
 </div>
 {% else %}
 <div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64"><circle cx="32" cy="32" r="22"/><path d="M32 18v14l10 6"/></svg>
   <h3>No agent jobs</h3>
   <p class="text-muted">Jobs appear here after AI evaluations and scout analyses run on codebase findings.</p>
+  <a href="/findings" class="btn mt-3">View Findings</a>
 </div>
 {% endif %}
 {% endif %}

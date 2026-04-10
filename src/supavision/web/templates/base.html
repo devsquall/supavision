@@ -24,6 +24,8 @@
   </script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="nprogress" aria-hidden="true"></div>
   {% set path = request.url.path if request else '' %}
 
   {# ── Sidebar ── #}
@@ -46,10 +48,6 @@
       <a href="/resources" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/resources') }}" title="Servers, databases, and codebases">
         <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm0 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V8zm0 5a1 1 0 011-1h10a1 1 0 011 1v.5a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5V13z"/></svg>
         <span class="sidebar-item-text">Resources</span>
-      </a>
-      <a href="/findings" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/findings') }}" title="Code issues found by scanning">
-        <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 01.5.5v5.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 7.793V2a.5.5 0 01.5-.5zM1.5 10a.5.5 0 01.5.5v2a1 1 0 001 1h10a1 1 0 001-1v-2a.5.5 0 011 0v2a2 2 0 01-2 2H3a2 2 0 01-2-2v-2a.5.5 0 01.5-.5z"/><circle cx="12" cy="11.5" r="1"/></svg>
-        <span class="sidebar-item-text">Findings</span>
       </a>
       <a href="/reports" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/reports') }}" title="Health check and discovery reports">
         <svg class="sidebar-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 2v2h6V3H5zm0 4v1h6V7H5zm0 3v1h4v-1H5z"/></svg>
@@ -131,9 +129,13 @@
         <button class="topbar-hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">
           <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M1 3h14M1 8h14M1 13h14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
         </button>
+        {% block breadcrumb %}{% endblock %}
       </div>
       <div class="topbar-right">
         <a href="/resources/new" class="btn btn-sm">+ Add Resource</a>
+        <button class="topbar-btn" onclick="openPalette()" title="Search (⌘K)" aria-label="Open command palette">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M10 10l4 4"/></svg>
+        </button>
         <button class="topbar-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme">
           <svg class="theme-icon-light" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1" fill="none"/></svg>
           <svg class="theme-icon-dark" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6 1a7 7 0 009 9A7 7 0 116 1z"/></svg>
@@ -171,12 +173,42 @@
     </header>
 
     {# ── Content ── #}
-    <main class="content" role="main">
+    <main id="main-content" class="content" role="main" data-anim-root>
       {% block content %}{% endblock %}
     </main>
   </div>
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Command Palette -->
+  <div id="cmd-palette-overlay" class="cmd-palette-overlay" style="display:none" onclick="if(event.target===this)closePalette()">
+    <div class="cmd-palette">
+      <input type="text" id="cmd-palette-input" class="cmd-palette-input"
+             placeholder="Search pages, resources..." autocomplete="off"
+             oninput="onPaletteInput(this.value)">
+      <div id="cmd-palette-results" class="cmd-palette-results"></div>
+      <div class="cmd-palette-footer">
+        <span class="cmd-palette-hint">&uarr;&darr; Navigate</span>
+        <span class="cmd-palette-hint">&crarr; Open</span>
+        <span class="cmd-palette-hint">esc Close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Help -->
+  <div id="keyboard-help" class="cmd-palette-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+    <div class="cmd-palette" style="max-width:420px">
+      <h3 style="margin:0 0 var(--sp-4);font-size:var(--text-lg)">Keyboard Shortcuts</h3>
+      <div class="cmd-palette-shortcuts">
+        <div class="shortcut-row"><kbd>&#8984;K</kbd> <span>Command palette</span></div>
+        <div class="shortcut-row"><kbd>?</kbd> <span>This help</span></div>
+        <div class="shortcut-row"><kbd>g d</kbd> <span>Go to Dashboard</span></div>
+        <div class="shortcut-row"><kbd>g r</kbd> <span>Go to Resources</span></div>
+        <div class="shortcut-row"><kbd>g s</kbd> <span>Go to Settings</span></div>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/supavision.js"></script>
 </body>
 </html>

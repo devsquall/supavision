@@ -10,7 +10,7 @@
 
 <div id="cc-overview"
      hx-get="/dashboard/overview"
-     hx-trigger="load, every 30s, refreshResources from:body"
+     hx-trigger="load, every 30s [document.visibilityState==='visible'], refreshResources from:body"
      hx-swap="innerHTML"
      role="region" aria-label="Control center" aria-live="polite">
   <div class="cc-status-strip skeleton-pulse skeleton-sm"></div>
