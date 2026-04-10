@@ -9,7 +9,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,24 @@ def _render(request: Request, template: str, context: dict | None = None, **kwar
     return templates.TemplateResponse(request, template, ctx, **kwargs)
 
 
+# ── Authorization helpers ─────────────────────────────────────────
+
+
+def _require_admin(request: Request) -> None:
+    """Raise 403 if the current user is not an admin.
+
+    Call at the top of any route handler that mutates state (create, delete,
+    trigger, approve, configure).  Read-only GET routes should remain open
+    to viewers.
+    """
+    if not getattr(request.state, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
 # ── Rate limiting ──────────────────────────────────────────────────
 
+# In-memory rate limiting — resets on server restart.
+# For persistent rate limiting, deploy behind a reverse proxy.
 _rate_limits: dict[str, list[float]] = defaultdict(list)
 
 
@@ -190,7 +206,6 @@ from .alerts import router as alerts_router  # noqa: E402
 from .ask import router as ask_router  # noqa: E402
 from .auth import router as auth_router  # noqa: E402
 from .command_center import router as command_center_router  # noqa: E402
-from .findings import router as findings_router  # noqa: E402
 from .metrics_page import router as metrics_page_router  # noqa: E402
 from .overview import router as overview_router  # noqa: E402
 from .reports import router as reports_router  # noqa: E402
@@ -202,7 +217,6 @@ from .settings import router as settings_router  # noqa: E402
 router.include_router(auth_router)
 router.include_router(overview_router)
 router.include_router(resources_router)
-router.include_router(findings_router)
 router.include_router(activity_router)
 router.include_router(settings_router)
 router.include_router(ask_router)

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...models import RunType
-from . import _render
+from . import _render, _require_admin
 
 router = APIRouter()
 
@@ -48,6 +48,7 @@ async def command_center_query(
     severity: str = Form(""),
 ):
     """Execute a structured command and return an HTMX fragment."""
+    _require_admin(request)
     store = request.app.state.store
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -55,8 +56,6 @@ async def command_center_query(
         result = _cmd_system_overview(store, now)
     elif command == "resource_health":
         result = _cmd_resource_health(store, resource_id, now)
-    elif command == "recent_findings":
-        result = _cmd_recent_findings(store, resource_id, severity, now)
     elif command == "baseline_diff":
         result = _cmd_baseline_diff(store, resource_id, now)
     elif command == "project_stats":
@@ -185,43 +184,6 @@ def _cmd_resource_health(store, resource_id: str, now: str) -> dict:
     return {"title": "Resource Health", "html": "\n".join(parts), "timestamp": now}
 
 
-def _cmd_recent_findings(store, resource_id: str, severity: str, now: str) -> dict:
-    items, total = store.list_work_items(
-        resource_id=resource_id or None,
-        severity=severity or None,
-        per_page=10,
-    )
-
-    if not items:
-        label = "No findings found"
-        if severity:
-            label += f" with severity '{html_mod.escape(severity)}'"
-        return {
-            "title": "Recent Findings",
-            "html": f'<p class="text-muted">{label}.</p>',
-            "timestamp": now,
-        }
-
-    rows = ""
-    for item in items:
-        sev = item.severity.value
-        rows += (
-            f'<tr>'
-            f'<td><span class="badge badge--{_severity_class(sev)}">{html_mod.escape(sev)}</span></td>'
-            f'<td><a href="/findings/{html_mod.escape(item.id)}">{html_mod.escape(item.display_title)}</a></td>'
-            f'<td>{html_mod.escape(item.stage.value)}</td>'
-            f'</tr>'
-        )
-
-    html = (
-        f'<p class="text-sm text-muted" class="mb-2">Showing {len(items)} of {total} findings</p>'
-        f'<div class="table-wrap"><table class="table">'
-        f'<thead><tr><th>Severity</th><th>Title</th><th>Stage</th></tr></thead>'
-        f'<tbody>{rows}</tbody></table></div>'
-    )
-    return {"title": "Recent Findings", "html": html, "timestamp": now}
-
-
 def _cmd_baseline_diff(store, resource_id: str, now: str) -> dict:
     if not resource_id:
         return {
@@ -280,46 +242,11 @@ def _cmd_project_stats(store, now: str) -> dict:
     resources = store.list_resources()
     total_resources = len(resources)
 
-    # Gather findings stats
-    all_items, total_findings = store.list_work_items(per_page=1)
-
-    # Findings by severity
-    sev_counts: dict[str, int] = {}
-    stage_counts: dict[str, int] = {}
-    for sev in ["critical", "high", "medium", "low", "info"]:
-        _, count = store.list_work_items(severity=sev, per_page=1)
-        if count > 0:
-            sev_counts[sev] = count
-    for stage in ["scanned", "evaluated", "approved", "implementing", "completed", "rejected"]:
-        _, count = store.list_work_items(stage=stage, per_page=1)
-        if count > 0:
-            stage_counts[stage] = count
-
-    sev_cards = ""
-    for sev, count in sev_counts.items():
-        badge = f'<span class="badge badge--{_severity_class(sev)}">{html_mod.escape(sev)}</span>'
-        sev_cards += (
-            f'<div class="stat-card"><span class="stat-value">{count}</span>'
-            f'<span class="stat-label">{badge}</span></div>'
-        )
-    stage_cards = "".join(
-        f'<div class="stat-card"><span class="stat-value">{count}</span>'
-        f'<span class="stat-label">{html_mod.escape(stage)}</span></div>'
-        for stage, count in stage_counts.items()
-    )
-
     html = (
         f'<div class="stat-grid">'
         f'<div class="stat-card"><span class="stat-value">{total_resources}</span>'
         f'<span class="stat-label">Resources</span></div>'
-        f'<div class="stat-card"><span class="stat-value">{total_findings}</span>'
-        f'<span class="stat-label">Total Findings</span></div>'
         f'</div>'
     )
-
-    if sev_cards:
-        html += f'<h4 class="mt-4">Findings by Severity</h4><div class="stat-grid">{sev_cards}</div>'
-    if stage_cards:
-        html += f'<h4 class="mt-4">Findings by Stage</h4><div class="stat-grid">{stage_cards}</div>'
 
     return {"title": "Project Stats", "html": html, "timestamp": now}

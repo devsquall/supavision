@@ -447,3 +447,282 @@ class TestAuthHelpers:
         h1 = hash_api_key("key-1")
         h2 = hash_api_key("key-2")
         assert h1 != h2
+
+
+# ── Helper fixtures for Lane 2 tests ─────────────────────────────
+
+
+@pytest.fixture
+def viewer_api_key(store) -> str:
+    """Create a viewer-role API key and return the raw key."""
+    key_id, raw_key, key_hash = generate_api_key()
+    store.save_api_key(key_id, key_hash, label="viewer", role="viewer")
+    return raw_key
+
+
+@pytest.fixture
+def viewer_client(app, viewer_api_key) -> TestClient:
+    """TestClient with viewer-role auth header."""
+    return TestClient(app, headers={"x-api-key": viewer_api_key})
+
+
+def _make_finding(resource_id: str, **overrides):
+    """Create a Finding with sensible defaults."""
+    from supavision.models import Finding, FindingSeverity
+
+    defaults = dict(
+        resource_id=resource_id,
+        file_path="src/app.py",
+        line_number=42,
+        category="security",
+        pattern_name="hardcoded_secret",
+        snippet="API_KEY = 'abc123'",
+        severity=FindingSeverity.HIGH,
+        language="python",
+    )
+    defaults.update(overrides)
+    return Finding(**defaults)
+
+
+def _make_agent_job(work_item_id: str, resource_id: str, **overrides):
+    """Create an AgentJob with sensible defaults."""
+    from supavision.models import AgentJob
+
+    defaults = dict(
+        work_item_id=work_item_id,
+        resource_id=resource_id,
+        job_type="evaluate",
+    )
+    defaults.update(overrides)
+    return AgentJob(**defaults)
+class TestMetrics:
+    def test_get_metrics_empty(self, client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = client.get(f"/api/v1/resources/{resource.id}/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["metrics"] == {}
+
+    def test_get_metrics_with_data(self, client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        store.save_metrics(resource.id, "report-1", [
+            {"name": "cpu", "value": 45.0, "unit": "%"},
+            {"name": "memory", "value": 72.5, "unit": "%"},
+        ])
+
+        resp = client.get(f"/api/v1/resources/{resource.id}/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["metrics"]["cpu"] == 45.0
+        assert data["metrics"]["memory"] == 72.5
+
+    def test_get_metrics_not_found(self, client):
+        resp = client.get("/api/v1/resources/nonexistent/metrics")
+        assert resp.status_code == 404
+
+    def test_get_metric_trend(self, client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        store.save_metrics(resource.id, "report-1", [
+            {"name": "cpu", "value": 45.0, "unit": "%"},
+        ])
+        store.save_metrics(resource.id, "report-2", [
+            {"name": "cpu", "value": 50.0, "unit": "%"},
+        ])
+
+        resp = client.get(f"/api/v1/resources/{resource.id}/metrics/cpu")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["metric"] == "cpu"
+        assert len(data["data"]) == 2
+
+    def test_get_metric_trend_not_found(self, client):
+        resp = client.get("/api/v1/resources/nonexistent/metrics/cpu")
+        assert resp.status_code == 404
+
+
+# ── Incidents endpoint ───────────────────────────────────────────
+
+
+class TestIncidents:
+    def test_get_incidents_empty(self, client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = client.get(f"/api/v1/resources/{resource.id}/incidents")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["incidents"] == []
+
+    def test_get_incidents_with_transitions(self, client, store):
+        from supavision.models import Evaluation, Severity
+
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        # Create evaluations with different severities to produce a transition
+        ev1 = Evaluation(
+            report_id="rpt-1",
+            resource_id=resource.id,
+            severity=Severity.HEALTHY,
+            summary="All good",
+        )
+        store.save_evaluation(ev1)
+
+        ev2 = Evaluation(
+            report_id="rpt-2",
+            resource_id=resource.id,
+            severity=Severity.WARNING,
+            summary="Disk usage high",
+        )
+        store.save_evaluation(ev2)
+
+        resp = client.get(f"/api/v1/resources/{resource.id}/incidents")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["incidents"]) == 1
+        incident = data["incidents"][0]
+        assert incident["from_severity"] == "healthy"
+        assert incident["to_severity"] == "warning"
+
+    def test_get_incidents_not_found(self, client):
+        resp = client.get("/api/v1/resources/nonexistent/incidents")
+        assert resp.status_code == 404
+class TestSystemStatus:
+    def test_system_status(self, client):
+        with patch("supavision.scheduler.get_scheduler_status") as mock_sched, \
+             patch("supavision.agent_runner.get_runner") as mock_runner:
+            mock_sched.return_value = {"running": True, "jobs": 3}
+            mock_runner.return_value = None
+
+            resp = client.get("/api/v1/system/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "version" in data
+        assert data["scheduler"] == {"running": True, "jobs": 3}
+        assert data["agent_runner"]["running"] is False
+
+
+# ── RBAC — Viewer role tests ─────────────────────────────────────
+
+
+class TestRBACViewer:
+    """Viewer API keys should have read access but not write access."""
+
+    # ── GET endpoints: viewer should get 200 ──
+
+    def test_viewer_can_list_resources(self, viewer_client):
+        resp = viewer_client.get("/api/v1/resources")
+        assert resp.status_code == 200
+
+    def test_viewer_can_get_resource_detail(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.get(f"/api/v1/resources/{resource.id}")
+        assert resp.status_code == 200
+
+    def test_viewer_can_get_metrics(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.get(f"/api/v1/resources/{resource.id}/metrics")
+        assert resp.status_code == 200
+
+    def test_viewer_can_get_incidents(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.get(f"/api/v1/resources/{resource.id}/incidents")
+        assert resp.status_code == 200
+
+    def test_viewer_can_get_system_status(self, viewer_client):
+        with patch("supavision.scheduler.get_scheduler_status", return_value={}), \
+             patch("supavision.agent_runner.get_runner", return_value=None):
+            resp = viewer_client.get("/api/v1/system/status")
+        assert resp.status_code == 200
+
+    # ── POST/DELETE endpoints: viewer should get 403 ──
+
+    def test_viewer_cannot_create_resource(self, viewer_client):
+        resp = viewer_client.post(
+            "/api/v1/resources",
+            json={"name": "test", "resource_type": "server"},
+        )
+        assert resp.status_code == 403
+
+    def test_viewer_cannot_delete_resource(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.delete(f"/api/v1/resources/{resource.id}")
+        assert resp.status_code == 403
+
+    def test_viewer_cannot_trigger_discovery(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.post(f"/api/v1/resources/{resource.id}/discover")
+        assert resp.status_code == 403
+
+    def test_viewer_cannot_trigger_health_check(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.post(f"/api/v1/resources/{resource.id}/health-check")
+        assert resp.status_code == 403
+
+    def test_viewer_cannot_send_notify_test(self, viewer_client, store):
+        resource = Resource(name="server", resource_type="server")
+        store.save_resource(resource)
+
+        resp = viewer_client.post(f"/api/v1/resources/{resource.id}/notify-test")
+        assert resp.status_code == 403
+
+
+class TestUpdateResource:
+    def test_update_name(self, client, store):
+        resource = Resource(name="original", resource_type="server")
+        store.save_resource(resource)
+        resp = client.put(f"/api/v1/resources/{resource.id}", json={"name": "updated"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "updated"
+
+    def test_update_config(self, client, store):
+        resource = Resource(name="test", resource_type="server", config={"region": "us-east"})
+        store.save_resource(resource)
+        resp = client.put(f"/api/v1/resources/{resource.id}", json={"config": {"zone": "az1"}})
+        assert resp.status_code == 200
+        # Verify config was merged
+        updated = store.get_resource(resource.id)
+        assert updated.config["region"] == "us-east"
+        assert updated.config["zone"] == "az1"
+
+    def test_update_not_found(self, client):
+        resp = client.put("/api/v1/resources/nonexistent", json={"name": "x"})
+        assert resp.status_code == 404
+
+    def test_update_requires_admin(self, app, store):
+        # Create viewer key
+        from supavision.web.auth import generate_api_key
+
+        key_id, raw_key, key_hash = generate_api_key()
+        store.save_api_key(key_id, key_hash, label="viewer", role="viewer")
+        viewer = TestClient(app, headers={"x-api-key": raw_key})
+
+        resource = Resource(name="test", resource_type="server")
+        store.save_resource(resource)
+        resp = viewer.put(f"/api/v1/resources/{resource.id}", json={"name": "hacked"})
+        assert resp.status_code == 403

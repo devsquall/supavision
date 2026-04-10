@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from ...models import RunStatus
 from ...resource_types import RESOURCE_TYPES, WIZARD_FLOWS
-from . import _check_rate_limit, _md_to_html, _render
+from . import _check_rate_limit, _md_to_html, _render, _require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,10 @@ _IMPACT_MAP = {
     ("critical", "database"): "Database queries or connections may be failing",
     ("critical", "aws_account"): "AWS services may be impacted",
     ("critical", "github_org"): "Repository workflows may be failing",
-    ("critical", "codebase"): "Critical security issues found",
     ("warning", "server"): "Server performance may be affected",
     ("warning", "database"): "Database performance may degrade",
     ("warning", "aws_account"): "AWS costs or security may need attention",
     ("warning", "github_org"): "Code quality or security may need review",
-    ("warning", "codebase"): "Code quality issues detected",
 }
 
 
@@ -80,12 +78,8 @@ async def resources_page(request: Request):
         else:  # no data yet
             explanation = "Awaiting first check"
             impact = "Health state unknown until checked"
-            if r.resource_type == "codebase":
-                action_label = "Scan"
-                action_url = f"/resources/{r.id}/scan"
-            else:
-                action_label = "Run Check"
-                action_url = f"/resources/{r.id}/health-check"
+            action_label = "Run Check"
+            action_url = f"/resources/{r.id}/health-check"
             action_is_link = False  # HTMX trigger
 
         resource_data.append({
@@ -239,6 +233,7 @@ def _validate_step(resource_type: str, step: int, data: dict) -> list[str]:
 @router.post("/resources/wizard/next")
 async def wizard_next(request: Request):
     """Validate current step and render the next step."""
+    _require_admin(request)
     form = await request.form()
     data = _collect_wizard_data(form)
     resource_type = data.get("resource_type", "")
@@ -288,6 +283,7 @@ async def wizard_next(request: Request):
 @router.post("/resources/wizard/back")
 async def wizard_back(request: Request):
     """Go back one step (no validation)."""
+    _require_admin(request)
     form = await request.form()
     data = _collect_wizard_data(form)
     resource_type = data.get("resource_type", "")
@@ -320,6 +316,7 @@ async def wizard_back(request: Request):
 @router.post("/resources/wizard/test")
 async def wizard_test_connection(request: Request):
     """Test SSH or database connection. Returns JSON for HTMX."""
+    _require_admin(request)
     import subprocess as _subprocess
 
     form = await request.form()
@@ -392,6 +389,7 @@ async def resource_edit_form(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/edit")
 async def resource_edit_submit(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -412,17 +410,6 @@ async def resource_edit_submit(resource_id: str, request: Request):
         for k in ("ssh_host", "ssh_user", "ssh_key_path", "ssh_port"):
             resource.config.pop(k, None)
 
-    # Codebase fields
-    if resource.resource_type == "codebase":
-        path = form.get("path", "").strip()
-        if path:
-            resource.config["path"] = path
-        lang = form.get("language_hint", "").strip()
-        if lang:
-            resource.config["language_hint"] = lang
-        elif "language_hint" in resource.config:
-            resource.config.pop("language_hint")
-
     store.save_resource(resource)
 
     from fastapi.responses import RedirectResponse
@@ -432,54 +419,39 @@ async def resource_edit_submit(resource_id: str, request: Request):
 
 @router.post("/resources/test-connection")
 async def test_connection(request: Request):
-    """Test SSH connection or validate codebase path before creating resource."""
+    """Test SSH connection before creating resource."""
+    _require_admin(request)
     import subprocess
 
     form = await request.form()
-    resource_type = form.get("resource_type", "")
     result = {"ok": False, "message": ""}
 
-    if resource_type == "codebase":
-        path = form.get("path", "").strip()
-        if not path:
-            result["message"] = "Path is required"
-        else:
-            from pathlib import Path as P
-            p = P(path)
-            if not p.exists():
-                result["message"] = f"Directory not found: {path}"
-            elif not p.is_dir():
-                result["message"] = f"Not a directory: {path}"
-            else:
-                file_count = sum(1 for _ in p.rglob("*") if _.is_file())
-                result = {"ok": True, "message": f"Directory exists. {file_count} files found."}
+    host = form.get("ssh_host", "").strip()
+    user = form.get("ssh_user", "ubuntu").strip()
+    port = form.get("ssh_port", "22").strip()
+    key_path = form.get("ssh_key_path", "").strip()
+
+    if not host:
+        result["message"] = "SSH host is required"
     else:
-        host = form.get("ssh_host", "").strip()
-        user = form.get("ssh_user", "ubuntu").strip()
-        port = form.get("ssh_port", "22").strip()
-        key_path = form.get("ssh_key_path", "").strip()
+        cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+               "-o", "StrictHostKeyChecking=accept-new",
+               "-p", port]
+        if key_path:
+            cmd.extend(["-i", key_path])
+        cmd.extend([f"{user}@{host}", "echo ok"])
 
-        if not host:
-            result["message"] = "SSH host is required"
-        else:
-            cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
-                   "-o", "StrictHostKeyChecking=accept-new",
-                   "-p", port]
-            if key_path:
-                cmd.extend(["-i", key_path])
-            cmd.extend([f"{user}@{host}", "echo ok"])
-
-            try:
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                if r.returncode == 0:
-                    result = {"ok": True, "message": f"Connected to {user}@{host}:{port}"}
-                else:
-                    err = r.stderr.strip()[:100]
-                    result["message"] = f"Connection failed: {err}"
-            except subprocess.TimeoutExpired:
-                result["message"] = "Connection timed out after 10s"
-            except Exception as e:
-                result["message"] = f"Error: {str(e)[:100]}"
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                result = {"ok": True, "message": f"Connected to {user}@{host}:{port}"}
+            else:
+                err = r.stderr.strip()[:100]
+                result["message"] = f"Connection failed: {err}"
+        except subprocess.TimeoutExpired:
+            result["message"] = "Connection timed out after 10s"
+        except Exception as e:
+            result["message"] = f"Error: {str(e)[:100]}"
 
     return result
 
@@ -487,6 +459,7 @@ async def test_connection(request: Request):
 @router.post("/resources/new")
 async def resource_new_submit(request: Request):
     """Final wizard submission — create the resource."""
+    _require_admin(request)
     from ...models import Resource, Schedule
 
     store = request.app.state.store
@@ -650,26 +623,26 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
         if e.should_alert
     ][:10]
 
-    # Findings summary for codebase resources
-    findings_summary = None
-    if resource.resource_type == "codebase":
-        stage_counts = store.count_work_items_by_stage(resource_id=resource_id)
-        recent_findings, finding_total = store.list_work_items(
-            resource_id=resource_id, per_page=5,
-        )
-        findings_summary = {
-            "stage_counts": stage_counts,
-            "total": finding_total,
-            "recent": [
-                {
-                    "id": f.id,
-                    "title": f.display_title,
-                    "severity": f.severity.value,
-                    "stage": f.stage.value,
-                }
-                for f in recent_findings
-            ],
-        }
+    # 30-day health grid
+    from datetime import timedelta
+
+    health_grid_raw = store.get_health_grid(resource_id, days=30)
+    today = datetime.now(timezone.utc).date()
+    health_grid = []
+    for i in range(30):
+        day = today - timedelta(days=29 - i)
+        day_str = day.isoformat()
+        severities = health_grid_raw.get(day_str, [])
+        # Use worst severity of the day
+        if "critical" in severities:
+            sev = "critical"
+        elif "warning" in severities:
+            sev = "warning"
+        elif "healthy" in severities:
+            sev = "healthy"
+        else:
+            sev = None
+        health_grid.append({"date": day_str, "severity": sev})
 
     # Detect active and last run for live output terminal
     active_run = None
@@ -696,11 +669,11 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
         "has_more_runs": has_more,
         "is_new": bool(new),
         "now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "findings_summary": findings_summary,
         "engine_available": request.app.state.engine is not None,
         "active_run": active_run,
         "sse_url": sse_url,
         "last_run": last_run,
+        "health_grid": health_grid,
     })
 
 
@@ -755,6 +728,7 @@ async def resource_history(resource_id: str, request: Request, page: int = 1):
 
 @router.post("/resources/{resource_id}/discover")
 async def trigger_discover(resource_id: str, request: Request):
+    _require_admin(request)
     if not _check_rate_limit(request.client.host):
         raise HTTPException(status_code=429, detail="Too many requests. Try again in a minute.")
     store = request.app.state.store
@@ -774,6 +748,7 @@ async def trigger_discover(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/health-check")
 async def trigger_health_check(resource_id: str, request: Request):
+    _require_admin(request)
     if not _check_rate_limit(request.client.host):
         raise HTTPException(status_code=429, detail="Too many requests. Try again in a minute.")
     store = request.app.state.store
@@ -793,6 +768,7 @@ async def trigger_health_check(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/toggle")
 async def toggle_resource(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -804,6 +780,7 @@ async def toggle_resource(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/schedule")
 async def update_schedule(resource_id: str, request: Request):
+    _require_admin(request)
     from ...models import Schedule
 
     store = request.app.state.store
@@ -823,6 +800,7 @@ async def update_schedule(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/notifications")
 async def update_notifications(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -845,6 +823,7 @@ async def update_notifications(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/notify-test")
 async def test_notification(resource_id: str, request: Request):
+    _require_admin(request)
     from ...models import Evaluation, Report, Severity
     from ...notifications import send_alert
 
@@ -873,6 +852,7 @@ async def test_notification(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/checklist")
 async def add_checklist_item(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -892,6 +872,7 @@ async def add_checklist_item(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/checklist-remove")
 async def remove_checklist_item(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -912,6 +893,7 @@ async def remove_checklist_item(resource_id: str, request: Request):
 
 @router.post("/resources/{resource_id}/delete")
 async def delete_resource(resource_id: str, request: Request):
+    _require_admin(request)
     store = request.app.state.store
     resource = store.get_resource(resource_id)
     if not resource:
@@ -1021,61 +1003,7 @@ async def report_detail(report_id: str, request: Request):
     })
 
 
-# ── Scan / Scout / Health Check triggers ─────────────────────────
-
-
-@router.post("/resources/{resource_id}/scan")
-async def trigger_scan(resource_id: str, request: Request):
-    """Trigger a codebase scan. Redirects back to show results."""
-    from ...codebase_engine import CodebaseEngine
-
-    store = request.app.state.store
-    resource = store.get_resource(resource_id)
-    if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
-    if resource.resource_type != "codebase":
-        raise HTTPException(status_code=400, detail="Not a codebase resource")
-
-    engine = CodebaseEngine(store)
-    engine.run_scan(resource_id)
-
-    if request.headers.get("HX-Request"):
-        return Response(
-            status_code=200, content="",
-            headers={"HX-Redirect": f"/resources/{resource_id}"},
-        )
-
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=f"/resources/{resource_id}", status_code=303)
-
-
-@router.post("/resources/{resource_id}/scout")
-async def trigger_scout(resource_id: str, request: Request, focus: str = "general"):
-    """Launch an AI scout agent to deeply analyze a codebase resource."""
-    from ...codebase_engine import CodebaseEngine
-
-    store = request.app.state.store
-    resource = store.get_resource(resource_id)
-    if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
-    if resource.resource_type != "codebase":
-        raise HTTPException(status_code=400, detail="Not a codebase resource")
-
-    valid_focuses = {"general", "security", "performance", "quality"}
-    if focus not in valid_focuses:
-        focus = "general"
-
-    engine = CodebaseEngine(store)
-    engine.create_scout_job(resource_id, focus)
-
-    if request.headers.get("HX-Request"):
-        return Response(
-            status_code=200, content="",
-            headers={"HX-Redirect": f"/resources/{resource_id}"},
-        )
-
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=f"/resources/{resource_id}", status_code=303)
+# ── Health Check triggers ─────────────────────────
 
 
 

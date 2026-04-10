@@ -92,18 +92,7 @@
       <input class="form-input" type="text" id="name" name="name" value="{{ resource.name }}" required>
     </div>
 
-    {% if resource.resource_type == 'codebase' %}
-    <div class="form-group mt-4">
-      <label class="form-label" for="path">Project Path</label>
-      <input class="form-input" type="text" id="path" name="path"
-             value="{{ resource.config.path or '' }}" required>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="language_hint">Language Hint</label>
-      <input class="form-input" type="text" id="language_hint" name="language_hint"
-             value="{{ resource.config.language_hint or '' }}">
-    </div>
-    {% elif rtype.get('connection') == 'ssh' %}
+    {% if rtype.get('connection') == 'ssh' %}
     <div class="form-group mt-4">
       <label class="form-label" for="ssh_host">SSH Host</label>
       <input class="form-input" type="text" id="ssh_host" name="ssh_host"

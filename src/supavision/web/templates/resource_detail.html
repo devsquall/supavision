@@ -24,32 +24,6 @@
     </h2>
   </div>
   <div class="page-header-right">
-    {% if resource.resource_type == 'codebase' %}
-    <div class="btn-group">
-      <button class="btn"
-              hx-post="/resources/{{ resource.id }}/scan"
-              hx-swap="none"
-              title="Run pattern scan to find security and quality issues in this codebase">
-        Scan for Issues
-      </button>
-      <div class="btn-dropdown">
-        <button class="btn btn-outline btn-dropdown-toggle" onclick="this.parentElement.classList.toggle('open')"
-                title="Launch AI agent to deeply analyze this codebase">
-          Scout ▾
-        </button>
-        <div class="btn-dropdown-menu">
-          <button hx-post="/resources/{{ resource.id }}/scout?focus=general" hx-swap="none"
-                  class="btn-dropdown-item" title="Broad review of code quality, architecture, and improvements">General Improvements</button>
-          <button hx-post="/resources/{{ resource.id }}/scout?focus=security" hx-swap="none"
-                  class="btn-dropdown-item" title="Focused analysis of security vulnerabilities and hardening">Security Audit</button>
-          <button hx-post="/resources/{{ resource.id }}/scout?focus=performance" hx-swap="none"
-                  class="btn-dropdown-item" title="Analysis of performance bottlenecks and optimization opportunities">Performance Review</button>
-          <button hx-post="/resources/{{ resource.id }}/scout?focus=quality" hx-swap="none"
-                  class="btn-dropdown-item" title="Code style, testing gaps, and maintainability review">Code Quality</button>
-        </div>
-      </div>
-    </div>
-    {% else %}
     <div>
       {% if active_run %}
       <button class="btn" disabled title="A run is already in progress">Diagnose</button>
@@ -64,7 +38,6 @@
       </button>
       {% endif %}
     </div>
-    {% endif %}
     <a href="/resources/{{ resource.id }}/edit" class="btn btn-outline">Edit</a>
   </div>
 </div>
@@ -79,6 +52,7 @@
     {% if active_run.started_at %}
     <span class="terminal-status" data-elapsed-since="{{ active_run.started_at.isoformat() }}">0s</span>
     {% endif %}
+    <button class="btn btn-sm btn-outline" onclick="copyTerminalOutput()" title="Copy output">Copy</button>
   </div>
   <div id="terminal-container" class="terminal-container"></div>
   <script>
@@ -97,6 +71,7 @@
     {% if last_run.completed_at and last_run.started_at %}
     <span class="terminal-status">{{ ((last_run.completed_at - last_run.started_at).total_seconds() | int) }}s</span>
     {% endif %}
+    <button class="btn btn-sm btn-outline" onclick="copyTerminalOutput()" title="Copy output">Copy</button>
   </div>
   {% if last_run.recording %}
   <div id="terminal-container" class="terminal-container"></div>
@@ -193,15 +168,11 @@
 {% endif %}
 
 {# ── Setup prompt (new resource, no data yet) ── #}
-{% if is_new and not context and not findings_summary %}
+{% if is_new and not context %}
 <div class="alert alert--info">
   <strong>Resource created!</strong>
-  {% if resource.resource_type == 'codebase' %}
-  Click <strong>Scan for Issues</strong> for a quick regex analysis, or use <strong>Scout</strong> to have Claude deeply analyze your codebase for improvements, security issues, and new features.
-  {% else %}
   Click <strong>Diagnose</strong> above to explore this {{ resource.resource_type }}.
   Claude will map services, databases, and configurations (1-3 minutes).
-  {% endif %}
 </div>
 {% endif %}
 
@@ -227,12 +198,6 @@
       <span class="text-muted">Never</span>
       {% endif %}
     </div>
-    {% if findings_summary %}
-    <div class="info-item">
-      <span class="text-muted text-sm">Findings</span>
-      <span>{{ findings_summary.total }}</span>
-    </div>
-    {% endif %}
     {% if health_cron %}
     <div class="info-item">
       <span class="text-muted text-sm">Schedule</span>
@@ -240,60 +205,15 @@
     </div>
     {% endif %}
   </div>
-</div>
-
-{# ── Findings Section (codebase resources) ── #}
-{% if resource.resource_type == 'codebase' %}
-<div id="findings-section" class="settings-section">
-  <h4>Findings
-    {% if findings_summary and findings_summary.total > 0 %}
-    <span class="tab-count">{{ findings_summary.total }}</span>
-    {% endif %}
-  </h4>
-  <p class="text-muted text-sm mb-2">Security and quality issues discovered by scanning this codebase.</p>
-
-  {% if findings_summary and findings_summary.stage_counts %}
-  <div class="stage-bar mb-4">
-    {% for stage, count in findings_summary.stage_counts.items() %}
-    {% if stage not in ('approved', 'implementing', 'completed') %}
-    <span class="stage-pill stage-pill--{{ stage }}">{{ stage }} <strong>{{ count }}</strong></span>
-    {% endif %}
+  {% if health_grid %}
+  <div class="health-grid" title="30-day health history">
+    {% for day in health_grid %}
+    <div class="hg-cell hg-cell--{{ day.severity or 'none' }}"
+         title="{{ day.date }}: {{ day.severity or 'no data' }}"></div>
     {% endfor %}
   </div>
   {% endif %}
-
-  {% if findings_summary and findings_summary.recent %}
-  <table class="table">
-    <thead>
-      <tr><th>Severity</th><th>Finding</th><th>Stage</th><th></th></tr>
-    </thead>
-    <tbody>
-      {% for f in findings_summary.recent %}
-      <tr>
-        <td><span class="badge badge--{{ f.severity }}">{{ f.severity }}</span></td>
-        <td><a href="/findings/{{ f.id }}">{{ f.title }}</a></td>
-        <td><span class="badge badge--stage-{{ f.stage }}">{{ f.stage }}</span></td>
-        <td>
-          {% if f.stage == 'scanned' %}
-          <a href="/findings/{{ f.id }}" class="btn btn-sm" title="Queue AI to assess severity and impact">AI Evaluate</a>
-          {% elif f.stage == 'evaluated' %}
-          <a href="/findings/{{ f.id }}" class="btn btn-sm btn-outline" title="Review the AI assessment of this finding">Review</a>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% if findings_summary.total > 5 %}
-  <a href="/findings?resource_id={{ resource.id }}" class="text-sm">All {{ findings_summary.total }} findings &rarr;</a>
-  {% endif %}
-  {% else %}
-  <div class="cc-empty-panel">
-    No findings yet &mdash; run a scan to discover security and quality issues.
-  </div>
-  {% endif %}
 </div>
-{% endif %}
 
 {# ── Recent Activity ── #}
 {% if runs %}

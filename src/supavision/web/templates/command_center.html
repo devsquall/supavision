@@ -38,28 +38,6 @@
   </div>
 
   <div class="command-card">
-    <div class="command-card-title">Recent Findings</div>
-    <div class="command-card-desc">Latest security and quality findings across codebases</div>
-    <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="command" value="recent_findings">
-      <select name="resource_id" class="form-select">
-        <option value="">All Resources</option>
-        {% for r in resources %}
-        <option value="{{ r.id }}">{{ r.name }}</option>
-        {% endfor %}
-      </select>
-      <select name="severity" class="form-select">
-        <option value="">All Severities</option>
-        {% for s in severities %}
-        <option value="{{ s }}">{{ s | title }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn btn-sm">Run</button>
-    </form>
-  </div>
-
-  <div class="command-card">
     <div class="command-card-title">Baseline Comparison</div>
     <div class="command-card-desc">View the latest system baseline and configuration snapshot</div>
     <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">

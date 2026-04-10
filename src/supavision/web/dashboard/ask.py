@@ -116,20 +116,6 @@ _INTENT_PATTERNS: dict[str, dict] = {
         ],
         "weight": 3,
     },
-    "security": {
-        "keywords": [
-            "security", "vulnerability", "vulnerabilities", "exploit",
-            "secure", "unsafe", "is it safe", "security concerns",
-        ],
-        "weight": 2,
-    },
-    "findings": {
-        "keywords": [
-            "finding", "findings", "issue", "issues", "bug", "bugs",
-            "scan", "scanned",
-        ],
-        "weight": 1,
-    },
     "overview": {
         "keywords": [
             "status", "overview", "summary", "health",

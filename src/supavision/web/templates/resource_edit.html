@@ -50,22 +50,6 @@
              value="{{ resource.config.ssh_key_path or '' }}" placeholder="~/.ssh/id_ed25519">
     </div>
     {% endif %}
-    {% if resource.resource_type == 'codebase' %}
-    <div class="form-group mt-4">
-      <label class="form-label" for="path">Project Path</label>
-      <input class="form-input" type="text" id="path" name="path"
-             value="{{ resource.config.path or '' }}" required
-             placeholder="/home/ubuntu/myproject">
-      <span class="form-hint">Absolute path to the project directory on this server.</span>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="language_hint">Language Hint</label>
-      <input class="form-input" type="text" id="language_hint" name="language_hint"
-             value="{{ resource.config.language_hint or '' }}"
-             placeholder="python, javascript, go, etc.">
-      <span class="form-hint">Optional. Helps prioritize relevant scan patterns.</span>
-    </div>
-    {% endif %}
     <div class="actions mt-4">
       <button type="submit" class="btn">Save Changes</button>
     </div>

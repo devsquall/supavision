@@ -3,15 +3,45 @@
 <div class="cc-status-strip">
   <div class="cc-status-item cc-status-item--critical">
     <span class="cc-status-count">{{ critical_count }}</span>
+    {% if critical_delta > 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ critical_delta }}</span>
+    {% elif critical_delta < 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ critical_delta|abs }}</span>
+    {% endif %}
     <span class="cc-status-label">Critical</span>
+    {% if sparkline_critical %}
+    <svg class="sparkline-mini" viewBox="0 0 48 20" width="48" height="20">
+      <polyline points="{{ sparkline_critical }}" fill="none" stroke="var(--color-critical)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
   </div>
   <div class="cc-status-item cc-status-item--warning">
     <span class="cc-status-count">{{ warning_count }}</span>
+    {% if warning_delta > 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ warning_delta }}</span>
+    {% elif warning_delta < 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ warning_delta|abs }}</span>
+    {% endif %}
     <span class="cc-status-label">Warning</span>
+    {% if sparkline_warning %}
+    <svg class="sparkline-mini" viewBox="0 0 48 20" width="48" height="20">
+      <polyline points="{{ sparkline_warning }}" fill="none" stroke="var(--color-warning)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
   </div>
   <div class="cc-status-item cc-status-item--healthy">
     <span class="cc-status-count">{{ healthy_count }}</span>
+    {% if healthy_delta > 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ healthy_delta }}</span>
+    {% elif healthy_delta < 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ healthy_delta|abs }}</span>
+    {% endif %}
     <span class="cc-status-label">Healthy</span>
+    {% if sparkline_healthy %}
+    <svg class="sparkline-mini" viewBox="0 0 48 20" width="48" height="20">
+      <polyline points="{{ sparkline_healthy }}" fill="none" stroke="var(--color-healthy)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
   </div>
   <div class="cc-status-item">
     <span class="cc-status-count">{{ total_resources }}</span>
@@ -63,7 +93,7 @@
         </div>
         {% endfor %}
         {% if total_action_items > 8 %}
-        <a href="/findings" class="cc-view-all">All {{ total_action_items }} issues &rarr;</a>
+        <a href="/resources" class="cc-view-all">All {{ total_action_items }} issues &rarr;</a>
         {% endif %}
       {% else %}
         <div class="cc-empty-panel">
@@ -80,10 +110,6 @@
         <a href="/resources/new" class="cc-quick-action-btn">
           <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
           Add Resource
-        </a>
-        <a href="/findings" class="cc-quick-action-btn">
-          <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7.25 5a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM7 7.25a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4z"/></svg>
-          Triage Findings
         </a>
         <a href="/activity" class="cc-quick-action-btn">
           <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4v4l3 1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -108,7 +134,7 @@
       </div>
       <div id="cc-live-activity"
            hx-get="/dashboard/live-activity"
-           hx-trigger="every 5s"
+           hx-trigger="every 5s [document.visibilityState==='visible']"
            hx-swap="innerHTML">
         {# Initial content rendered inline from overview (no skeleton flash) #}
         {% include "dashboard_live_activity.html" %}

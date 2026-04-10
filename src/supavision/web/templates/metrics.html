@@ -4,11 +4,11 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>Metrics</h2>
-    <span class="page-subtitle">Resource health metrics and codebase statistics</span>
+    <span class="page-subtitle">Resource health metrics</span>
   </div>
 </div>
 
-{% if not infra_cards and not codebase_cards %}
+{% if not infra_cards %}
 <div class="empty-state">
   <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="40" height="40" rx="3"/><path d="M12 34l8-10 6 6 10-14"/></svg>
   <h3>No metrics collected yet</h3>
@@ -53,52 +53,6 @@
         </svg>
         {% endif %}
       </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-{# ── Codebase Statistics ── #}
-{% if codebase_cards %}
-<div class="resource-section">
-  <div class="resource-section-header">
-    <h3>Codebase</h3>
-    <span class="text-muted text-xs ml-3">How findings progress from scan to resolution</span>
-  </div>
-  {% for card in codebase_cards %}
-  <div class="stat-card mb-4">
-    <div class="resource-section-header">
-      <a href="/resources/{{ card.resource_id }}">{{ card.resource_name }}</a>
-      <span class="badge badge--type">codebase</span>
-    </div>
-    <p class="text-sm text-muted mb-4">{{ card.total }} total findings</p>
-
-    {% if card.total > 0 %}
-    <div class="stage-pipeline mb-4">
-      {% set stage_colors = {
-        "created": "var(--color-unknown)",
-        "scanned": "var(--color-unknown)",
-        "evaluated": "var(--color-info)",
-        "dismissed": "var(--color-muted)"
-      } %}
-      {% for stage, count in card.stage_counts.items() %}
-      {% if count > 0 and stage not in ('approved', 'implementing', 'completed') %}
-      {# dynamic: width/color computed per item #}
-      <div class="stage-pipeline-segment" style="width:{{ (count / card.total * 100) | round(1) }}%;background:{{ stage_colors.get(stage, 'var(--color-unknown)') }};" title="{{ stage | capitalize }}: {{ count }}">
-        {% if (count / card.total * 100) > 8 %}{{ count }}{% endif %}
-      </div>
-      {% endif %}
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    <div class="stage-bar">
-      {% for stage, count in card.stage_counts.items() %}
-      {% if count > 0 and stage not in ('approved', 'implementing', 'completed') %}
-      <span class="stage-pill stage-pill--{{ stage }}">{{ stage | upper }} <strong>{{ count }}</strong></span>
-      {% endif %}
       {% endfor %}
     </div>
   </div>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -13,7 +14,7 @@ from ..models import (
     RunType,
     Severity,
 )
-from .auth import require_api_key
+from .auth import require_api_key, require_api_key_admin
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +27,33 @@ async def health():
     return {"status": "ok", "service": "supavision"}
 
 
+@health_router.get("/search")
+async def global_search(request: Request, q: str = ""):
+    """Global search across resources."""
+    if not q or len(q) < 2:
+        return {"ok": True, "results": []}
+    store = _get_store(request)
+    results = []
+    for r in store.list_resources():
+        if q.lower() in r.name.lower() or q.lower() in r.resource_type.lower():
+            results.append({
+                "type": "resource",
+                "name": r.name,
+                "badge": r.resource_type,
+                "link": f"/resources/{r.id}",
+            })
+    return {"ok": True, "results": results[:20]}
+
+
 # All other API routes require API key auth
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
 
 @router.get("/system/status")
 async def system_status(request: Request):
-    from ..scheduler import get_scheduler_status
-    from ..agent_runner import get_runner
     from .. import __version__
+    from ..agent_runner import get_runner
+    from ..scheduler import get_scheduler_status
 
     runner = get_runner()
     return {
@@ -53,6 +72,12 @@ class CreateResourceRequest(BaseModel):
     resource_type: str
     parent_id: str = ""
     config: dict[str, str] = {}
+
+
+class UpdateResourceRequest(BaseModel):
+    name: str | None = None
+    config: dict | None = None
+    parent_id: str | None = None
 
 
 class TriggerResponse(BaseModel):
@@ -114,7 +139,7 @@ async def list_resources(request: Request):
 
 
 @router.post("/resources")
-async def create_resource(body: CreateResourceRequest, request: Request):
+async def create_resource(body: CreateResourceRequest, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     resource = Resource(
         name=body.name,
@@ -155,7 +180,7 @@ async def get_resource(resource_id: str, request: Request):
 
 
 @router.delete("/resources/{resource_id}")
-async def delete_resource(resource_id: str, request: Request):
+async def delete_resource(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     resource = store.get_resource(resource_id)
     if not resource:
@@ -164,11 +189,30 @@ async def delete_resource(resource_id: str, request: Request):
     return {"ok": True, "deleted": resource_id}
 
 
+@router.put("/resources/{resource_id}")
+async def update_resource(
+    resource_id: str, body: UpdateResourceRequest, request: Request, _admin=Depends(require_api_key_admin)
+):
+    store = _get_store(request)
+    resource = store.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    if body.name is not None:
+        resource.name = body.name
+    if body.config is not None:
+        resource.config.update(body.config)
+    if body.parent_id is not None:
+        resource.parent_id = body.parent_id
+    resource.updated_at = datetime.now(timezone.utc)
+    store.save_resource(resource)
+    return {"ok": True, "resource_id": resource.id, "name": resource.name}
+
+
 # ── Trigger Runs ────────────────────────────────────────────────
 
 
 @router.post("/resources/{resource_id}/discover")
-async def trigger_discovery(resource_id: str, request: Request):
+async def trigger_discovery(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     engine = _get_engine(request)
 
@@ -194,7 +238,7 @@ async def trigger_discovery(resource_id: str, request: Request):
 
 
 @router.post("/resources/{resource_id}/health-check")
-async def trigger_health_check(resource_id: str, request: Request):
+async def trigger_health_check(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     engine = _get_engine(request)
 
@@ -265,7 +309,7 @@ async def list_reports(
 
 
 @router.post("/resources/{resource_id}/notify-test")
-async def notify_test(resource_id: str, request: Request):
+async def notify_test(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     resource = store.get_resource(resource_id)
     if not resource:
@@ -289,164 +333,6 @@ async def notify_test(resource_id: str, request: Request):
 
     channels, _ = await send_alert(resource, test_report, test_eval, skip_dedup=True)
     return {"ok": bool(channels), "channels": channels}
-
-
-# ── Codebase endpoints ──────────────────────────────────────────
-
-
-@router.post("/codebase/{resource_id}/scan")
-async def codebase_scan(resource_id: str, request: Request):
-    """Run a regex scan on a codebase resource."""
-    from ..codebase_engine import CodebaseEngine
-
-    store = request.app.state.store
-    engine = CodebaseEngine(store)
-    try:
-        run = engine.run_scan(resource_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    items, total = store.list_work_items(
-        resource_id=resource_id, run_id=run.id
-    )
-    return {
-        "ok": True,
-        "run_id": run.id,
-        "findings_created": total,
-        "report_id": run.report_id,
-    }
-
-
-# ── Findings endpoints ─────────────────────────────────────────
-
-
-@router.get("/findings")
-async def list_findings(
-    request: Request,
-    resource_id: str = "",
-    stage: str = "",
-    severity: str = "",
-    page: int = 1,
-    limit: int = 50,
-):
-    """List codebase findings with optional filters."""
-    store = _get_store(request)
-    items, total = store.list_work_items(
-        resource_id=resource_id or None,
-        stage=stage or None,
-        severity=severity or None,
-        page=page,
-        per_page=min(limit, 100),
-    )
-    return {
-        "ok": True,
-        "total": total,
-        "page": page,
-        "items": [
-            {
-                "id": item.id,
-                "resource_id": item.resource_id,
-                "stage": item.stage.value,
-                "severity": item.severity.value,
-                "title": item.display_title,
-                "source": item.source.value,
-                "created_at": str(item.created_at),
-            }
-            for item in items
-        ],
-    }
-
-
-@router.get("/findings/{item_id}")
-async def get_finding(item_id: str, request: Request):
-    """Get full details of a finding/work item."""
-    store = _get_store(request)
-    item = store.get_work_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Finding not found")
-    jobs = store.list_agent_jobs(work_item_id=item_id)
-    return {
-        "ok": True,
-        "finding": item.model_dump(mode="json"),
-        "jobs": [j.model_dump(mode="json") for j in jobs],
-    }
-
-
-@router.post("/findings/{item_id}/evaluate")
-async def evaluate_finding(item_id: str, request: Request):
-    """Queue an evaluation job for a finding."""
-    from ..codebase_engine import CodebaseEngine
-
-    store = _get_store(request)
-    item = store.get_work_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Finding not found")
-    engine = CodebaseEngine(store)
-    job = engine.create_evaluate_job(item_id, item.resource_id)
-    return {"ok": True, "job_id": job.id, "status": job.status.value}
-
-
-@router.post("/findings/{item_id}/approve")
-async def approve_finding(item_id: str, request: Request):
-    """Approve a finding for implementation."""
-    from ..models import FindingStage
-
-    store = _get_store(request)
-    item = store.transition_work_item(item_id, FindingStage.APPROVED)
-    return {"ok": True, "id": item.id, "stage": item.stage.value}
-
-
-@router.post("/findings/{item_id}/reject")
-async def reject_finding(item_id: str, request: Request):
-    """Reject a finding."""
-    from ..models import FindingStage
-
-    store = _get_store(request)
-    item = store.transition_work_item(item_id, FindingStage.REJECTED)
-    return {"ok": True, "id": item.id, "stage": item.stage.value}
-
-
-@router.post("/findings/{item_id}/implement")
-async def implement_finding(item_id: str, request: Request):
-    """Queue an implementation job for an approved finding."""
-    from ..codebase_engine import CodebaseEngine
-
-    store = _get_store(request)
-    item = store.get_work_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Finding not found")
-    try:
-        engine = CodebaseEngine(store)
-        job = engine.create_implement_job(item_id, item.resource_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True, "job_id": job.id, "status": job.status.value}
-
-
-@router.post("/resources/{resource_id}/scout")
-async def scout_resource(
-    resource_id: str, request: Request, focus: str = "general",
-):
-    """Launch a scout agent to explore a codebase resource."""
-    from ..codebase_engine import CodebaseEngine
-
-    store = _get_store(request)
-    try:
-        engine = CodebaseEngine(store)
-        job = engine.create_scout_job(resource_id, focus)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True, "job_id": job.id, "status": job.status.value}
-
-
-@router.get("/jobs/{job_id}")
-async def get_job(job_id: str, request: Request):
-    """Get agent job status and output."""
-    store = _get_store(request)
-    job = store.get_agent_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return {"ok": True, "job": job.model_dump(mode="json")}
 
 
 @router.get("/resources/{resource_id}/metrics")
@@ -502,21 +388,3 @@ async def get_incidents(resource_id: str, request: Request, limit: int = 10):
     return {"ok": True, "resource_id": resource_id, "incidents": incidents[:limit]}
 
 
-@router.get("/blocklist")
-async def list_blocklist(request: Request):
-    """List known false-positive blocklist entries."""
-    store = _get_store(request)
-    entries = store.list_blocklist()
-    return {
-        "ok": True,
-        "total": len(entries),
-        "entries": [
-            {
-                "id": e.id,
-                "pattern_signature": e.pattern_signature,
-                "category": e.category,
-                "description": e.description,
-            }
-            for e in entries
-        ],
-    }

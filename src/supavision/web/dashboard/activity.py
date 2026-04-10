@@ -43,27 +43,6 @@ async def activity_page(request: Request, range: str = "24h"):
                 "link": f"/resources/{resource.id}",
             })
 
-    # Agent jobs (evaluations, implementations)
-    for resource in resources.values():
-        for job in store.list_agent_jobs(resource_id=resource.id, limit=20):
-            if job.created_at < cutoff:
-                continue
-            item = store.get_work_item(job.work_item_id) if not job.work_item_id.startswith("scout-") else None
-            title = item.display_title if item else job.work_item_id
-            events.append({
-                "type": job.job_type,
-                "resource_name": resource.name,
-                "severity": (
-                    "info" if job.status.value == "completed"
-                    else "warning" if job.status.value == "running"
-                    else "critical" if job.status.value == "failed"
-                    else None
-                ),
-                "summary": f"{title} — {job.status.value}",
-                "created_at": job.created_at.isoformat(),
-                "link": f"/findings/{job.work_item_id}" if item else f"/resources/{resource.id}",
-            })
-
     # Sort by time descending
     events.sort(key=lambda e: e["created_at"], reverse=True)
     events = events[:50]  # Cap at 50

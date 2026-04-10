@@ -173,5 +173,4 @@ async def session_viewer(request: Request, session_type: str, session_id: str):
         "is_running": job.status.value == "running",
         "work_item_title": work_item_title,
         "work_item_id": work_item_id,
-        "sse_url": f"/findings/{job.work_item_id}/jobs/{job.id}/stream",
     })
