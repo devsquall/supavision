@@ -24,6 +24,38 @@ from pathlib import Path
 import httpx
 
 from .config import DEFAULT_MODEL, OPENROUTER_API_KEY, OPENROUTER_URL
+from .db import Store
+from .evaluator import Evaluator
+from .executor import ConnectionConfig, Executor
+from .models import (
+    Checklist,
+    ChecklistItem,
+    Evaluation,
+    Report,
+    Resource,
+    Run,
+    RunStatus,
+    RunType,
+    Severity,
+    SystemContext,
+)
+from .models.health import IssueDiff, ReportPayload, RunMetadata, compute_issue_diff
+from .report_handoff import (
+    allocate_payload_path,
+    build_preamble,
+    cleanup_payload_path,
+    read_payload,
+)
+from .report_vocab import get_vocabulary, supports_structured_payload
+from .templates import (
+    TEMPLATE_DIR_DEFAULT,
+    load_template,
+    resolve_credentials,
+    resolve_template,
+)
+from .tools import TOOL_DEFINITIONS, ToolDispatcher
+
+logger = logging.getLogger(__name__)
 
 # ── Live output streaming ──────────────────────────────────────────
 # In-memory buffers for SSE streaming. Each entry is (timestamp_secs, text).
@@ -46,30 +78,157 @@ def get_run_buffer(run_id: str) -> tuple[list[tuple[float, str]], bool]:
     if run_id in _run_pending:
         return [], False  # Pending — not done, just no output yet
     return [], True  # Cleaned up or unknown
-from .db import Store
-from .evaluator import Evaluator
-from .executor import ConnectionConfig, Executor
-from .models import (
-    Checklist,
-    ChecklistItem,
-    Evaluation,
-    Report,
-    Resource,
-    Run,
-    RunStatus,
-    RunType,
-    Severity,
-    SystemContext,
-)
-from .templates import (
-    TEMPLATE_DIR_DEFAULT,
-    load_template,
-    resolve_credentials,
-    resolve_template,
-)
-from .tools import TOOL_DEFINITIONS, ToolDispatcher
 
-logger = logging.getLogger(__name__)
+
+# ── stream-json event formatting ───────────────────────────────────
+# Claude CLI with --output-format stream-json emits one JSON object per
+# line: system/init, assistant (text + tool_use), user (tool_result),
+# result.  We render each event as ANSI-colored terminal lines for
+# real-time transparency via xterm.js.
+
+_DIM = "\x1b[90m"
+_YELLOW = "\x1b[33m"
+_GREEN = "\x1b[32m"
+_RED = "\x1b[31m"
+_BOLD = "\x1b[1m"
+_RESET = "\x1b[0m"
+_CYAN = "\x1b[36m"
+
+_TOOL_RESULT_MAX = 500  # Truncate tool result display (full result stays in Claude's context)
+
+
+def _fmt_timestamp(elapsed: float) -> str:
+    """Format elapsed seconds as [mm:ss] prefix."""
+    m, s = divmod(int(elapsed), 60)
+    return f"{_DIM}[{m:02d}:{s:02d}]{_RESET} "
+
+
+def _format_tool_input(name: str, inp: dict) -> str:
+    """Format a tool_use input in a human-readable way."""
+    if name == "Bash":
+        cmd = inp.get("command", "")
+        desc = inp.get("description", "")
+        label = f"$ {cmd}"
+        if desc:
+            label = f"{desc}: $ {cmd}"
+        return label[:200]
+    if name == "Read":
+        return inp.get("file_path", str(inp))[:200]
+    if name in ("Grep", "Glob"):
+        pattern = inp.get("pattern", "")
+        path = inp.get("path", ".")
+        return f'"{pattern}" in {path}'[:200]
+    if name == "Edit":
+        fp = inp.get("file_path", "")
+        return f"{fp}"[:200]
+    if name == "Write":
+        return inp.get("file_path", str(inp))[:200]
+    # Fallback
+    return json.dumps(inp, ensure_ascii=False)[:150]
+
+
+def _format_stream_event(event: dict, elapsed: float) -> list[str]:
+    """Convert a stream-json event into displayable terminal lines.
+
+    Returns a list of strings (may be empty for events we skip).
+    Each string already contains ANSI escape codes for coloring.
+    """
+    ts = _fmt_timestamp(elapsed)
+    etype = event.get("type", "")
+    subtype = event.get("subtype", "")
+
+    # ── System init ──────────────────────────────────────────────
+    if etype == "system" and subtype == "init":
+        model = event.get("model", "unknown")
+        tools = event.get("tools", [])
+        tool_names = [t for t in tools if isinstance(t, str)][:8]
+        return [
+            f"{ts}{_DIM}─── Session started ({model}) ───{_RESET}",
+            f"{ts}{_DIM}    Tools: {', '.join(tool_names)}{_RESET}",
+        ]
+
+    # ── Assistant message (text + tool calls) ────────────────────
+    if etype == "assistant":
+        lines = []
+        msg = event.get("message", {})
+        for block in msg.get("content", []):
+            btype = block.get("type", "")
+            if btype == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    for tl in text.split("\n"):
+                        lines.append(f"{ts}  {tl}")
+            elif btype == "tool_use":
+                name = block.get("name", "Tool")
+                inp = block.get("input", {})
+                label = _format_tool_input(name, inp)
+                lines.append(f"{ts}{_YELLOW}▸ {_CYAN}{name}{_RESET}{_YELLOW}: {label}{_RESET}")
+        return lines
+
+    # ── User message (tool results) ──────────────────────────────
+    if etype == "user":
+        lines = []
+        msg = event.get("message", {})
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            return []
+        for block in content:
+            if block.get("type") != "tool_result":
+                continue
+            raw = block.get("content", "")
+            # tool_result content can be string or list of text blocks
+            if isinstance(raw, list):
+                raw = "\n".join(x.get("text", "") for x in raw if isinstance(x, dict))
+            text = str(raw).strip()
+            is_error = block.get("is_error", False)
+            if is_error:
+                preview = text[:_TOOL_RESULT_MAX]
+                lines.append(f"{ts}  {_RED}⚠ {preview}{_RESET}")
+            elif text:
+                # Show first few lines, truncated
+                preview_lines = text.split("\n")[:4]
+                preview = "\n".join(preview_lines)
+                if len(preview) > _TOOL_RESULT_MAX:
+                    preview = preview[:_TOOL_RESULT_MAX] + "..."
+                elif len(text) > len(preview):
+                    preview += f"\n  ... ({len(text)} chars total)"
+                for pl in preview.split("\n"):
+                    lines.append(f"{ts}  {_DIM}↳ {pl}{_RESET}")
+        return lines
+
+    # ── Result ───────────────────────────────────────────────────
+    if etype == "result":
+        turns = event.get("num_turns", 0)
+        dur = event.get("duration_ms", 0) / 1000
+        cost = event.get("total_cost_usd", 0)
+        if subtype == "success" or not event.get("is_error", False):
+            return [f"{ts}{_GREEN}{_BOLD}✓ Done in {dur:.0f}s ({turns} turns, ${cost:.3f}){_RESET}"]
+        else:
+            err = event.get("error", "unknown error")
+            return [f"{ts}{_RED}{_BOLD}✕ Failed: {err}{_RESET}"]
+
+    # Skip: hook_started, hook_response, rate_limit_event, stream_event, etc.
+    return []
+
+
+def _extract_result(event: dict) -> tuple[str | None, dict]:
+    """Extract final report text and stats from a result event.
+
+    Returns (report_text, stats_dict).  report_text is None if this
+    isn't a result event.
+    """
+    if event.get("type") != "result":
+        return None, {}
+    text = event.get("result", "")
+    usage = event.get("usage", {})
+    return text, {
+        "num_turns": event.get("num_turns", 0),
+        "tool_calls": 0,  # Not directly exposed; could count from events
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "cost_usd": event.get("total_cost_usd", 0.0),
+        "duration_ms": event.get("duration_ms", 0),
+    }
 
 MAX_TURNS = 50  # Safety limit — not configurable
 LOCK_DIR = Path(".supavision/locks")
@@ -363,15 +522,82 @@ class Engine:
             )
             resolved = resolve_template(template, resource, creds, runtime_ctx)
 
-            if self.backend == "claude_cli":
-                access_section = self._build_access_section(resource)
-                full_prompt = resolved + "\n\n" + access_section
-                response, usage = await self._run_claude_cli(full_prompt, run_id=run.id)
-            else:
-                response, usage = await self._run_agentic_loop(
-                    system_prompt=resolved,
-                    user_message=self._build_user_message("Run health check for resource", resource),
-                    executor=executor,
+            # Workstream A2: allocate structured-payload handoff for opted-in types.
+            # The preamble is appended to the prompt; the engine reads the resulting
+            # file (claude_cli) or dispatcher slot (openrouter) after the run ends.
+            structured_payload: ReportPayload | None = None
+            payload_path = None
+            dispatcher_for_payload: ToolDispatcher | None = None
+            template_version = ""
+            run_start = time.monotonic()
+            if supports_structured_payload(resource.resource_type):
+                payload_path = allocate_payload_path(run.id)
+                vocabulary = get_vocabulary(resource.resource_type)
+                if vocabulary is not None:
+                    preamble = build_preamble(payload_path, vocabulary, resource.resource_type)
+                    resolved = resolved + "\n\n" + preamble
+                    template_version = vocabulary.template_version
+
+            try:
+                if self.backend == "claude_cli":
+                    access_section = self._build_access_section(resource)
+                    full_prompt = resolved + "\n\n" + access_section
+                    response, usage = await self._run_claude_cli(full_prompt, run_id=run.id)
+                    if payload_path is not None:
+                        structured_payload = read_payload(payload_path)
+                else:
+                    dispatcher_for_payload = ToolDispatcher(executor=executor)
+                    response, usage = await self._run_agentic_loop(
+                        system_prompt=resolved,
+                        user_message=self._build_user_message("Run health check for resource", resource),
+                        executor=executor,
+                        dispatcher=dispatcher_for_payload,
+                    )
+                    if payload_path is not None:
+                        structured_payload = dispatcher_for_payload.submitted_payload
+            finally:
+                if payload_path is not None:
+                    cleanup_payload_path(payload_path)
+
+            if payload_path is not None and structured_payload is None:
+                logger.warning(
+                    "Structured payload missing for resource=%s run=%s — falling back to legacy",
+                    resource.name, run.id,
+                )
+
+            if structured_payload is not None:
+                logger.info(
+                    "Structured payload received: resource=%s status=%s issues=%d metrics=%d",
+                    resource.name,
+                    structured_payload.status,
+                    len(structured_payload.issues),
+                    len(structured_payload.metrics),
+                )
+
+            # A3: build engine-stamped metadata (independent of payload presence)
+            report_run_metadata: RunMetadata | None = None
+            if template_version or dispatcher_for_payload is not None:
+                tool_calls = 0
+                if dispatcher_for_payload is not None:
+                    # Subtract submit_report calls from raw call_count so the
+                    # metric reflects *investigation* tool usage, not the final
+                    # handoff call.
+                    tool_calls = max(
+                        0,
+                        dispatcher_for_payload.call_count
+                        - dispatcher_for_payload.submit_report_call_count,
+                    )
+                report_run_metadata = RunMetadata(
+                    template_version=template_version,
+                    tool_calls_made=tool_calls,
+                    runtime_seconds=round(time.monotonic() - run_start, 2),
+                )
+
+            # A6: compute diff vs most recent prior structured payload
+            payload_diff: IssueDiff | None = None
+            if structured_payload is not None:
+                payload_diff = self._compute_payload_diff(
+                    resource_id, structured_payload
                 )
 
             # Store report
@@ -379,6 +605,9 @@ class Engine:
                 resource_id=resource_id,
                 run_type=RunType.HEALTH_CHECK,
                 content=response,
+                payload=structured_payload,
+                run_metadata=report_run_metadata,
+                payload_diff=payload_diff,
             )
             self.store.save_report(report)
 
@@ -557,7 +786,8 @@ class Engine:
         cmd = [
             claude_path,
             "--print",
-            "--output-format", "text",
+            "--output-format", "stream-json",
+            "--verbose",
             "--model", self._cli_model_name(),
             "--permission-mode", "auto",
             "--allowedTools", "Bash(*) Read Glob Grep",
@@ -584,7 +814,8 @@ class Engine:
                 cwd="/tmp",
             )
 
-            output_lines: list[str] = []
+            final_text: str | None = None
+            final_stats: dict = {}
             stderr_buf = bytearray()
 
             # Read stderr concurrently
@@ -603,12 +834,30 @@ class Engine:
                         proc.kill()
                         raise RuntimeError(f"Claude CLI timed out after {timeout}s")
 
-                    line = raw_line.decode("utf-8", errors="replace")
-                    output_lines.append(line)
+                    line = raw_line.decode("utf-8", errors="replace").rstrip("\n")
+                    if not line:
+                        continue
 
-                    # Push to streaming buffer for SSE clients (with timestamp)
+                    # Parse stream-json event
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        # Unparseable line — show raw (backwards compat)
+                        if run_id:
+                            _run_buffers[run_id].append((elapsed, line))
+                        continue
+
+                    # Extract final report text + stats from result event
+                    text, stats = _extract_result(event)
+                    if text is not None:
+                        final_text = text
+                        final_stats = stats
+
+                    # Format event as colored terminal lines for live display
+                    display_lines = _format_stream_event(event, elapsed)
                     if run_id:
-                        _run_buffers[run_id].append((elapsed, line.rstrip("\n")))
+                        for dl in display_lines:
+                            _run_buffers[run_id].append((elapsed, dl))
 
                 await proc.wait()
                 await stderr_task
@@ -619,7 +868,7 @@ class Engine:
                 raise
 
             elapsed = time.monotonic() - start_time
-            output = "".join(output_lines)
+            output = final_text or ""
 
             if proc.returncode != 0:
                 stderr_text = stderr_buf.decode("utf-8", errors="replace")[:2000]
@@ -627,17 +876,23 @@ class Engine:
                     f"Claude CLI exited with code {proc.returncode}: {stderr_text}"
                 )
 
+            if not output.strip():
+                raise RuntimeError("Claude CLI produced no result event (empty report)")
+
             logger.info(
-                "Claude CLI completed in %.0fs (%d chars output)",
+                "Claude CLI completed in %.0fs (%d chars, %d turns, $%.3f)",
                 elapsed, len(output),
+                final_stats.get("num_turns", 0),
+                final_stats.get("cost_usd", 0.0),
             )
 
             return output, {
-                "turns": 0,
-                "tool_calls": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
+                "turns": final_stats.get("num_turns", 0),
+                "tool_calls": final_stats.get("tool_calls", 0),
+                "input_tokens": final_stats.get("input_tokens", 0),
+                "output_tokens": final_stats.get("output_tokens", 0),
                 "elapsed_seconds": round(elapsed, 1),
+                "cost_usd": final_stats.get("cost_usd", 0.0),
                 "backend": "claude_cli",
             }
 
@@ -657,12 +912,18 @@ class Engine:
         system_prompt: str,
         user_message: str,
         executor: Executor,
+        dispatcher: ToolDispatcher | None = None,
     ) -> tuple[str, dict]:
         """Run the tool_use agentic loop until Claude produces a final report.
 
         Returns (final_text_response, usage_stats).
+
+        If `dispatcher` is provided, the caller retains access to it (used by
+        health checks to read `dispatcher.submitted_payload` after the loop).
+        If not provided, a fresh one is created for this run.
         """
-        dispatcher = ToolDispatcher(executor=executor)
+        if dispatcher is None:
+            dispatcher = ToolDispatcher(executor=executor)
 
         # Convert our tool definitions to OpenAI function-calling format
         # (OpenRouter uses this format for Claude models too)
@@ -985,6 +1246,29 @@ class Engine:
                 continue
 
         return metrics
+
+    def _compute_payload_diff(
+        self, resource_id: str, current_payload: ReportPayload
+    ) -> IssueDiff:
+        """Compute run-vs-previous issue set-diff (Workstream A6).
+
+        Walks recent health-check reports to find the most recent one that
+        has a structured payload, then set-diffs against it. If no prior
+        payload exists (first structured run), returns a diff where every
+        current issue is "new".
+        """
+        try:
+            recent = self.store.get_recent_reports(
+                resource_id, RunType.HEALTH_CHECK, limit=10
+            )
+            for prior in recent:
+                if prior.payload is not None:
+                    return compute_issue_diff(
+                        current_payload, prior.payload, prior.id
+                    )
+        except Exception as e:
+            logger.warning("Diff computation failed (non-fatal): %s", e)
+        return compute_issue_diff(current_payload, None)
 
     def _correlate(self, resource: Resource, evaluation: Evaluation) -> str | None:
         """Check related resources for correlated issues.
