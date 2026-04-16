@@ -54,8 +54,10 @@
 <div class="settings-section">
   <div class="log-stream-header">
     <h4>Log Stream</h4>
-    <label class="text-sm text-muted font-normal">
-      <input type="checkbox" id="show-timestamps" class="mr-1"> Timestamps
+    <label class="toggle-switch">
+      <input type="checkbox" id="show-timestamps">
+      <span class="toggle-switch-track"></span>
+      Timestamps
     </label>
     <button class="btn btn-sm btn-outline ml-auto" id="clear-log-btn">Clear</button>
   </div>
@@ -64,8 +66,10 @@
   </div>
   <div class="log-stream-footer">
     <span class="text-sm text-muted"><span id="log-line-count">0</span> lines</span>
-    <label class="text-sm text-muted">
-      <input type="checkbox" id="auto-scroll" checked class="mr-1"> Auto-scroll
+    <label class="toggle-switch">
+      <input type="checkbox" id="auto-scroll" checked>
+      <span class="toggle-switch-track"></span>
+      Auto-scroll
     </label>
   </div>
 </div>

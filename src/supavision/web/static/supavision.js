@@ -1,15 +1,16 @@
 /* Supavision — Product interactions */
 
-// ── Global functions (accessible from onclick) ────────
-function toggleTheme() {
+// ── Namespaced API (accessible from onclick via sv.*) ────────
+window.sv = window.sv || {};
+
+sv.theme = { toggle: function() {
   var html = document.documentElement;
   var next = (html.dataset.theme || "light") === "light" ? "dark" : "light";
   html.dataset.theme = next;
   localStorage.setItem("supavision-theme", next);
-}
+}};
 
-function toggleSidebar() {
-  // matchMedia aligns with the CSS breakpoint exactly (including scrollbar width)
+sv.sidebar = { toggle: function() {
   var isMobile = window.matchMedia("(max-width: 768px)").matches;
   if (isMobile) {
     document.body.classList.toggle("sidebar-open");
@@ -20,7 +21,11 @@ function toggleSidebar() {
     localStorage.setItem("supavision-sidebar",
       document.body.classList.contains("sidebar-collapsed") ? "collapsed" : "expanded");
   }
-}
+}};
+
+// Backwards compat — templates reference these via onclick
+function toggleTheme() { sv.theme.toggle(); }
+function toggleSidebar() { sv.sidebar.toggle(); }
 
 // ── Command Palette ──────────────────────────────
 var _paletteActive = false;
@@ -28,18 +33,18 @@ var _paletteIdx = -1;
 var _searchTimer = null;
 
 var _navItems = [
-  {type: "nav", name: "Dashboard", link: "/", badge: ""},
-  {type: "nav", name: "Resources", link: "/resources", badge: ""},
-  {type: "nav", name: "Reports", link: "/reports", badge: ""},
-  {type: "nav", name: "Alerts", link: "/alerts", badge: ""},
-  {type: "nav", name: "Sessions", link: "/sessions", badge: ""},
-  {type: "nav", name: "Activity", link: "/activity", badge: ""},
-  {type: "nav", name: "Live", link: "/activity/live", badge: ""},
-  {type: "nav", name: "Metrics", link: "/metrics", badge: ""},
-  {type: "nav", name: "Schedules", link: "/schedules", badge: ""},
-  {type: "nav", name: "Command Center", link: "/command-center", badge: ""},
-  {type: "nav", name: "Ask Supavision", link: "/ask", badge: ""},
-  {type: "nav", name: "Settings", link: "/settings", badge: ""},
+  {type: "nav", name: "Dashboard", link: "/"},
+  {type: "nav", name: "Resources", link: "/resources"},
+  {type: "nav", name: "Reports", link: "/reports"},
+  {type: "nav", name: "Alerts", link: "/alerts"},
+  {type: "nav", name: "Sessions", link: "/sessions"},
+  {type: "nav", name: "Activity", link: "/activity"},
+  {type: "nav", name: "Live", link: "/activity/live"},
+  {type: "nav", name: "Metrics", link: "/metrics"},
+  {type: "nav", name: "Schedules", link: "/schedules"},
+  {type: "nav", name: "Command Center", link: "/command-center"},
+  {type: "nav", name: "Ask Supavision", link: "/ask"},
+  {type: "nav", name: "Settings", link: "/settings"},
   {type: "nav", name: "Profile", link: "/profile", badge: ""},
 ];
 
@@ -75,8 +80,10 @@ function renderPaletteResults(items) {
     container.innerHTML = '<div class="cmd-palette-empty">No results</div>';
     return;
   }
+  var navSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>';
+  var resSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 6h6"/></svg>';
   container.innerHTML = items.map(function(item, i) {
-    var icon = item.type === "nav" ? "\u2192" : item.type === "resource" ? "\u25C6" : "\u25C7";
+    var icon = item.type === "nav" ? navSvg : resSvg;
     var badge = item.badge ? '<span class="badge badge--type" style="margin-left:auto">' + _esc(item.badge) + '</span>' : '';
     return '<a href="' + _esc(item.link) + '" class="cmd-palette-item' +
            (i === _paletteIdx ? ' cmd-palette-item--active' : '') +
@@ -609,7 +616,7 @@ function showConfirmModal(message, onConfirm) {
     // g + key shortcuts
     if (_gPressed) {
       _gPressed = false;
-      var routes = { d: "/", r: "/resources", s: "/settings", a: "/activity", m: "/metrics" };
+      var routes = { d: "/", r: "/resources", s: "/settings", a: "/activity", m: "/metrics", l: "/activity/live" };
       if (routes[e.key]) { window.location.href = routes[e.key]; return; }
     }
     if (e.key === "g") { _gPressed = true; setTimeout(function() { _gPressed = false; }, 1000); }

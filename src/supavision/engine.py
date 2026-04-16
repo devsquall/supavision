@@ -780,7 +780,9 @@ class Engine:
         claude_path = shutil.which("claude") or "claude"
 
         import tempfile
-        prompt_file = Path(tempfile.mktemp(suffix=".md", prefix="supavision-"))
+        _fd, _tmp = tempfile.mkstemp(suffix=".md", prefix="supavision-")
+        os.close(_fd)
+        prompt_file = Path(_tmp)
         prompt_file.write_text(prompt, encoding="utf-8")
 
         cmd = [
@@ -1103,10 +1105,11 @@ class Engine:
 
     def _acquire_resource_lock(self, resource_id: str):
         """Acquire a file lock for a specific resource to prevent concurrent runs."""
-        LOCK_DIR.mkdir(parents=True, exist_ok=True)
+        LOCK_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         lock_path = LOCK_DIR / f"{resource_id}.lock"
         try:
-            fd = open(lock_path, "w")
+            fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
+            fd = os.fdopen(fd, "w")
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd.write(str(os.getpid()))
             fd.flush()
@@ -1120,8 +1123,8 @@ class Engine:
             try:
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 fd.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to release resource lock: %s", e)
 
     # ── Executor factory ─────────────────────────────────────────────
 

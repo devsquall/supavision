@@ -58,11 +58,11 @@
       <h4 class="mb-1">API Keys</h4>
       <p class="text-sm text-muted">Authenticate requests to <code>/api/v1/*</code> via the <code>x-api-key</code> header.</p>
     </div>
-    <button class="btn btn-sm" onclick="document.getElementById('new-key-form').classList.remove('hidden')">Generate New Key</button>
+    <button class="btn btn-sm" onclick="document.getElementById('new-key-form').classList.toggle('is-open')">Generate New Key</button>
   </div>
 
   {# ── New key creation panel (hidden until button clicked) ── #}
-  <div id="new-key-form" class="wizard-card mb-4 {{ '' if new_key else 'hidden' }}">
+  <div id="new-key-form" class="wizard-card mb-4 collapsible {{ 'is-open' if new_key else '' }}">
     {% if new_key %}
     <h4>API Key Created</h4>
     <div class="alert alert--warning mt-2">
@@ -88,7 +88,7 @@
       </div>
       <div class="mt-4 inline-actions">
         <button type="submit" class="btn">Generate Key</button>
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('new-key-form').classList.add('hidden')">Cancel</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('new-key-form').classList.remove('is-open')">Cancel</button>
       </div>
     </form>
     {% endif %}

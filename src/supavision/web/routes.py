@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,6 +19,23 @@ from ..models import (
 from .auth import require_api_key, require_api_key_admin
 
 logger = logging.getLogger(__name__)
+
+_api_rate_limits: dict[str, list[float]] = defaultdict(list)
+
+
+_API_RATE_LIMIT_PER_MINUTE = 60  # API consumers need higher throughput than dashboard
+
+
+async def _api_rate_limit(request: Request):
+    """FastAPI dependency: rate-limit mutating API requests per IP."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return  # Read-only requests are not rate-limited
+    ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    _api_rate_limits[ip] = [t for t in _api_rate_limits[ip] if now - t < 60]
+    if len(_api_rate_limits[ip]) >= _API_RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    _api_rate_limits[ip].append(now)
 
 # Health endpoint — no auth required (for Docker healthcheck, load balancers, uptime monitors)
 health_router = APIRouter(prefix="/api/v1")
@@ -46,7 +65,7 @@ async def global_search(request: Request, q: str = ""):
 
 
 # All other API routes require API key auth
-router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key), Depends(_api_rate_limit)])
 
 
 @router.get("/system/status")

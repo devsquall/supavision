@@ -728,15 +728,6 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 .badge--low      { background: var(--color-unknown-dim); color: var(--color-text-2); }
 .badge--info     { background: var(--color-unknown-dim); color: var(--color-text-2); }
 
-/* Stage badges */
-.badge--stage-scanned      { background: var(--color-unknown-dim); color: var(--color-text-2); }
-.badge--stage-created      { background: var(--color-unknown-dim); color: var(--color-text-2); }
-.badge--stage-evaluated    { background: rgba(88, 166, 255, 0.15); color: var(--color-link); }
-.badge--stage-approved     { background: var(--color-healthy-dim); color: var(--color-healthy); }
-.badge--stage-implementing { background: var(--color-warning-dim); color: var(--color-warning); }
-.badge--stage-completed    { background: var(--color-healthy-dim); color: var(--color-healthy); }
-.badge--stage-rejected     { background: var(--color-critical-dim); color: var(--color-critical); }
-.badge--stage-dismissed    { background: var(--color-unknown-dim); color: var(--color-text-2); }
 
 /* Code block */
 .code-block {
@@ -824,6 +815,28 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 .spinner--lg { width: 24px; height: 24px; border-width: 3px; }
 .htmx-indicator { display: none; opacity: 0; transition: opacity 200ms ease; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-flex; opacity: 1; }
+
+/* ── Toggle switch (CSS-only) ── */
+.toggle-switch { position: relative; display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; font-size: var(--text-sm); color: var(--color-text-2); user-select: none; }
+.toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-switch-track {
+  width: 32px; height: 18px; border-radius: 9px;
+  background: var(--color-muted); transition: background 150ms ease;
+  position: relative; flex-shrink: 0;
+}
+.toggle-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: transform 150ms ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch input:checked + .toggle-switch-track { background: var(--color-primary); }
+.toggle-switch input:checked + .toggle-switch-track::after { transform: translateX(14px); }
+.toggle-switch input:focus-visible + .toggle-switch-track { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ── Collapsible panel (smooth expand) ── */
+.collapsible { max-height: 0; overflow: hidden; transition: max-height 300ms ease, opacity 200ms ease; opacity: 0; }
+.collapsible.is-open { max-height: 600px; opacity: 1; }
 
 /* Button loading state */
 .btn--loading {
