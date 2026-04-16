@@ -232,68 +232,6 @@ function initReplayTerminal(events) {
   }
 }
 
-function initJobTerminal(itemId, jobId) {
-  var container = document.getElementById("terminal-container");
-  if (!container || typeof Terminal === "undefined") return;
-
-  var term = new Terminal({
-    cols: 80, rows: 20,
-    cursorBlink: false,
-    scrollback: 5000,
-    convertEol: true,
-    theme: { background: '#0e1117', foreground: '#e6edf3', cursor: '#e6edf3' }
-  });
-
-  if (typeof FitAddon !== "undefined") {
-    var fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
-    fitAddon.fit();
-    window.addEventListener("resize", function() { fitAddon.fit(); });
-  } else {
-    term.open(container);
-  }
-  _activeTerm = term;
-
-  term.write("\x1b[2m Agent starting...\x1b[0m\r\n");
-
-  var source = new EventSource("/findings/" + itemId + "/jobs/" + jobId + "/stream");
-
-  source.onmessage = function(e) {
-    try {
-      var data = JSON.parse(e.data);
-      if (data.d) term.write(data.d + "\r\n");
-    } catch (err) {
-      term.write(e.data + "\r\n");
-    }
-  };
-
-  source.addEventListener("done", function() {
-    source.close();
-    term.write("\r\n\x1b[32m\u2713 Job completed\x1b[0m\r\n");
-    var header = document.querySelector(".session-header .badge:last-of-type, .page-header .badge");
-    if (header) { header.className = "badge badge--healthy"; header.textContent = "completed"; }
-    if (window.sv && sv.toast) {
-      sv.toast.show({ title: "Job complete", type: "success", duration: 3000 });
-    }
-    var refreshTarget = document.querySelector("[hx-trigger*='refreshOnComplete']");
-    if (refreshTarget && window.htmx) {
-      htmx.trigger(refreshTarget, "refreshOnComplete");
-    } else {
-      var banner = document.createElement("div");
-      banner.className = "terminal-complete-banner";
-      banner.innerHTML = 'Job completed \u2014 <a href="javascript:window.location.reload()">Refresh to see results</a>';
-      container.parentElement.appendChild(banner);
-      if (window.sv && sv.fx) sv.fx.fadeSwap(banner);
-    }
-  });
-
-  source.onerror = function() {
-    source.close();
-    term.write("\r\n\x1b[33m⚠ Connection lost — refresh to reconnect\x1b[0m\r\n");
-  };
-}
-
 // ── Confirmation Modal (replaces browser confirm()) ──
 function showConfirmModal(message, onConfirm) {
   // Remove existing modal

@@ -300,10 +300,6 @@ class TestRBACSettings:
         resp = viewer_client.post("/settings/api-keys/fake-id/revoke")
         assert resp.status_code == 403
 
-    def test_viewer_cannot_delete_blocklist(self, viewer_client):
-        resp = viewer_client.request("DELETE", "/settings/blocklist/fake-id")
-        assert resp.status_code == 403
-
     def test_viewer_cannot_check_claude(self, viewer_client):
         resp = viewer_client.post("/settings/check-claude")
         assert resp.status_code == 403

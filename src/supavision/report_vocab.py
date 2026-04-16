@@ -1,4 +1,4 @@
-"""Canonical vocabularies for Lane 1 structured report payloads (Workstream A).
+"""Canonical vocabularies for structured report payloads.
 
 Each resource type that opts into structured reports declares:
 - `tags`: the canonical issue-tag vocabulary (used to derive stable issue IDs

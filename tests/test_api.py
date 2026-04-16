@@ -449,7 +449,7 @@ class TestAuthHelpers:
         assert h1 != h2
 
 
-# ── Helper fixtures for Lane 2 tests ─────────────────────────────
+# ── Helper fixtures ─────────────────────────────
 
 
 @pytest.fixture
@@ -466,35 +466,6 @@ def viewer_client(app, viewer_api_key) -> TestClient:
     return TestClient(app, headers={"x-api-key": viewer_api_key})
 
 
-def _make_finding(resource_id: str, **overrides):
-    """Create a Finding with sensible defaults."""
-    from supavision.models import Finding, FindingSeverity
-
-    defaults = dict(
-        resource_id=resource_id,
-        file_path="src/app.py",
-        line_number=42,
-        category="security",
-        pattern_name="hardcoded_secret",
-        snippet="API_KEY = 'abc123'",
-        severity=FindingSeverity.HIGH,
-        language="python",
-    )
-    defaults.update(overrides)
-    return Finding(**defaults)
-
-
-def _make_agent_job(work_item_id: str, resource_id: str, **overrides):
-    """Create an AgentJob with sensible defaults."""
-    from supavision.models import AgentJob
-
-    defaults = dict(
-        work_item_id=work_item_id,
-        resource_id=resource_id,
-        job_type="evaluate",
-    )
-    defaults.update(overrides)
-    return AgentJob(**defaults)
 class TestMetrics:
     def test_get_metrics_empty(self, client, store):
         resource = Resource(name="server", resource_type="server")

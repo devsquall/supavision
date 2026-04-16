@@ -1,5 +1,5 @@
 {# Shared definitions for Supavision UI guidance.
-   Import macros: {% from '_glossary.html' import severity_legend, stage_pipeline, concept %} #}
+   Import macros: {% from '_glossary.html' import severity_legend, concept %} #}
 
 {% macro severity_legend() %}
 <div class="glossary-legend">
@@ -11,8 +11,8 @@
 
 {% macro stage_pipeline() %}
 <div class="glossary-pipeline text-muted text-xs">
-  <strong>scanned</strong> found by scanner &rarr;
-  <strong>evaluated</strong> AI assessed severity and impact
+  <strong>discovered</strong> initial exploration &rarr;
+  <strong>monitored</strong> recurring health checks
 </div>
 {% endmacro %}
 
@@ -21,7 +21,6 @@
 {%- elif term == "health_check" -%}periodic evaluation of system state
 {%- elif term == "baseline" -%}snapshot from the last discovery
 {%- elif term == "scout" -%}AI agent that searches for improvements
-{%- elif term == "blocklist" -%}patterns skipped during scanning
 {%- elif term == "evaluate" -%}AI assesses severity and impact
 {%- endif -%}
 {%- endmacro %}

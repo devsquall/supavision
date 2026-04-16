@@ -18,12 +18,12 @@
             <path d="M12 2C6.48 2 2 5.79 2 10.5c0 2.74 1.67 5.16 4.24 6.71L5 22l4.84-2.43C10.54 19.85 11.26 20 12 20c5.52 0 10-3.79 10-8.5S17.52 2 12 2z"/>
           </svg>
         </div>
-        <p>Query your resources, findings, and metrics using natural language</p>
+        <p>Query your resources and metrics using natural language</p>
         <div class="chat-examples">
           <button class="chat-example-btn" onclick="askExample(this)">What's wrong with my system?</button>
           <button class="chat-example-btn" onclick="askExample(this)">What should I fix first?</button>
           <button class="chat-example-btn" onclick="askExample(this)">Are there security concerns?</button>
-          <button class="chat-example-btn" onclick="askExample(this)">Show me all findings</button>
+          <button class="chat-example-btn" onclick="askExample(this)">Show me the latest reports</button>
         </div>
       </div>
     </div>
@@ -59,26 +59,6 @@
       </div>
     </div>
 
-    <div class="context-card">
-      <div class="context-card-header">Findings <span class="text-muted">({{ context.findings_total }})</span></div>
-      <div class="context-card-body" id="ctx-findings">
-        {% if context.findings %}
-        <ul class="context-list">
-          {% for f in context.findings[:10] %}
-          <li class="context-list-item" data-finding-id="{{ f.id }}" data-finding-title="{{ f.title }}">
-            <span class="badge badge--{{ f.severity }}">{{ f.severity }}</span>
-            <span class="context-finding-title">{{ f.title }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% if context.findings_total > 10 %}
-        <span class="text-muted">+ {{ context.findings_total - 10 }} more</span>
-        {% endif %}
-        {% else %}
-        <span class="text-muted">No findings yet</span>
-        {% endif %}
-      </div>
-    </div>
 
     {# Always render metrics card — JS can update it dynamically #}
     {% set has_metrics = context.resources | selectattr('metrics') | list | length > 0 %}
@@ -268,19 +248,6 @@
       return h + '</div></div>';
     }
 
-    // ── Findings table ──
-    if (type === 'findings' && Array.isArray(d) && d.length) {
-      var h = '<div class="result-section"><div class="result-label">' + esc(title) + ' (' + d.length + ')</div>';
-      h += '<table class="result-table"><thead><tr><th>Severity</th><th>Category</th><th>File</th><th>Stage</th></tr></thead><tbody>';
-      d.forEach(function(f) {
-        h += '<tr><td><span class="badge badge--' + esc(f.severity || '') + '">' + esc(f.severity || '') + '</span></td>';
-        h += '<td>' + esc(f.category || '') + '</td>';
-        h += '<td>' + esc(f.file_path || '') + (f.line_number ? ':' + f.line_number : '') + '</td>';
-        h += '<td>' + esc(f.stage || '') + '</td></tr>';
-      });
-      return h + '</tbody></table></div>';
-    }
-
     // ── Report ──
     if (type === 'report' && typeof d === 'object') {
       var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div>';
@@ -335,16 +302,7 @@
       return h + '</div>';
     }
 
-    // ── Blocklist ──
-    if (type === 'blocklist' && Array.isArray(d) && d.length) {
-      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><table class="result-table"><thead><tr><th>Pattern</th><th>Category</th><th>Description</th></tr></thead><tbody>';
-      d.forEach(function(b) {
-        h += '<tr><td><code>' + esc(b.pattern_signature || '') + '</code></td>';
-        h += '<td>' + esc(b.category || '') + '</td>';
-        h += '<td>' + esc(b.description || '') + '</td></tr>';
-      });
-      return h + '</tbody></table></div>';
-    }
+
 
     // ── Help examples ──
     if (type === 'help' && Array.isArray(d)) {
@@ -391,21 +349,6 @@
         h += '<span class="badge badge--' + esc(r.severity) + '">' + esc(r.severity) + '</span></li>';
       });
       resEl.innerHTML = h + '</ul>';
-    }
-
-    // Findings
-    var findEl = document.getElementById('ctx-findings');
-    if (ctx.findings) {
-      var shown = ctx.findings.slice(0, 10);
-      var h = '<ul class="context-list">';
-      shown.forEach(function(f) {
-        h += '<li class="context-list-item" data-finding-id="' + esc(f.id) + '">';
-        h += '<span class="badge badge--' + esc(f.severity) + '">' + esc(f.severity) + '</span>';
-        h += '<span class="context-finding-title">' + esc(f.title) + '</span></li>';
-      });
-      h += '</ul>';
-      if (ctx.findings_total > 10) h += '<span class="text-muted">+ ' + (ctx.findings_total - 10) + ' more</span>';
-      findEl.innerHTML = h;
     }
 
     // Metrics — update and show/hide the card

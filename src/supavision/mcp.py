@@ -3,7 +3,7 @@
 Speaks JSON-RPC over stdin/stdout (MCP stdio protocol).
 Run: SUPAVISION_DB_PATH=/path/to/db python -m supavision.mcp
 
-Lane 1 (Health) tools:
+Available tools:
   supavision_list_resources     — List all resources with current severity
   supavision_get_latest_report  — Latest health check report for a resource
   supavision_get_baseline       — Discovery baseline (system context + checklist)

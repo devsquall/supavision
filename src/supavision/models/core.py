@@ -1,8 +1,4 @@
-"""Core models shared by both lanes.
-
-Both Lane 1 (Health) and Lane 2 (Work) import from here.
-These are the foundational types that everything depends on.
-"""
+"""Core models shared across all modules."""
 
 from __future__ import annotations
 

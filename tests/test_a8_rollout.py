@@ -1,4 +1,4 @@
-"""Tests for Workstream A8: structured-payload rollout to additional Lane 1 types.
+"""Tests for structured-payload rollout to additional resource types.
 
 Verifies each opted-in resource type produces a preamble with the right payload
 path, tag vocabulary, and metric names — and that template versions are unique.

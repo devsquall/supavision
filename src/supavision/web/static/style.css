@@ -717,7 +717,7 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 }
 .stage-pill strong { color: var(--color-text); margin-left: 2px; }
 
-/* Severity badges for findings */
+/* Severity badges */
 .badge--critical { background: var(--color-critical-dim); color: var(--color-critical); }
 .badge--high     { background: var(--color-critical-dim); color: var(--color-critical); }
 .badge--medium   { background: var(--color-warning-dim); color: var(--color-warning); }
@@ -734,7 +734,7 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 .badge--stage-rejected     { background: var(--color-critical-dim); color: var(--color-critical); }
 .badge--stage-dismissed    { background: var(--color-unknown-dim); color: var(--color-text-2); }
 
-/* Code block for findings */
+/* Code block */
 .code-block {
   background: var(--color-surface-2); padding: var(--sp-4); border-radius: var(--radius-md);
   overflow-x: auto; font-family: var(--font-mono); font-size: var(--text-sm);
@@ -1831,12 +1831,6 @@ a.evidence-chip:hover { border-color: var(--color-link); color: var(--color-link
 }
 .context-list-item a { color: var(--color-link); text-decoration: none; }
 .context-list-item a:hover { text-decoration: underline; }
-.context-finding-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
 .context-metric {
   background: var(--color-surface-3);
   padding: 1px 4px;
@@ -2324,86 +2318,6 @@ a.evidence-chip:hover { border-color: var(--color-link); color: var(--color-link
   }
 }
 
-
-/* ═══════════════════════════════════════════════════════════════
-   FINDINGS WORKFLOW — summary strip + card rows
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── Summary Strip ── */
-.findings-summary {
-  display: flex; align-items: center; gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); flex-wrap: wrap;
-}
-.findings-summary-stat {
-  display: flex; align-items: baseline; gap: var(--sp-2);
-}
-.findings-summary-count {
-  font-size: var(--text-xl); font-weight: 700;
-}
-.findings-summary-label {
-  font-size: var(--text-sm); color: var(--color-text-2);
-}
-.findings-summary-stages {
-  display: flex; gap: var(--sp-2); flex-wrap: wrap;
-}
-.stage-pill--active {
-  outline: 2px solid var(--color-link); outline-offset: 1px;
-}
-.findings-summary-next {
-  margin-left: auto; display: flex; align-items: center; gap: var(--sp-2);
-  font-size: var(--text-sm);
-}
-.findings-next-label {
-  font-weight: 600; color: var(--color-text-2);
-}
-.findings-next-link {
-  color: var(--color-link); text-decoration: none;
-  display: flex; align-items: center; gap: var(--sp-2);
-}
-.findings-next-link:hover { text-decoration: underline; }
-
-/* ── Finding Cards ── */
-.findings-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-.finding-card {
-  display: flex; align-items: flex-start; gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-left: 3px solid transparent;
-  border-radius: var(--radius-md);
-}
-.finding-card--critical { border-left-color: var(--color-critical); }
-.finding-card--high { border-left-color: var(--color-critical); }
-.finding-card--medium { border-left-color: var(--color-warning); }
-.finding-card--low { border-left-color: var(--color-info); }
-.finding-card--info { border-left-color: var(--color-muted); }
-
-.finding-card-left { flex-shrink: 0; padding-top: 2px; }
-.finding-card-body { flex: 1; min-width: 0; }
-.finding-card-title a {
-  font-weight: 500; font-size: var(--text-sm);
-  color: var(--color-link); text-decoration: none;
-}
-.finding-card-title a:hover { text-decoration: underline; }
-.finding-card-explanation {
-  font-size: var(--text-sm); color: var(--color-text);
-  margin-top: var(--sp-1);
-}
-.finding-card-meta {
-  display: flex; align-items: center; gap: var(--sp-2);
-  margin-top: var(--sp-1); font-size: var(--text-xs);
-  flex-wrap: wrap;
-}
-.finding-card-action {
-  flex-shrink: 0; align-self: center;
-}
-
-@media (max-width: 700px) {
-  .finding-card { flex-wrap: wrap; }
-  .finding-card-action { width: 100%; margin-top: var(--sp-2); }
-  .findings-summary-next { margin-left: 0; width: 100%; margin-top: var(--sp-2); }
-}
 
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKEN UTILITIES — Ticket 9

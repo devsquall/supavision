@@ -1,4 +1,4 @@
-"""Settings page — system info, API keys, blocklist, Claude check."""
+"""Settings page — system info, API keys, Claude check."""
 
 from __future__ import annotations
 
@@ -101,19 +101,6 @@ async def settings_revoke_api_key(key_id: str, request: Request):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/settings", status_code=303)
     raise HTTPException(status_code=404, detail="Key not found")
-
-
-@router.delete("/settings/blocklist/{entry_id}")
-async def settings_blocklist_delete(entry_id: str, request: Request):
-    _require_admin(request)
-    from fastapi.responses import HTMLResponse
-
-    store = request.app.state.store
-    if store.delete_blocklist_entry(entry_id):
-        if request.headers.get("HX-Request"):
-            return HTMLResponse(content="", status_code=200)
-        return {"ok": True}
-    raise HTTPException(status_code=404, detail="Entry not found")
 
 
 @router.post("/settings/check-claude")

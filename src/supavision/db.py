@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     last_used_at TEXT
 );
 
--- Lane 2: Work Items (codebase findings + manual tasks)
+-- Legacy tables (kept for cascade-delete compatibility)
 CREATE TABLE IF NOT EXISTS work_items (
     id TEXT PRIMARY KEY,
     resource_id TEXT NOT NULL,
@@ -374,10 +374,10 @@ class Store:
 
     def delete_resource(self, resource_id: str) -> None:
         # Cascade: delete all related data before removing the resource
-        # Lane 1: Health
+        # Health data
         for table in ("runs", "reports", "evaluations", "system_contexts", "checklists"):
             self._execute(f"DELETE FROM {table} WHERE resource_id = ?", (resource_id,))
-        # Lane 2: Work (cascade through work items)
+        # Legacy work tables (cascade through work items)
         self.delete_work_items_for_resource(resource_id)
         self._execute("DELETE FROM resources WHERE id = ?", (resource_id,))
         self._commit()
@@ -790,7 +790,7 @@ class Store:
             return cursor.rowcount > 0
 
     # ══════════════════════════════════════════════════════════════════
-    # LANE 2: Work Items — codebase findings + manual tasks
+    # Legacy work item methods (kept for cascade-delete compatibility)
     # These methods must NEVER write to the evaluations table.
     # Finding-level judgments are stored as fields on the WorkItem itself.
     # ══════════════════════════════════════════════════════════════════

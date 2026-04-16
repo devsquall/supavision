@@ -354,8 +354,8 @@ TOOL_DEFINITIONS = [
             "required": ["query", "db_type"],
         },
     },
-    # Workstream A2: structured report submission. Called exactly once at the
-    # end of a Lane 1 health check (OpenRouter backend only — Claude CLI uses
+    # Structured report submission. Called exactly once at the
+    # end of a health check (OpenRouter backend only — Claude CLI uses
     # the file-based handoff in report_handoff.py). Arguments are validated
     # against ReportPayload via Pydantic; failure returns a validation error
     # and the caller retries once, then falls back to UNKNOWN status.

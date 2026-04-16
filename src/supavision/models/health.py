@@ -1,10 +1,10 @@
-"""Lane 1: Health models — resource-level monitoring.
+"""Health models — resource-level monitoring.
 
 Infrastructure domain files (engine.py, evaluator.py, executor.py, tools.py,
 discovery_diff.py) should import from here and from core.py ONLY.
 
 These models must NEVER be used for per-issue lifecycle tracking.
-For that, see work.py (Lane 2).
+Use the issue set-diff system (compute_issue_diff) instead.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class Severity(enum.StrEnum):
     """Report severity level assigned by the evaluator.
 
     This is resource-level health: "Is this resource healthy?"
-    NOT finding-level severity. For that, use FindingSeverity in work.py.
+    NOT per-issue severity — see IssueSeverity for that.
     """
 
     HEALTHY = "healthy"
@@ -79,7 +79,7 @@ class Report(BaseModel):
     NOT a per-issue tracker. Reports do NOT have lifecycle stages.
 
     Workstream A3: `payload` holds the structured fields Claude submitted via
-    `submit_report` (Lane 1 health checks that opt in via `report_vocab`).
+    `submit_report` (health check health checks that opt in via `report_vocab`).
     When `payload is None`, the report is in legacy prose-only mode and the
     dashboard / evaluator / alerts fall back to the pre-A behavior.
     `run_metadata` is engine-stamped (template version, runtime, tool-call count)
@@ -118,9 +118,8 @@ class Evaluation(BaseModel):
     Answers: "How healthy is this resource?"
     Uses Severity (healthy/warning/critical).
 
-    This is ONLY for resource-level Report evaluations (Lane 1).
-    Finding-level judgments are stored as fields on WorkItem itself (Lane 2).
-    The evaluations table must NEVER contain finding-level data.
+    This is ONLY for resource-level Report evaluations.
+    The evaluations table must NEVER contain per-issue data.
     """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -153,7 +152,7 @@ class Metric(BaseModel):
 # ── Structured Report Payload (Workstream A) ─────────────────────────
 #
 # Claude submits structured report output via the `submit_report` tool at the
-# end of a Lane 1 health check. The tool's argument schema is `ReportPayload`;
+# end of a health check health check. The tool's argument schema is `ReportPayload`;
 # Pydantic validates at the tool boundary, so there is no prose parsing.
 # Engine-stamped fields (template version, runtime) live on `RunMetadata`
 # and are NOT part of what Claude provides.
@@ -207,7 +206,7 @@ def compute_issue_id(tags: list[str], scope: str | None, title: str) -> str:
 
 
 class ReportIssue(BaseModel):
-    """A single issue identified in a Lane 1 health report.
+    """A single issue identified in a health check health report.
 
     Claude provides title/severity/evidence/recommendation/tags/scope; the
     engine derives `id` from (tags, scope) so diffs stay stable even when
@@ -239,7 +238,7 @@ class ReportIssue(BaseModel):
 class ReportPayload(BaseModel):
     """Structured output Claude submits via the `submit_report` tool.
 
-    This is the contract that turns Lane 1 reports from prose dumps into
+    This is the contract that turns health check reports from prose dumps into
     structured data. See plan: purrfect-inventing-nebula.md, Workstream A.
 
     Engine-stamped metadata (template version, runtime, tool-call count)
