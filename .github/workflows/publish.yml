@@ -47,7 +47,5 @@ jobs:
 
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
-        # If PyPI trusted publishing isn't configured on the project, set
-        # PYPI_API_TOKEN as a repository secret and uncomment the `with:` block below.
-        # with:
-        #   password: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          skip-existing: true
