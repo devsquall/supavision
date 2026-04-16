@@ -62,6 +62,12 @@ function closePalette() {
   _paletteIdx = -1;
 }
 
+function _esc(str) {
+  var d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function renderPaletteResults(items) {
   var container = document.getElementById("cmd-palette-results");
   if (!container) return;
@@ -71,12 +77,12 @@ function renderPaletteResults(items) {
   }
   container.innerHTML = items.map(function(item, i) {
     var icon = item.type === "nav" ? "\u2192" : item.type === "resource" ? "\u25C6" : "\u25C7";
-    var badge = item.badge ? '<span class="badge badge--type" style="margin-left:auto">' + item.badge + '</span>' : '';
-    return '<a href="' + item.link + '" class="cmd-palette-item' +
+    var badge = item.badge ? '<span class="badge badge--type" style="margin-left:auto">' + _esc(item.badge) + '</span>' : '';
+    return '<a href="' + _esc(item.link) + '" class="cmd-palette-item' +
            (i === _paletteIdx ? ' cmd-palette-item--active' : '') +
            '" data-idx="' + i + '">' +
            '<span class="cmd-palette-icon">' + icon + '</span>' +
-           '<span>' + item.name + '</span>' +
+           '<span>' + _esc(item.name) + '</span>' +
            badge + '</a>';
   }).join("");
 }

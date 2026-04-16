@@ -15,6 +15,10 @@
   </div>
 </div>
 
+<div id="connection-error" class="alert alert--warning mb-4" style="display:none">
+  Connection lost after multiple attempts. <a href="javascript:location.reload()">Reload to reconnect</a>.
+</div>
+
 {# ── Active Jobs Panel ── #}
 <div class="settings-section" id="active-jobs-panel">
   <h4>Active Jobs <span id="active-count" class="tab-count">{{ active_items | length }}</span></h4>
@@ -25,12 +29,12 @@
       <thead>
         <tr><th>Type</th><th>Resource</th><th>Status</th><th>Elapsed</th></tr>
       </thead>
-      <tbody>
+      <tbody id="jobs-tbody">
         {% for item in active_items %}
         <tr data-job-id="{{ item.id }}">
           <td><span class="badge badge--type">{{ item.type }}</span></td>
           <td>{{ item.resource }}</td>
-          <td><span class="badge badge--{{ 'warning' if item.status == 'running' else 'unknown' }}">{{ item.status }}</span></td>
+          <td><span class="badge badge--running">{{ item.status }}</span></td>
           <td class="text-muted text-sm job-elapsed" data-started="{{ item.started_at or '' }}">{{ item.elapsed or '—' }}</td>
         </tr>
         {% endfor %}
@@ -38,8 +42,9 @@
     </table>
     {% else %}
     <div class="empty-state p-6" id="no-jobs-msg">
-      <p class="text-muted">No active jobs. The system is idle.</p>
-      <p class="text-sm text-muted">Start a scan or scout from a resource page to see live output here.</p>
+      <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="24" cy="24" r="20"/><path d="M24 14v10l7 7"/></svg>
+      <h3>System is idle</h3>
+      <p class="text-muted">No active jobs. Run a health check from a <a href="/resources">resource page</a> to see live output here.</p>
     </div>
     {% endif %}
   </div>
@@ -47,15 +52,14 @@
 
 {# ── Log Stream Panel ── #}
 <div class="settings-section">
-  <h4>Log Stream
-    <label class="text-sm text-muted font-normal ml-3">
+  <div class="log-stream-header">
+    <h4>Log Stream</h4>
+    <label class="text-sm text-muted font-normal">
       <input type="checkbox" id="show-timestamps" class="mr-1"> Timestamps
     </label>
-    <button class="btn btn-sm btn-outline ml-auto" onclick="document.getElementById('log-output').textContent = ''; logLineCount = 0; document.getElementById('log-line-count').textContent = '0';">
-      Clear
-    </button>
-  </h4>
-  <div class="log-stream-container">
+    <button class="btn btn-sm btn-outline ml-auto" id="clear-log-btn">Clear</button>
+  </div>
+  <div class="log-stream-container" role="log" aria-live="polite">
     <pre id="log-output" class="log-stream-pre"></pre>
   </div>
   <div class="log-stream-footer">
@@ -71,17 +75,24 @@
   var logOutput = document.getElementById("log-output");
   var liveStatus = document.getElementById("live-status");
   var activeCount = document.getElementById("active-count");
-  var logLineCount = document.getElementById("log-line-count");
+  var logLineCountEl = document.getElementById("log-line-count");
   var autoScroll = document.getElementById("auto-scroll");
   var showTimestamps = document.getElementById("show-timestamps");
-  var noJobsMsg = document.getElementById("no-jobs-msg");
   var activeJobsList = document.getElementById("active-jobs-list");
-  window.logLineCount = 0;
+  var connectionError = document.getElementById("connection-error");
+  var lineCount = 0;
 
   var MAX_LOG_LINES = 2000;
+  var MAX_RECONNECTS = 5;
   var source = null;
   var reconnectAttempts = 0;
   var activeJobs = {};
+
+  function esc(str) {
+    var d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+  }
 
   function setStatus(text, connected) {
     liveStatus.innerHTML = connected
@@ -89,9 +100,18 @@
       : '<span class="live-dot live-dot--disconnected"></span> ' + text;
   }
 
-  function appendLog(text, jobId) {
+  function fmtElapsed(startedAt) {
+    if (!startedAt) return "\u2014";
+    var secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+    if (secs < 0) secs = 0;
+    return secs < 60 ? secs + "s" : Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+  }
+
+  // ── Log stream ──
+
+  function appendLog(text, jobId, severity) {
     var line = document.createElement("div");
-    line.className = "log-line";
+    line.className = "log-line" + (severity ? " log-line--" + severity : "");
 
     if (showTimestamps.checked) {
       var ts = document.createElement("span");
@@ -112,15 +132,14 @@
     line.appendChild(msg);
 
     logOutput.appendChild(line);
-    window.logLineCount++;
+    lineCount++;
 
-    // Trim old lines
     while (logOutput.childNodes.length > MAX_LOG_LINES) {
       logOutput.removeChild(logOutput.firstChild);
-      window.logLineCount--;
+      lineCount--;
     }
 
-    logLineCount.textContent = window.logLineCount;
+    logLineCountEl.textContent = lineCount;
 
     if (autoScroll.checked) {
       var container = logOutput.parentElement;
@@ -128,40 +147,65 @@
     }
   }
 
-  function updateJobsTable() {
-    var keys = Object.keys(activeJobs);
-    activeCount.textContent = keys.length;
+  document.getElementById("clear-log-btn").addEventListener("click", function() {
+    logOutput.textContent = "";
+    lineCount = 0;
+    logLineCountEl.textContent = "0";
+  });
 
-    if (keys.length === 0) {
-      activeJobsList.innerHTML =
-        '<div class="empty-state p-6">' +
-        '<p class="text-muted">No active jobs. The system is idle.</p>' +
-        '<p class="text-sm text-muted">Start a scan or scout from a resource page to see live output here.</p>' +
-        '</div>';
-      return;
-    }
+  // ── Jobs table (targeted DOM updates, no innerHTML rebuild) ──
 
-    var html = '<table class="table"><thead><tr><th>Type</th><th>Resource</th><th>Status</th><th>Elapsed</th></tr></thead><tbody>';
-    keys.forEach(function(id) {
-      var j = activeJobs[id];
-      var elapsed = "—";
-      if (j.startedAt) {
-        var secs = Math.floor((Date.now() - new Date(j.startedAt).getTime()) / 1000);
-        elapsed = secs < 60 ? secs + "s" : Math.floor(secs / 60) + "m " + (secs % 60) + "s";
-      }
-      html += '<tr>' +
-        '<td><span class="badge badge--type">' + j.type + '</span></td>' +
-        '<td>' + j.resource + '</td>' +
-        '<td><span class="badge badge--warning">' + j.status + '</span></td>' +
-        '<td class="text-muted text-sm">' + elapsed + '</td>' +
-        '</tr>';
-    });
-    html += '</tbody></table>';
-    activeJobsList.innerHTML = html;
+  function ensureTable() {
+    var table = document.getElementById("active-jobs-table");
+    if (table) return document.getElementById("jobs-tbody");
+    activeJobsList.innerHTML =
+      '<table class="table" id="active-jobs-table">' +
+      '<thead><tr><th>Type</th><th>Resource</th><th>Status</th><th>Elapsed</th></tr></thead>' +
+      '<tbody id="jobs-tbody"></tbody></table>';
+    return document.getElementById("jobs-tbody");
   }
 
+  function showEmpty() {
+    activeJobsList.innerHTML =
+      '<div class="empty-state p-6">' +
+      '<svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="24" cy="24" r="20"/><path d="M24 14v10l7 7"/></svg>' +
+      '<h3>System is idle</h3>' +
+      '<p class="text-muted">No active jobs. Run a health check from a <a href="/resources">resource page</a> to see live output here.</p>' +
+      '</div>';
+  }
+
+  function addJobRow(id, job) {
+    var tbody = ensureTable();
+    var tr = document.createElement("tr");
+    tr.setAttribute("data-job-id", id);
+    tr.innerHTML =
+      '<td><span class="badge badge--type">' + esc(job.type) + '</span></td>' +
+      '<td>' + esc(job.resource) + '</td>' +
+      '<td><span class="badge badge--running">' + esc(job.status) + '</span></td>' +
+      '<td class="text-muted text-sm job-elapsed" data-started="' + esc(job.startedAt) + '">' + fmtElapsed(job.startedAt) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function removeJobRow(id) {
+    var row = document.querySelector('tr[data-job-id="' + id + '"]');
+    if (row) row.remove();
+    if (Object.keys(activeJobs).length === 0) showEmpty();
+  }
+
+  // Tick elapsed cells every 1 second
+  setInterval(function() {
+    var cells = document.querySelectorAll(".job-elapsed[data-started]");
+    cells.forEach(function(cell) {
+      var started = cell.getAttribute("data-started");
+      if (started) cell.textContent = fmtElapsed(started);
+    });
+  }, 1000);
+
+  // ── SSE connection ──
+
   function connect() {
-    if (source) { source.close(); }
+    if (source) source.close();
+    connectionError.style.display = "none";
 
     source = new EventSource("/api/activity/stream");
     setStatus("Live", true);
@@ -176,44 +220,46 @@
             type: data.job_type,
             resource: data.resource,
             status: data.status,
-            startedAt: new Date().toISOString(),
+            startedAt: new Date().toISOString()
           };
-          appendLog("Started: " + data.job_type + " on " + data.resource, data.id);
-          updateJobsTable();
+          activeCount.textContent = Object.keys(activeJobs).length;
+          addJobRow(data.id, activeJobs[data.id]);
+          appendLog("Started: " + data.job_type + " on " + data.resource, data.id, "start");
         }
         else if (data.type === "log") {
-          appendLog(data.text, data.id);
+          var severity = null;
+          if (data.text && (data.text.indexOf("Error") !== -1 || data.text.indexOf("FAIL") !== -1)) severity = "error";
+          appendLog(data.text, data.id, severity);
         }
         else if (data.type === "job_done") {
-          appendLog("Completed: " + (activeJobs[data.id] ? activeJobs[data.id].type : data.id), data.id);
+          appendLog("Completed: " + (activeJobs[data.id] ? activeJobs[data.id].type : data.id), data.id, "done");
           delete activeJobs[data.id];
-          updateJobsTable();
+          activeCount.textContent = Object.keys(activeJobs).length;
+          removeJobRow(data.id);
         }
         else if (data.type === "heartbeat") {
           activeCount.textContent = data.active;
         }
-      } catch (err) {
-        // Ignore parse errors
-      }
+      } catch (err) {}
     };
 
     source.onerror = function() {
       source.close();
       source = null;
       reconnectAttempts++;
+      if (reconnectAttempts >= MAX_RECONNECTS) {
+        setStatus("Disconnected", false);
+        connectionError.style.display = "block";
+        return;
+      }
       var delay = Math.min(reconnectAttempts * 2000, 10000);
       setStatus("Reconnecting...", false);
       setTimeout(connect, delay);
     };
   }
 
-  // Update elapsed times every second
-  setInterval(updateJobsTable, 5000);
-
-  // Start SSE connection
   connect();
 
-  // Cleanup on page leave
   window.addEventListener("beforeunload", function() {
     if (source) source.close();
   });

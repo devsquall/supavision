@@ -4,7 +4,7 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>Resources</h2>
-    <span class="page-subtitle">Infrastructure and codebase inventory</span>
+    <span class="page-subtitle">All monitored resources</span>
   </div>
   <div class="page-header-right">
     <a href="/resources/new" class="btn">+ Add Resource</a>
@@ -44,10 +44,10 @@
 <div class="empty-state">
   <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="24" cy="24" r="20"/><path d="M24 14v20M14 24h20"/></svg>
   <h3>Add your first resource</h3>
-  <p class="text-muted">Resources are the servers, databases, and codebases Supavision monitors.</p>
+  <p class="text-muted">Resources are the servers, databases, and cloud accounts Supavision monitors.</p>
   <div class="mt-4 empty-state-actions">
     <a href="/resources/new?type=server" class="btn" title="Connect via SSH to track health">Monitor a Server</a>
-    <a href="/resources/new?type=codebase" class="btn btn-outline" title="Find security and quality issues in code">Scan a Codebase</a>
+    <a href="/resources/new" class="btn btn-outline" title="AWS, Database, GitHub Org">More Options</a>
   </div>
 </div>
 {% endif %}

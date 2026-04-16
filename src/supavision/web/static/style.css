@@ -648,8 +648,12 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
   padding: var(--sp-3);
   min-height: 200px;
 }
-.log-line { padding: 1px 0; }
+.log-line { padding: 2px 0 2px 8px; border-left: 3px solid transparent; }
 .log-line:hover { background: rgba(255,255,255,0.04); }
+.log-line--start { border-left-color: var(--color-info); }
+.log-line--done { border-left-color: var(--color-healthy); }
+.log-line--error { border-left-color: var(--color-critical); background: rgba(248,81,73,0.06); }
+.log-stream-header { display: flex; align-items: center; gap: var(--sp-3); }
 .log-ts {
   color: var(--_term-muted);
   margin-right: var(--sp-2);
@@ -818,6 +822,8 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 }
 .spinner--sm { width: 12px; height: 12px; border-width: 1.5px; }
 .spinner--lg { width: 24px; height: 24px; border-width: 3px; }
+.htmx-indicator { display: none; opacity: 0; transition: opacity 200ms ease; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-flex; opacity: 1; }
 
 /* Button loading state */
 .btn--loading {

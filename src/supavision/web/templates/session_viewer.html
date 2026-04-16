@@ -7,7 +7,7 @@
   <a href="/sessions?tab={{ 'runs' if session_type == 'run' else 'jobs' }}" class="session-header-back">&larr; Back to Sessions</a>
   <h2>{{ resource_name }}</h2>
   <span class="badge badge--{{ type_label }}">{{ type_label | replace('_', ' ') }}</span>
-  <span class="badge badge--{{ status }}">{{ status }}</span>
+  <span class="badge badge--{{ 'running' if status == 'running' else status }}" data-status-badge>{{ status }}</span>
 </div>
 
 <div class="session-meta mb-4">
@@ -20,6 +20,10 @@
   {% endif %}
 </div>
 
+<div id="session-error-banner" class="alert alert--warning mb-2" style="display:none">
+  Stream disconnected. <a href="javascript:location.reload()">Reload to see the final result</a>.
+</div>
+
 {# ── Terminal Pane ── #}
 <div id="terminal" class="terminal-pane">{% if not is_running and output %}{{ output }}{% elif not is_running and error %}<span class="error-line">{{ error }}</span>{% elif not is_running %}<span class="thinking">No output recorded for this session.</span>{% else %}<span class="thinking">Connecting to live stream...</span>{% endif %}</div>
 
@@ -30,31 +34,46 @@
   var url = '{{ sse_url }}';
   var source = new EventSource(url);
   var firstEvent = true;
+  var startTime = Date.now();
+
+  function classifyLine(text) {
+    if (!text) return '';
+    if (text.indexOf('Error') !== -1 || text.indexOf('FAIL') !== -1 || text.charAt(0) === '\u2717') return 'error-line';
+    if (text.charAt(0) === '$' || text.indexOf('Running:') === 0) return 'tool-call';
+    if (text.indexOf('\u280B') !== -1 || text.indexOf('thinking') !== -1 || text.indexOf('Analyzing') === 0) return 'thinking';
+    return '';
+  }
 
   source.onmessage = function(event) {
-    if (firstEvent) { terminal.textContent = ''; firstEvent = false; }
-    terminal.textContent += event.data + '\n';
+    if (firstEvent) { terminal.innerHTML = ''; firstEvent = false; }
+    var cls = classifyLine(event.data);
+    if (cls) {
+      terminal.innerHTML += '<span class="' + cls + '">' + event.data.replace(/</g, '&lt;') + '</span>\n';
+    } else {
+      var line = document.createTextNode(event.data + '\n');
+      terminal.appendChild(line);
+    }
     terminal.scrollTop = terminal.scrollHeight;
   };
 
   source.addEventListener('done', function() {
     source.close();
-    // Swap the status badge in place.
-    var statusBadge = document.querySelector('.session-header .badge:last-of-type');
-    if (statusBadge) {
-      statusBadge.className = 'badge badge--healthy';
-      statusBadge.textContent = 'completed';
-      if (window.sv && sv.fx) sv.fx.pulse(statusBadge);
+    var elapsed = Math.round((Date.now() - startTime) / 1000);
+
+    var badge = document.querySelector('[data-status-badge]');
+    if (badge) {
+      badge.className = 'badge badge--healthy';
+      badge.textContent = 'completed';
+      if (window.sv && sv.fx) sv.fx.pulse(badge);
     }
+
+    var banner = document.createElement('div');
+    banner.className = 'terminal-complete-banner';
+    banner.innerHTML = 'Run completed in ' + elapsed + 's \u2014 <a href="javascript:window.location.reload()">View full results</a>';
+    terminal.parentNode.insertBefore(banner, terminal.nextSibling);
+
     if (window.sv && sv.toast) {
       sv.toast.show({ title: 'Run complete', type: 'success', duration: 3000 });
-    }
-    // Prefer in-place refresh; only reload if no HTMX partial wired up.
-    var refreshTarget = document.querySelector("[hx-trigger*='refreshOnComplete']");
-    if (refreshTarget && window.htmx) {
-      htmx.trigger(refreshTarget, 'refreshOnComplete');
-    } else {
-      setTimeout(function() { window.location.reload(); }, 1500);
     }
   });
 
@@ -63,7 +82,7 @@
     if (firstEvent) {
       terminal.innerHTML = '<span class="thinking">Stream ended or unavailable.</span>';
     } else {
-      terminal.textContent += '\n[Stream ended]\n';
+      document.getElementById('session-error-banner').style.display = 'block';
     }
   };
 })();

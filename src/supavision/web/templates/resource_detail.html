@@ -48,7 +48,7 @@
 <div id="live-output" class="settings-section">
   <div class="terminal-header">
     <h4>Live Output</h4>
-    <span class="badge badge--warning">{{ active_run.status }}</span>
+    <span class="badge badge--running">{{ active_run.status }}</span>
     {% if active_run.started_at %}
     <span class="terminal-status" data-elapsed-since="{{ active_run.started_at.isoformat() }}">0s</span>
     {% endif %}
