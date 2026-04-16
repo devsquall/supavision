@@ -60,6 +60,7 @@
   <div class="settings-section">
     <h3 class="settings-section-title">
       What changed since last run
+      <span class="text-muted text-sm" style="font-weight:normal">&mdash; compared to the previous health check</span>
     </h3>
     <div class="diff-summary">
       <span class="diff-count diff-count--new">+{{ report.payload_diff.new | length }} new</span>
@@ -93,6 +94,7 @@
   {% if report.payload.metrics %}
   <div class="settings-section">
     <h3 class="settings-section-title">Metrics</h3>
+    <p class="text-muted text-sm mb-2">Numeric measurements collected during this check.</p>
     <div class="metrics-strip">
       {% for name, value in report.payload.metrics.items() %}
       <div class="metric-chip">
@@ -112,6 +114,7 @@
         <span class="muted">({{ report.payload.issues | length }})</span>
       {% endif %}
     </h3>
+    <p class="text-muted text-sm mb-2">Problems identified during this health check, ordered by severity.</p>
     {% if report.payload.issues %}
     <ul class="issue-list">
       {% for issue in report.payload.issues %}
@@ -127,13 +130,13 @@
         </div>
         {% if issue.evidence %}
         <div class="issue-row">
-          <span class="issue-label">Evidence</span>
+          <span class="issue-label" title="Data supporting this finding">Evidence</span>
           <pre class="issue-evidence">{{ issue.evidence }}</pre>
         </div>
         {% endif %}
         {% if issue.recommendation %}
         <div class="issue-row">
-          <span class="issue-label">Recommendation</span>
+          <span class="issue-label" title="Suggested action to resolve this">Recommendation</span>
           <div class="issue-recommendation">{{ issue.recommendation }}</div>
         </div>
         {% endif %}
@@ -157,6 +160,7 @@
   {% if report.run_metadata %}
   <div class="settings-section">
     <h3 class="settings-section-title">Run metadata</h3>
+    <p class="text-muted text-sm mb-2">Technical details about how this check was executed.</p>
     <dl class="kv-list">
       {% if report.run_metadata.template_version %}
       <dt>Template</dt><dd><code>{{ report.run_metadata.template_version }}</code></dd>

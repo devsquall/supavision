@@ -33,7 +33,7 @@
               hx-swap="none"
               data-action="check"
               data-success-msg="Health check started"
-              title="Connect to this resource and run a live diagnostic check">
+              title="Run Claude to explore this resource and check its health (1-3 min)">
         Diagnose
       </button>
       {% endif %}
@@ -206,6 +206,7 @@
     {% endif %}
   </div>
   {% if health_grid %}
+  <p class="text-muted text-sm mb-2">Each cell is one day. Color shows the worst severity recorded that day.</p>
   <div class="health-grid" title="30-day health history">
     {% for day in health_grid %}
     <div class="hg-cell hg-cell--{{ day.severity or 'none' }}"

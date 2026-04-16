@@ -10,6 +10,7 @@
   <span class="badge badge--{{ 'running' if status == 'running' else status }}" data-status-badge>{{ status }}</span>
 </div>
 
+<p class="text-muted text-sm mb-2">Live transcript of Claude's interaction with your infrastructure. Blue lines are tool calls, red lines are errors, gray lines are reasoning.</p>
 <div class="session-meta mb-4">
   {% if started_at %}
   <span>Started <span data-timestamp="{{ started_at }}">{{ started_at }}</span></span>

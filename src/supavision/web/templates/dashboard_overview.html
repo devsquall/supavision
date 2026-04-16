@@ -1,16 +1,17 @@
 {% from '_glossary.html' import severity_legend %}
 {# ── Status Summary Strip ── #}
+<p class="text-muted text-sm mb-2">Current health across all resources. Green = healthy, yellow = warning, red = critical.</p>
 <div class="cc-status-strip">
   <div class="cc-status-item cc-status-item--critical">
     <span class="cc-status-count" data-count-to="{{ critical_count }}">{{ critical_count }}</span>
     {% if critical_delta > 0 %}
-    <span class="trend-arrow trend-arrow--up">&#9650;{{ critical_delta }}</span>
+    <span class="trend-arrow trend-arrow--up" title="Change since previous check">&#9650;{{ critical_delta }}</span>
     {% elif critical_delta < 0 %}
-    <span class="trend-arrow trend-arrow--down">&#9660;{{ critical_delta|abs }}</span>
+    <span class="trend-arrow trend-arrow--down" title="Change since previous check">&#9660;{{ critical_delta|abs }}</span>
     {% endif %}
     <span class="cc-status-label">Critical</span>
     {% if sparkline_critical %}
-    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20" title="30-day trend">
       <polyline points="{{ sparkline_critical }}" fill="none" stroke="var(--color-critical)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     {% endif %}
@@ -18,13 +19,13 @@
   <div class="cc-status-item cc-status-item--warning">
     <span class="cc-status-count" data-count-to="{{ warning_count }}">{{ warning_count }}</span>
     {% if warning_delta > 0 %}
-    <span class="trend-arrow trend-arrow--up">&#9650;{{ warning_delta }}</span>
+    <span class="trend-arrow trend-arrow--up" title="Change since previous check">&#9650;{{ warning_delta }}</span>
     {% elif warning_delta < 0 %}
-    <span class="trend-arrow trend-arrow--down">&#9660;{{ warning_delta|abs }}</span>
+    <span class="trend-arrow trend-arrow--down" title="Change since previous check">&#9660;{{ warning_delta|abs }}</span>
     {% endif %}
     <span class="cc-status-label">Warning</span>
     {% if sparkline_warning %}
-    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20" title="30-day trend">
       <polyline points="{{ sparkline_warning }}" fill="none" stroke="var(--color-warning)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     {% endif %}
@@ -32,13 +33,13 @@
   <div class="cc-status-item cc-status-item--healthy">
     <span class="cc-status-count" data-count-to="{{ healthy_count }}">{{ healthy_count }}</span>
     {% if healthy_delta > 0 %}
-    <span class="trend-arrow trend-arrow--down">&#9660;{{ healthy_delta }}</span>
+    <span class="trend-arrow trend-arrow--down" title="Change since previous check">&#9660;{{ healthy_delta }}</span>
     {% elif healthy_delta < 0 %}
-    <span class="trend-arrow trend-arrow--up">&#9650;{{ healthy_delta|abs }}</span>
+    <span class="trend-arrow trend-arrow--up" title="Change since previous check">&#9650;{{ healthy_delta|abs }}</span>
     {% endif %}
     <span class="cc-status-label">Healthy</span>
     {% if sparkline_healthy %}
-    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20" title="30-day trend">
       <polyline points="{{ sparkline_healthy }}" fill="none" stroke="var(--color-healthy)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     {% endif %}
@@ -63,6 +64,7 @@
     <div class="cc-panel">
       <div class="cc-panel-header">
         <h3 class="cc-panel-title">Action Needed</h3>
+        <span class="text-muted text-sm">Issues that need attention, ordered by severity</span>
         {% if total_action_items > 0 %}
         <span class="badge badge--{{ 'critical' if critical_count > 0 else 'warning' }}">{{ total_action_items }}</span>
         {% endif %}

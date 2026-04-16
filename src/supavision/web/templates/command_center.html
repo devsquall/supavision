@@ -4,7 +4,7 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>Command Center</h2>
-    <span class="page-subtitle">Query your infrastructure</span>
+    <span class="page-subtitle">Run pre-built queries to check resource health, compare baselines, and view stats. Results appear on the right.</span>
   </div>
 </div>
 
@@ -13,7 +13,7 @@
 
   <div class="command-card">
     <div class="command-card-title">System Overview</div>
-    <div class="command-card-desc">Summary of all resources and their current health status</div>
+    <div class="command-card-desc">All resources with their current severity, type, and recent changes</div>
     <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="command" value="system_overview">
@@ -23,7 +23,7 @@
 
   <div class="command-card">
     <div class="command-card-title">Resource Health</div>
-    <div class="command-card-desc">Latest health status, report, and metrics for a resource</div>
+    <div class="command-card-desc">Latest report, severity assessment, and metrics for a specific resource</div>
     <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="command" value="resource_health">
@@ -39,7 +39,7 @@
 
   <div class="command-card">
     <div class="command-card-title">Baseline Comparison</div>
-    <div class="command-card-desc">View the latest system baseline and configuration snapshot</div>
+    <div class="command-card-desc">Configuration snapshot from the most recent discovery — what's running and how it's configured</div>
     <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="command" value="baseline_diff">
@@ -55,7 +55,7 @@
 
   <div class="command-card">
     <div class="command-card-title">Project Stats</div>
-    <div class="command-card-desc">Aggregate statistics across all monitored resources</div>
+    <div class="command-card-desc">Aggregate counts: total resources, runs, reports, and alerts</div>
     <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="command" value="project_stats">

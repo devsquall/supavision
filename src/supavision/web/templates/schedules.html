@@ -27,13 +27,14 @@
 </div>
 
 {% if schedule_rows %}
+<p class="text-muted text-sm mb-3">Discovery maps your infrastructure initially. Health checks monitor it on a recurring schedule. Edit a resource to set or change schedules.</p>
 <div class="table-wrap">
   <table class="table table--stack">
     <thead>
       <tr>
         <th>Resource</th>
-        <th>Discovery Schedule</th>
-        <th>Health Check Schedule</th>
+        <th title="How often to re-scan and map services">Discovery Schedule</th>
+        <th title="How often to check current health">Health Check Schedule</th>
         <th>Next Run</th>
         <th>Status</th>
       </tr>

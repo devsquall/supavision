@@ -4,7 +4,7 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>Ask Supavision</h2>
-    <span class="page-subtitle">Ask questions about your infrastructure</span>
+    <span class="page-subtitle">Ask natural-language questions about your infrastructure. Uses your resource data, reports, and metrics as context.</span>
   </div>
 </div>
 
@@ -32,6 +32,7 @@
       <textarea class="chat-input" id="chat-input"
               placeholder="Ask about your infrastructure..."
               rows="1"></textarea>
+      <p class="text-muted text-xs mt-1" style="position:absolute;bottom:-18px;left:0">Try: "Which resources have warnings?" or "What changed since yesterday?"</p>
       <button class="btn btn-primary chat-send-btn" id="chat-send-btn"
               onclick="sendChatMessage()">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5V9l8-1-8-1z"/></svg>

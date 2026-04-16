@@ -4,7 +4,7 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>Alerts</h2>
-    <span class="page-subtitle">Notification history and delivery status</span>
+    <span class="page-subtitle">Notifications sent when a resource's health changes. Configure webhooks in each resource's settings.</span>
   </div>
 </div>
 
@@ -60,9 +60,9 @@
         <span class="badge">{{ item.channel }}</span>
         {% endif %}
         {% if item.status == 'sent' %}
-        <span class="badge badge--healthy">Sent</span>
+        <span class="badge badge--healthy" title="Delivered successfully">Sent</span>
         {% elif item.status == 'failed' %}
-        <span class="badge badge--critical">Failed</span>
+        <span class="badge badge--critical" title="Delivery failed — check webhook URL">Failed</span>
         {% else %}
         <span class="badge">{{ item.status }}</span>
         {% endif %}
