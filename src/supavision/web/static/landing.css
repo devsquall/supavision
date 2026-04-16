@@ -99,6 +99,10 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
 }
 .lp-nav-links a { transition: color 150ms ease; }
 .lp-nav-links a:hover { color: var(--lp-text); }
+.lp-nav-toggle {
+  display: none; background: none; border: none; color: var(--lp-text-2);
+  cursor: pointer; padding: var(--lp-sp-2);
+}
 
 /* ── Buttons ─────────────────────────────────────────────────── */
 
@@ -483,6 +487,16 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
 /* ── Responsive ──────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
+  .lp-nav-toggle { display: block; }
+  .lp-nav-links {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; gap: 0; padding: var(--lp-sp-4) var(--lp-sp-6);
+    background: rgba(10, 10, 31, 0.95);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--lp-border-dark);
+  }
+  .lp-nav-links.is-open { display: flex; }
+  .lp-nav-links a { padding: var(--lp-sp-3) 0; }
   .lp-hero-inner { grid-template-columns: 1fr; gap: var(--lp-sp-8); }
   .lp-hero-copy { text-align: center; }
   .lp-hero-sub { margin-left: auto; margin-right: auto; }

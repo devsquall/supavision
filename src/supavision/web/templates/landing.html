@@ -15,6 +15,10 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Supavision: open-source AI infrastructure monitoring">
   <meta name="twitter:description" content="Claude investigates your infrastructure and returns structured reports with diffs and actionable alerts. Open source on GitHub, install with pip.">
+  <meta property="og:image" content="https://supavision.devsquall.com/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:image" content="https://supavision.devsquall.com/static/og-image.png">
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,6 +36,9 @@
       <a href="#" class="lp-logo" aria-label="Supavision home">
         <span class="lp-logo-accent">S</span>upavision
       </a>
+      <button class="lp-nav-toggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <div class="lp-nav-links">
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
@@ -353,6 +360,23 @@
         });
       }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
       document.querySelectorAll('.lp-reveal').forEach(function (el) { io.observe(el); });
+    })();
+
+    // Mobile nav toggle
+    (function () {
+      var btn = document.querySelector('.lp-nav-toggle');
+      var links = document.querySelector('.lp-nav-links');
+      if (!btn || !links) return;
+      btn.addEventListener('click', function () {
+        var open = links.classList.toggle('is-open');
+        btn.setAttribute('aria-expanded', open);
+      });
+      links.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          links.classList.remove('is-open');
+          btn.setAttribute('aria-expanded', 'false');
+        });
+      });
     })();
   </script>
 </body>

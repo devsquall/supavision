@@ -24,7 +24,7 @@ Traditional monitoring requires you to define every check, threshold, and alert 
 Add server → Discovery (Claude explores via SSH) → Baseline → Scheduled health checks → Slack alerts
 ```
 
-Supports: **Servers** (SSH), **AWS Accounts**, **Databases** (PostgreSQL + MySQL), **GitHub Orgs** — extensible via prompt templates.
+Supports: **Servers** (SSH), **AWS Accounts**, **Databases**, **GitHub Orgs** — extensible via prompt templates.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ pip install -e ".[dev]"
 | **Web dashboard** | Real-time status, live xterm streaming of Claude's tool calls, 30-day health grid, sparklines |
 | **Command palette** | `Cmd+K` (or `Ctrl+K`) global search + keyboard shortcuts (`g d`, `g r`, `?` for help) |
 | **User auth** | Session-based login, role-based access (admin/viewer), profile editing, user management |
-| **5 resource types** | Server, AWS Account, PostgreSQL, MySQL, GitHub Organization |
+| **4 resource types** | Server, AWS Account, Database, GitHub Organization |
 | **Structured reports** | Optional typed-issue payload via `submit_report` tool — enables set-diff across runs, smart alerts, per-metric trends |
 | **Live session transparency** | Stream-json parsing of Claude CLI — see each SSH command, tool result, and reasoning step live |
 | **Structured metrics** | Schema-validated per-resource metrics with time-series history |
