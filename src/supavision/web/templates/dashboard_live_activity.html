@@ -1,0 +1,20 @@
+{% if activities %}
+<div class="cc-activity-list">
+  {% for a in activities %}
+  <div class="cc-activity-item">
+    {% if a.status == 'running' %}
+    <span class="spinner spinner--sm"></span>
+    {% else %}
+    <span class="status-dot status-dot--unknown status-dot--md"></span>
+    {% endif %}
+    <div class="cc-activity-body">
+      <a href="{{ a.link }}" class="cc-activity-label">{{ a.label }}</a>
+      <span class="cc-activity-type">{{ a.type }}</span>
+    </div>
+    <span class="badge badge--{{ 'warning' if a.status == 'running' else 'unknown' }}">{{ a.status }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="cc-empty-panel">Idle &mdash; no scans or checks running.</div>
+{% endif %}

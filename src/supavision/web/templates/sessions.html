@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Sessions - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Sessions</h2>
+    <span class="page-subtitle">Transcripts from health checks and discovery runs</span>
+  </div>
+</div>
+
+<div class="filter-bar mb-4">
+  <form method="get" action="/sessions" class="filter-form">
+    <select name="status" class="form-select">
+      <option value="">All statuses</option>
+      {% for s in run_statuses %}
+      <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select name="run_type" class="form-select">
+      <option value="">All types</option>
+      {% for t in run_types %}
+      <option value="{{ t }}" {{ 'selected' if run_type_filter == t }}>{{ t | replace('_', ' ') | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+    {% if status_filter or run_type_filter %}
+    <a href="/sessions" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if run_rows %}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead>
+      <tr>
+        <th>Resource</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Duration</th>
+        <th>Tokens</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in run_rows %}
+      <tr>
+        <td data-label="Resource"><a href="/resources/{{ row.resource_id }}">{{ row.resource_name }}</a></td>
+        <td data-label="Type"><span class="badge badge--{{ row.run_type }}">{{ row.run_type | replace('_', ' ') }}</span></td>
+        <td data-label="Status"><span class="badge badge--{{ row.status }}">{{ row.status }}</span></td>
+        <td data-label="Started"><span data-timestamp="{{ row.started_at }}">{{ row.started_at }}</span></td>
+        <td data-label="Duration">{{ row.duration or "&mdash;" }}</td>
+        <td data-label="Tokens">{{ "{:,}".format(row.tokens) if row.tokens else "&mdash;" }}</td>
+        <td>
+          {% if row.status == "running" %}
+          <a href="/sessions/run/{{ row.id }}" class="btn btn-sm">Watch</a>
+          {% else %}
+          <a href="/sessions/run/{{ row.id }}" class="btn btn-sm btn-outline">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64"><rect x="6" y="10" width="52" height="38" rx="4"/><path d="M14 22h8M14 30h20M14 38h14" opacity="0.5"/></svg>
+  <h3>No infrastructure runs</h3>
+  <p class="text-muted">Runs appear here after you run health checks or discoveries on your resources.</p>
+  <a href="/resources" class="btn mt-3">View Resources</a>
+</div>
+{% endif %}
+{% endblock %}

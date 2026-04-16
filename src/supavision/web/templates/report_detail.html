@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Report: {{ resource_name }} - Supavision{% endblock %}
+{% block og_meta %}
+  {% set og_severity = evaluation.severity if evaluation else 'unknown' %}
+  {% set og_summary = evaluation.summary if evaluation else (report.payload.summary if report.payload else 'Health check report') %}
+  <meta property="og:title" content="{{ resource_name }} — {{ og_severity | upper }}">
+  <meta property="og:description" content="{{ og_summary[:200] }}">
+  <meta property="og:type" content="article">
+  {% if base_url %}<meta property="og:url" content="{{ base_url }}/reports/{{ report.id }}">{% endif %}
+  <meta property="og:site_name" content="Supavision">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ resource_name }} — {{ og_severity | upper }}">
+  <meta name="twitter:description" content="{{ og_summary[:200] }}">
+{% endblock %}
+{% block content %}
+
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Resources</a></li>
+  <li><a href="/resources/{{ report.resource_id }}">{{ resource_name }}</a></li>
+  <li>Report</li>
+</ul>
+
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>{{ report.run_type | capitalize }} Report</h2>
+    <span class="page-subtitle">
+      {{ resource_name }}
+      {% if evaluation %}
+      <span class="badge badge--{{ evaluation.severity }}">{{ evaluation.severity }}</span>
+      {% endif %}
+      {% if report.payload is none and report.run_type == 'health_check' %}
+      <span class="badge badge--muted" title="Legacy prose-only report (pre-structured)">legacy</span>
+      {% endif %}
+      &mdash; <span data-timestamp="{{ report.created_at }}">{{ report.created_at }}</span>
+    </span>
+  </div>
+  <div class="page-header-right">
+    <button type="button" class="btn btn-outline btn-sm" data-copy-link title="Copy shareable link">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M6.5 2.5h-3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3"/>
+        <path d="M13.5 2.5h-4v4"/><path d="M13.5 2.5L8 8"/>
+      </svg>
+      Copy link
+    </button>
+    <a href="/resources/{{ report.resource_id }}" class="btn btn-outline">Back to Resource</a>
+  </div>
+</div>
+
+{% if evaluation %}
+<div class="action-card {{ '' if evaluation.severity == 'critical' else 'action-card--warning' if evaluation.severity == 'warning' else 'action-card--info' }} mb-4">
+  <div class="action-card-title">{{ evaluation.summary }}</div>
+</div>
+{% endif %}
+
+{% if report.payload %}
+  {# ── Workstream A5: structured report render ─────────────────────── #}
+
+  {# What changed since last run (A6) #}
+  {% if report.payload_diff %}
+  <div class="settings-section">
+    <h3 class="settings-section-title">
+      What changed since last run
+    </h3>
+    <div class="diff-summary">
+      <span class="diff-count diff-count--new">+{{ report.payload_diff.new | length }} new</span>
+      <span class="diff-count diff-count--resolved">&minus;{{ report.payload_diff.resolved | length }} resolved</span>
+      <span class="diff-count diff-count--persisted">={{ report.payload_diff.persisted | length }} persisted</span>
+    </div>
+    {% if report.payload_diff.new %}
+    <div class="diff-group">
+      <span class="diff-label">New</span>
+      <ul class="diff-list">
+        {% for entry in report.payload_diff.new %}
+        <li class="diff-entry diff-entry--{{ entry.severity }}">{{ entry.title }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if report.payload_diff.resolved %}
+    <div class="diff-group">
+      <span class="diff-label">Resolved</span>
+      <ul class="diff-list">
+        {% for entry in report.payload_diff.resolved %}
+        <li class="diff-entry diff-entry--{{ entry.severity }}">{{ entry.title }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Metrics strip #}
+  {% if report.payload.metrics %}
+  <div class="settings-section">
+    <h3 class="settings-section-title">Metrics</h3>
+    <div class="metrics-strip">
+      {% for name, value in report.payload.metrics.items() %}
+      <div class="metric-chip">
+        <span class="metric-chip-name">{{ name }}</span>
+        <span class="metric-chip-value">{{ value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Issues list #}
+  <div class="settings-section">
+    <h3 class="settings-section-title">
+      Issues
+      {% if report.payload.issues %}
+        <span class="muted">({{ report.payload.issues | length }})</span>
+      {% endif %}
+    </h3>
+    {% if report.payload.issues %}
+    <ul class="issue-list">
+      {% for issue in report.payload.issues %}
+      <li class="issue issue--{{ issue.severity }}">
+        <div class="issue-header">
+          <span class="badge badge--{{ 'critical' if issue.severity == 'critical' else 'warning' if issue.severity == 'warning' else 'info' }}">
+            {{ issue.severity }}
+          </span>
+          <span class="issue-title">{{ issue.title }}</span>
+          {% if issue.scope %}
+          <code class="issue-scope">{{ issue.scope }}</code>
+          {% endif %}
+        </div>
+        {% if issue.evidence %}
+        <div class="issue-row">
+          <span class="issue-label">Evidence</span>
+          <pre class="issue-evidence">{{ issue.evidence }}</pre>
+        </div>
+        {% endif %}
+        {% if issue.recommendation %}
+        <div class="issue-row">
+          <span class="issue-label">Recommendation</span>
+          <div class="issue-recommendation">{{ issue.recommendation }}</div>
+        </div>
+        {% endif %}
+        {% if issue.tags %}
+        <div class="issue-row">
+          <span class="issue-label">Tags</span>
+          <div class="issue-tags">
+            {% for tag in issue.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No issues reported — all checks passed.</p>
+    {% endif %}
+  </div>
+
+  {# Run metadata (engine-stamped) #}
+  {% if report.run_metadata %}
+  <div class="settings-section">
+    <h3 class="settings-section-title">Run metadata</h3>
+    <dl class="kv-list">
+      {% if report.run_metadata.template_version %}
+      <dt>Template</dt><dd><code>{{ report.run_metadata.template_version }}</code></dd>
+      {% endif %}
+      {% if report.run_metadata.tool_calls_made %}
+      <dt>Tool calls</dt><dd>{{ report.run_metadata.tool_calls_made }}</dd>
+      {% endif %}
+      {% if report.run_metadata.runtime_seconds %}
+      <dt>Runtime</dt><dd>{{ report.run_metadata.runtime_seconds }}s</dd>
+      {% endif %}
+    </dl>
+  </div>
+  {% endif %}
+
+  {# Collapsed raw narrative #}
+  <details class="settings-section">
+    <summary class="settings-section-title">Raw narrative</summary>
+    <div class="report-content">{{ report_html | safe }}</div>
+  </details>
+
+{% else %}
+  {# ── Legacy fallback: prose-only report ─────────────────────────── #}
+  <div class="settings-section">
+    <div class="report-content">{{ report_html | safe }}</div>
+  </div>
+{% endif %}
+
+{% endblock %}

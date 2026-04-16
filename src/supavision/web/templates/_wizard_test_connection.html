@@ -1,0 +1,84 @@
+<div class="wizard-card">
+  <h3>Step {{ current_wizard_step }}: Test Connection</h3>
+
+  <p class="text-muted mb-4">Testing SSH connection to <code>{{ data.user or 'ubuntu' }}@{{ data.host }}:{{ data.port or '22' }}</code></p>
+
+  {% if errors %}
+  <div class="alert alert--danger mb-4">
+    {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div id="test-result-area" class="mb-4">
+    <div class="alert alert--info" id="test-status">
+      <span class="badge badge--running">Testing</span> Connecting to {{ data.user or 'ubuntu' }}@{{ data.host }}:{{ data.port or '22' }}...
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-outline hidden" id="retry-btn" onclick="runTest()">Retry</button>
+
+  <script>
+  function runTest() {
+    var statusEl = document.getElementById('test-status');
+    statusEl.className = 'alert alert--info';
+    statusEl.innerHTML = '<span class="badge badge--running">Testing</span> Connecting to {{ data.user or "ubuntu" }}@{{ data.host }}:{{ data.port or "22" }}...';
+    document.getElementById('retry-btn').classList.add('hidden');
+    document.getElementById('next-btn').disabled = true;
+
+    var fd = new FormData();
+    fd.append('csrf_token', '{{ csrf_token }}');
+    fd.append('host', '{{ data.host }}');
+    fd.append('port', '{{ data.port or "22" }}');
+    fd.append('user', '{{ data.user or "ubuntu" }}');
+    fd.append('ssh_key_path', '{{ data.ssh_key_path or "" }}');
+
+    fetch('/resources/wizard/test', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var el = document.getElementById('test-status');
+        if (d.ok) {
+          el.className = 'alert alert--success';
+          el.innerHTML = '<strong>Connected successfully</strong> &mdash; ' + d.message;
+          document.getElementById('next-btn').disabled = false;
+        } else {
+          el.className = 'alert alert--danger';
+          el.innerHTML = '<strong>Connection failed</strong> &mdash; ' + d.message;
+          document.getElementById('retry-btn').classList.remove('hidden');
+        }
+      })
+      .catch(function(e) {
+        var el = document.getElementById('test-status');
+        el.className = 'alert alert--danger';
+        el.textContent = 'Error: ' + e;
+        document.getElementById('retry-btn').classList.remove('hidden');
+      });
+  }
+  runTest();
+  </script>
+
+  <form hx-post="/resources/wizard/next" hx-target="#wizard-content" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+    <input type="hidden" name="resource_type" value="{{ resource_type }}">
+    {% for key, val in data.items() %}
+    {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+    <input type="hidden" name="{{ key }}" value="{{ val }}">
+    {% endif %}
+    {% endfor %}
+
+    <div class="wizard-footer">
+      <form class="inline-form" hx-post="/resources/wizard/back" hx-target="#wizard-content" hx-swap="innerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+        <input type="hidden" name="resource_type" value="{{ resource_type }}">
+        {% for key, val in data.items() %}
+        {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+        <input type="hidden" name="{{ key }}" value="{{ val }}">
+        {% endif %}
+        {% endfor %}
+        <button type="submit" class="btn btn-outline">&larr; Back</button>
+      </form>
+      <button type="submit" class="btn" id="next-btn" disabled>{% if next_step_label %}Next: {{ next_step_label }}{% else %}Create Resource{% endif %}</button>
+    </div>
+  </form>
+</div>

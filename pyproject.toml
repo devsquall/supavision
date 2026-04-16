@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "supavision"
+version = "0.4.1"
+description = "AI-powered infrastructure monitoring that discovers and watches your servers intelligently"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+keywords = ["monitoring", "infrastructure", "ai", "llm", "claude", "devops", "server"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "httpx>=0.27.0",
+    "croniter>=2.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/supavision"]
+
+[tool.hatch.build.targets.sdist]
+# Exclude large reference assets from the source distribution. The wheel
+# is what most users install; the sdist is only for build-from-source.
+exclude = [
+    "screenshots/",
+    "teleport.png",
+    ".github/",
+    "docker-compose.yml",
+    "Dockerfile",
+    ".dockerignore",
+    "ui-guidance.md",
+    "web-auth.md",
+    "scripts/",
+]
+
+[project.scripts]
+supavision = "supavision.cli:main"
+
+[project.urls]
+Repository = "https://github.com/devsquall/supavision"
+Documentation = "https://github.com/devsquall/supavision#readme"
+Issues = "https://github.com/devsquall/supavision/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/supavision/cli.py" = ["E402"]  # _load_dotenv() must run before imports

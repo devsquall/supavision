@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Supavision: open-source AI infrastructure monitoring</title>
+  <meta name="description" content="Supavision runs Claude as a monitoring agent. Every health check returns a structured report with stable issue IDs, run-vs-run diffs, and Slack alerts you can act on. Open source, MIT licensed, on PyPI.">
+  <meta name="theme-color" content="#0a0a1f">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Supavision: open-source AI infrastructure monitoring">
+  <meta property="og:description" content="Claude investigates your infrastructure and returns structured reports with diffs and actionable alerts. Open source on GitHub, install with pip.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Supavision">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Supavision: open-source AI infrastructure monitoring">
+  <meta name="twitter:description" content="Claude investigates your infrastructure and returns structured reports with diffs and actionable alerts. Open source on GitHub, install with pip.">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/static/landing.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+  <a href="#main" class="lp-skip">Skip to content</a>
+
+  <!-- ── NAV ─────────────────────────────────────────────────── -->
+  <nav class="lp-nav" aria-label="Primary">
+    <div class="lp-nav-inner">
+      <a href="#" class="lp-logo" aria-label="Supavision home">
+        <span class="lp-logo-accent">S</span>upavision
+      </a>
+      <div class="lp-nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#security">Security</a>
+        <a href="https://github.com/devsquall/supavision" class="lp-btn lp-btn--ghost lp-btn--sm">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+
+  <!-- ── HERO ────────────────────────────────────────────────── -->
+  <section class="lp-hero">
+    <div class="lp-hero-inner">
+      <div class="lp-hero-copy lp-reveal">
+        <span class="lp-eyebrow">Open source, MIT licensed, on PyPI</span>
+        <h1 class="lp-hero-title">
+          Your infrastructure,<br>
+          <span class="lp-hero-accent">monitored</span><br>
+          by AI.
+        </h1>
+        <p class="lp-hero-sub">
+          Open-source monitoring that runs Claude as a read-only agent against your servers,
+          AWS, GitHub, and databases. Structured reports with typed issues, evidence, and run-vs-run diffs.
+        </p>
+        <div class="lp-hero-ctas">
+          <a href="https://github.com/devsquall/supavision" class="lp-btn lp-btn--primary">View on GitHub &rarr;</a>
+          <a href="#how" class="lp-btn lp-btn--ghost">How it works</a>
+        </div>
+      </div>
+
+      <div class="lp-hero-mockup lp-reveal" role="img" aria-label="Preview of a structured Supavision health report">
+        <div class="lp-mockup-header">
+          <span class="lp-mockup-dot lp-mockup-dot--r"></span>
+          <span class="lp-mockup-dot lp-mockup-dot--y"></span>
+          <span class="lp-mockup-dot lp-mockup-dot--g"></span>
+          <span class="lp-mockup-title">prod-server-01 · health_check</span>
+        </div>
+        <span class="lp-mockup-badge">⚠ warning</span>
+        <div class="lp-mockup-summary">Disk at 82% on /var, growing 4GB/week. Certbot renewal failing. 3 systemd services crash-looping.</div>
+        <div class="lp-mockup-metrics">
+          <span class="lp-mockup-metric">cpu<strong>23%</strong></span>
+          <span class="lp-mockup-metric">mem<strong>61%</strong></span>
+          <span class="lp-mockup-metric">disk<strong>82%</strong></span>
+          <span class="lp-mockup-metric">load<strong>0.7</strong></span>
+        </div>
+        <div class="lp-mockup-issue lp-mockup-issue--warning">
+          <div class="lp-mockup-issue-title">Disk will be full in 28 days</div>
+          <div class="lp-mockup-issue-body">Rotate /var/log/app/*.log. /var grew 4.1GB/week.</div>
+        </div>
+        <div class="lp-mockup-issue lp-mockup-issue--critical">
+          <div class="lp-mockup-issue-title">certbot SSL renewal failing</div>
+          <div class="lp-mockup-issue-body">ACME challenges failing for master.devsquall.com</div>
+        </div>
+        <div class="lp-mockup-diff">
+          <span class="lp-mockup-diff-new">+2 new</span>
+          <span class="lp-mockup-diff-resolved">−1 resolved</span>
+          <span>=3 persisted</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PROBLEM ─────────────────────────────────────────────── -->
+  <section class="lp-section lp-section--light">
+    <div class="lp-container lp-container--narrow" style="text-align:center">
+      <h2 class="lp-section-title lp-reveal">Monitoring tells you <em>what</em> broke.<br>Not <em>why</em>. Not <em>what to do</em>.</h2>
+      <p class="lp-section-sub lp-reveal" style="margin:0 auto">You get a 3am Slack alert: "disk usage warning." Then you SSH in, tail logs, check docker, look at cron. Same 20-minute routine, every page. Supavision does that investigation for you.</p>
+    </div>
+  </section>
+
+  <!-- ── FEATURES (detailed with visuals) ────────────────────── -->
+  <section id="features" class="lp-section lp-section--light" style="padding-top:0">
+    <div class="lp-container">
+      <!-- Feature 1: Structured reports -->
+      <div class="lp-feature lp-reveal">
+        <div>
+          <span class="lp-eyebrow">Structured reports</span>
+          <h3>Skim a report in 5 seconds.</h3>
+          <p>Every health check produces a typed payload: status, summary, metrics, and a list of issues with severity, evidence, and recommendations. No prose dumps to parse.</p>
+          <ul class="lp-feature-list">
+            <li>Pydantic-validated at the boundary</li>
+            <li>Dual-mode evaluator: structured primary, regex fallback</li>
+            <li>Raw narrative still available collapsed</li>
+          </ul>
+        </div>
+        <div class="lp-feature-visual">
+          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
+            <rect x="20" y="28" width="200" height="20" rx="6" fill="#bf8700"/>
+            <rect x="20" y="68" width="440" height="12" rx="4" fill="#d0d7de"/>
+            <rect x="20" y="96" width="320" height="12" rx="4" fill="#d0d7de"/>
+            <g>
+              <rect x="20" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="60" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">cpu 23%</text>
+              <rect x="108" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="148" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">mem 61%</text>
+              <rect x="196" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="236" y="164" font-family="Inter" font-size="11" fill="#bf8700" text-anchor="middle">disk 82%</text>
+              <rect x="284" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="324" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">load 0.7</text>
+            </g>
+            <rect x="20" y="200" width="440" height="48" rx="8" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
+            <rect x="20" y="200" width="6" height="48" fill="#bf8700"/>
+            <text x="40" y="224" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">Disk will be full in 28 days</text>
+            <text x="40" y="240" font-family="Inter" font-size="9" fill="#8b949e">Rotate /var/log/app/*.log — grew 4.1 GB/week</text>
+            <rect x="20" y="260" width="440" height="48" rx="8" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
+            <rect x="20" y="260" width="6" height="48" fill="#d1242f"/>
+            <text x="40" y="284" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">certbot SSL renewal failing</text>
+            <text x="40" y="300" font-family="Inter" font-size="9" fill="#8b949e">ACME challenges failing for master.devsquall.com</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Feature 2: Run diffs -->
+      <div class="lp-feature lp-feature--reverse lp-reveal">
+        <div>
+          <span class="lp-eyebrow">Run-vs-run diffs</span>
+          <h3>See what changed. Instantly.</h3>
+          <p>Stable issue IDs (derived from tag + scope slugs) make set-diffs across runs deterministic. New, resolved, and persisted counts show up in the dashboard and Slack alerts.</p>
+          <ul class="lp-feature-list">
+            <li>Issue title drift does not break the diff</li>
+            <li>Cheap: plain set math, no LLM cost</li>
+            <li>Visible in reports, timelines, and alerts</li>
+          </ul>
+        </div>
+        <div class="lp-feature-visual">
+          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
+            <text x="40" y="50" font-family="Inter" font-weight="700" font-size="13" fill="#1a1a2e">What changed</text>
+            <g transform="translate(40 80)">
+              <rect x="0" y="0" width="110" height="48" rx="10" fill="#bf87001a" stroke="#bf8700" stroke-width="1"/>
+              <text x="55" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#bf8700" text-anchor="middle">+2 new</text>
+            </g>
+            <g transform="translate(165 80)">
+              <rect x="0" y="0" width="140" height="48" rx="10" fill="#1a7f371a" stroke="#1a7f37" stroke-width="1"/>
+              <text x="70" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#1a7f37" text-anchor="middle">−1 resolved</text>
+            </g>
+            <g transform="translate(320 80)">
+              <rect x="0" y="0" width="110" height="48" rx="10" fill="#e9ecef" stroke="#d0d7de" stroke-width="1"/>
+              <text x="55" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#57606a" text-anchor="middle">=3 persisted</text>
+            </g>
+            <line x1="40" y1="155" x2="440" y2="155" stroke="#e9ecef" stroke-width="1"/>
+            <text x="40" y="185" font-family="Inter" font-size="11" fill="#bf8700">new: Disk will be full in 28 days</text>
+            <text x="40" y="210" font-family="Inter" font-size="11" fill="#bf8700">new: certbot SSL renewal failing</text>
+            <text x="40" y="245" font-family="Inter" font-size="11" fill="#1a7f37">resolved: nginx worker restart loop</text>
+            <text x="40" y="280" font-family="Inter" font-size="11" fill="#8b949e">persisted: ssh brute-force attempts (port 22)</text>
+            <text x="40" y="305" font-family="Inter" font-size="11" fill="#8b949e">persisted: unattended-upgrades disabled</text>
+            <text x="40" y="330" font-family="Inter" font-size="11" fill="#8b949e">persisted: /tmp not on tmpfs</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Feature 3: Slack alerts -->
+      <div class="lp-feature lp-reveal">
+        <div>
+          <span class="lp-eyebrow">Actionable Slack alerts</span>
+          <h3>Alerts that say what to do.</h3>
+          <p>When a critical issue appears, the Slack message cites the top issue, its recommendation, and the diff counts. Deep link back to the full report. Dedup prevents the same issue from alerting repeatedly.</p>
+          <ul class="lp-feature-list">
+            <li>Dedup keyed by stable issue ID</li>
+            <li>Block Kit formatting with severity colors</li>
+            <li>Falls back to legacy format for older reports</li>
+          </ul>
+        </div>
+        <div class="lp-feature-visual">
+          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
+            <rect x="20" y="20" width="440" height="320" rx="16" fill="#fff" stroke="#d0d7de"/>
+            <rect x="20" y="20" width="10" height="320" rx="4 0 0 4" fill="#d1242f"/>
+            <text x="50" y="60" font-family="Inter" font-weight="700" font-size="14" fill="#1a1a2e">prod-01 · CRITICAL</text>
+            <text x="50" y="88" font-family="Inter" font-size="10" fill="#57606a">Disk at 99% on /var, 3 services crash-looping</text>
+            <rect x="50" y="110" width="390" height="70" rx="8" fill="#f6f8fa"/>
+            <text x="66" y="136" font-family="Inter" font-weight="700" font-size="11" fill="#1a1a2e">Top issue: Disk will be full in 28 days</text>
+            <text x="66" y="158" font-family="Inter" font-size="9.5" fill="#57606a">Rotate /var/log/app/*.log — /var grew 4.1 GB/week</text>
+            <text x="66" y="173" font-family="Inter" font-size="9.5" fill="#57606a">Consider moving docker volumes off /var</text>
+            <text x="50" y="215" font-family="JetBrains Mono" font-size="11" fill="#57606a">+2 new, −1 resolved, =3 persisted</text>
+            <rect x="50" y="240" width="160" height="40" rx="8" fill="#0969da"/>
+            <text x="130" y="265" font-family="Inter" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">View full report →</text>
+            <text x="50" y="310" font-family="Inter" font-size="9" fill="#8b949e">via Supavision · 2 min ago</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MORE CAPABILITIES (compact cards) ───────────────────── -->
+  <section class="lp-section lp-section--light" style="padding-top:0">
+    <div class="lp-container">
+      <div class="lp-cards-grid lp-reveal">
+        <div class="lp-card">
+          <div class="lp-card-icon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="18" rx="3"/><path d="M8 7h8M8 11h5"/></svg>
+          </div>
+          <h3>4 resource types</h3>
+          <p>Servers (SSH), AWS accounts, GitHub orgs, and databases. Each type has its own prompt templates and tool allowlist. Add custom types via templates.</p>
+        </div>
+        <div class="lp-card">
+          <div class="lp-card-icon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+          </div>
+          <h3>Claude Code MCP</h3>
+          <p>Ships an MCP server so Claude Code can query your ops data directly. "How has prod-01 been trending this week?" Read-only by default.</p>
+        </div>
+        <div class="lp-card">
+          <div class="lp-card-icon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v4M16 2v4M4 10h16"/></svg>
+          </div>
+          <h3>Cron scheduling</h3>
+          <p>Set a cron expression per resource. Health checks run in the background with a concurrency limit. Miss nothing, waste no cycles.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ────────────────────────────────────────── -->
+  <section id="how" class="lp-section">
+    <div class="lp-container lp-container--narrow" style="text-align:center">
+      <h2 class="lp-section-title lp-reveal">Three steps. Five minutes.</h2>
+    </div>
+    <div class="lp-container">
+      <div class="lp-steps lp-reveal">
+        <div class="lp-step">
+          <h3>Connect</h3>
+          <p>Add a server, AWS account, GitHub org, or database via the dashboard wizard or CLI. Credentials stored as env var references, not raw secrets.</p>
+        </div>
+        <div class="lp-step">
+          <h3>Schedule</h3>
+          <p>Set a cron per resource. Claude investigates using read-only tools from a per-resource allowlist. No writes, no destructive actions.</p>
+        </div>
+        <div class="lp-step">
+          <h3>Act</h3>
+          <p>Read the dashboard, get Slack alerts with the top issue and its recommendation, or ask Claude Code via MCP.</p>
+        </div>
+      </div>
+
+      <div class="lp-install lp-reveal">
+        <div class="lp-install-blocks">
+          <div>
+            <span class="lp-code-label">install</span>
+            <div class="lp-code"><span class="lp-code-prompt">$</span> pip install supavision</div>
+          </div>
+          <div>
+            <span class="lp-code-label">create an admin user</span>
+            <div class="lp-code"><span class="lp-code-prompt">$</span> supavision create-admin</div>
+          </div>
+        </div>
+        <div class="lp-install-ctas">
+          <a href="https://github.com/devsquall/supavision" class="lp-btn lp-btn--primary">Star on GitHub &rarr;</a>
+          <a href="https://pypi.org/project/supavision/" class="lp-btn lp-btn--ghost">View on PyPI</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECURITY ────────────────────────────────────────────── -->
+  <section id="security" class="lp-section">
+    <div class="lp-container lp-container--narrow" style="text-align:center">
+      <h2 class="lp-section-title lp-reveal">Read-only by design.</h2>
+      <p class="lp-section-sub lp-reveal" style="margin:0 auto">The agent runs from a curated allowlist of ~70 read-only commands. No shell chaining, no SQL writes, no destructive operations. Everything is auditable.</p>
+    </div>
+    <div class="lp-container">
+      <ul class="lp-security lp-reveal">
+        <li><strong>RBAC built in.</strong> Admin and viewer roles. Per-endpoint enforcement on every mutation route.</li>
+        <li><strong>CSRF tokens on every form.</strong> Double-submit cookie pattern, validated per request.</li>
+        <li><strong>SSRF prevention.</strong> Webhook URLs validated against private network ranges before DNS resolution.</li>
+        <li><strong>Credential isolation.</strong> Secrets stored as env var references, never as raw values in the database.</li>
+        <li><strong>SQLite WAL mode.</strong> Concurrent-safe, zero external dependencies. No database to misconfigure.</li>
+        <li><strong>Open source, MIT.</strong> Read the code. Audit the allowlist. Fork it.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── FINAL CTA ──────────────────────────────────────────── -->
+  <section class="lp-section" style="text-align:center">
+    <div class="lp-container lp-container--narrow">
+      <h2 class="lp-section-title lp-reveal">Try it against a throwaway VM first.</h2>
+      <p class="lp-section-sub lp-reveal" style="margin:0 auto var(--lp-sp-6)">Open source. MIT licensed. Feedback and PRs welcome.</p>
+      <div class="lp-reveal">
+        <a href="https://github.com/devsquall/supavision" class="lp-btn lp-btn--primary">View on GitHub &rarr;</a>
+        <a href="https://pypi.org/project/supavision/" class="lp-btn lp-btn--ghost" style="margin-left:var(--lp-sp-3)">View on PyPI</a>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+  <!-- ── FOOTER ──────────────────────────────────────────────── -->
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
+      <div>
+        <span class="lp-logo" style="font-size:16px"><span class="lp-logo-accent">S</span>upavision</span>
+        <span style="margin-left:var(--lp-sp-3); color:var(--lp-text-dim); font-size:13px">Built with Claude</span>
+      </div>
+      <div class="lp-footer-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#security">Security</a>
+        <a href="https://github.com/devsquall/supavision">GitHub</a>
+        <a href="https://pypi.org/project/supavision/">PyPI</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── Scroll reveal animations ──────────────────────────────── -->
+  <script>
+    (function () {
+      if (!('IntersectionObserver' in window)) {
+        document.querySelectorAll('.lp-reveal').forEach(function (el) { el.classList.add('is-visible'); });
+        return;
+      }
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.querySelectorAll('.lp-reveal').forEach(function (el) { el.classList.add('is-visible'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add('is-visible');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+      document.querySelectorAll('.lp-reveal').forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+</body>
+</html>

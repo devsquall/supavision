@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login — Supavision</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-brand">
+        <h1><span class="login-brand-accent">S</span>upavision</h1>
+        <p class="login-tagline">AI-powered infrastructure monitoring</p>
+      </div>
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="{{ next_url | default('/') }}">
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input class="form-input" type="email" id="email" name="email" required autofocus placeholder="admin@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-input" type="password" id="password" name="password" required>
+        </div>
+        <button type="submit" class="btn login-btn">Sign in</button>
+        <p class="text-muted text-xs mt-2" style="text-align:center;">Use credentials provided by your administrator</p>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

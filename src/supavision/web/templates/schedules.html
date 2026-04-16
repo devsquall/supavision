@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from '_glossary.html' import cron_friendly %}
+{% block title %}Schedules - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Schedules</h2>
+    <span class="page-subtitle">Automated monitoring schedules</span>
+  </div>
+</div>
+
+{# ── Scheduler Status Bar ── #}
+<div class="scheduler-status">
+  {% if scheduler_status.running %}
+  <span class="status-dot status-dot--running"></span>
+  <strong>Scheduler running</strong>
+  {% else %}
+  <span class="status-dot status-dot--unhealthy"></span>
+  <strong>Scheduler stopped</strong>
+  {% endif %}
+  {% if scheduler_status.ticks %}
+  <span class="text-muted">{{ scheduler_status.ticks }} ticks</span>
+  {% endif %}
+  {% if scheduler_status.last_tick_at %}
+  <span class="text-muted">Last tick: <span data-timestamp="{{ scheduler_status.last_tick_at.isoformat() if scheduler_status.last_tick_at is not string else scheduler_status.last_tick_at }}">just now</span></span>
+  {% endif %}
+</div>
+
+{% if schedule_rows %}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead>
+      <tr>
+        <th>Resource</th>
+        <th>Discovery Schedule</th>
+        <th>Health Check Schedule</th>
+        <th>Next Run</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in schedule_rows %}
+      <tr>
+        <td data-label="Resource"><a href="/resources/{{ row.resource_id }}">{{ row.resource_name }}</a></td>
+        <td data-label="Discovery">
+          {% if row.discovery_cron %}
+          {{ cron_friendly(row.discovery_cron) }} <span class="cron-expr">{{ row.discovery_cron }}</span>
+          {% else %}
+          <span class="text-muted">&mdash;</span>
+          {% endif %}
+        </td>
+        <td data-label="Health Check">
+          {% if row.health_cron %}
+          {{ cron_friendly(row.health_cron) }} <span class="cron-expr">{{ row.health_cron }}</span>
+          {% else %}
+          <span class="text-muted">&mdash;</span>
+          {% endif %}
+        </td>
+        <td data-label="Next Run">
+          {% if row.next_run %}
+          <span data-timestamp="{{ row.next_run }}">{{ row.next_run }}</span>
+          {% else %}
+          <span class="text-muted">&mdash;</span>
+          {% endif %}
+        </td>
+        <td data-label="Status">
+          <label class="toggle-switch">
+            <input type="checkbox"
+              {{ 'checked' if row.enabled }}
+              hx-post="/schedules/{{ row.resource_id }}/toggle"
+              hx-swap="none"
+              hx-on::after-request="window.location.reload()">
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="6" y="10" width="36" height="30" rx="2"/>
+    <path d="M6 20h36"/>
+    <path d="M16 6v8M32 6v8"/>
+    <circle cx="24" cy="29" r="5.5"/>
+    <path d="M24 26v3.5l2.2 1.3"/>
+  </svg>
+  <h3>No schedules configured</h3>
+  <p class="text-muted">Set cron schedules when editing a resource to automate monitoring.</p>
+  <a href="/resources" class="btn">View Resources</a>
+</div>
+{% endif %}
+{% endblock %}

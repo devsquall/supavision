@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Build artifacts
+*.egg-info/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Supervisor runtime
+.env
+.supavision/
+.supervisor/
+
+# Internal planning
+.review-loop/
+SUPAVISION_NEXT_DIRECTION.md
+
+# Reference assets (not shipped)
+screenshots/
+teleport.png
+ui-guidance.md
+web-auth.md
+scripts/
+
+# Logs
+*.log

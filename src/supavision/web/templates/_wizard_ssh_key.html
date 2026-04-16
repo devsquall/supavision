@@ -1,0 +1,60 @@
+<div class="wizard-card">
+  <h3>Step {{ current_wizard_step }}: SSH Key</h3>
+
+  {% if errors %}
+  <div class="alert alert--danger mb-4">
+    {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if key_generated %}
+  <div class="alert alert--success mb-4">SSH key pair generated. Supavision uses this key to securely connect to your server for discovery and health checks.</div>
+
+  <div class="form-group">
+    <label class="form-label">Public Key</label>
+    <div class="guidance-panel">
+      <pre class="code-copy">{{ public_key }}<button type="button" class="copy-btn" onclick="navigator.clipboard.writeText(this.previousSibling.textContent.trim())">Copy</button></pre>
+    </div>
+  </div>
+
+  <div class="guidance-panel mt-4">
+    <h4>Add this public key to the remote server</h4>
+    <ol class="text-sm ml-3">
+      <li>SSH into <code>{{ data.host }}</code> manually.</li>
+      <li>Run the following command:</li>
+      <pre class="code-copy">ssh-copy-id -i {{ data.ssh_key_path }}.pub {{ data.user or 'ubuntu' }}@{{ data.host }}<button type="button" class="copy-btn" onclick="navigator.clipboard.writeText(this.previousSibling.textContent.trim())">Copy</button></pre>
+      <li>Alternatively, paste the public key into <code>~/.ssh/authorized_keys</code>.</li>
+    </ol>
+  </div>
+  {% endif %}
+
+  {% if key_error %}
+  <div class="alert alert--danger mb-4">Failed to generate SSH key: {{ key_error }}</div>
+  {% endif %}
+
+  <form hx-post="/resources/wizard/next" hx-target="#wizard-content" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+    <input type="hidden" name="resource_type" value="{{ resource_type }}">
+    {% for key, val in data.items() %}
+    {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+    <input type="hidden" name="{{ key }}" value="{{ val }}">
+    {% endif %}
+    {% endfor %}
+
+    <div class="wizard-footer">
+      <form class="inline-form" hx-post="/resources/wizard/back" hx-target="#wizard-content" hx-swap="innerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+        <input type="hidden" name="resource_type" value="{{ resource_type }}">
+        {% for key, val in data.items() %}
+        {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+        <input type="hidden" name="{{ key }}" value="{{ val }}">
+        {% endif %}
+        {% endfor %}
+        <button type="submit" class="btn btn-outline">&larr; Back</button>
+      </form>
+      <button type="submit" class="btn">{% if next_step_label %}Next: {{ next_step_label }}{% else %}Create Resource{% endif %}</button>
+    </div>
+  </form>
+</div>

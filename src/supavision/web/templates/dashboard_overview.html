@@ -1,0 +1,226 @@
+{% from '_glossary.html' import severity_legend %}
+{# ── Status Summary Strip ── #}
+<div class="cc-status-strip">
+  <div class="cc-status-item cc-status-item--critical">
+    <span class="cc-status-count" data-count-to="{{ critical_count }}">{{ critical_count }}</span>
+    {% if critical_delta > 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ critical_delta }}</span>
+    {% elif critical_delta < 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ critical_delta|abs }}</span>
+    {% endif %}
+    <span class="cc-status-label">Critical</span>
+    {% if sparkline_critical %}
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+      <polyline points="{{ sparkline_critical }}" fill="none" stroke="var(--color-critical)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
+  </div>
+  <div class="cc-status-item cc-status-item--warning">
+    <span class="cc-status-count" data-count-to="{{ warning_count }}">{{ warning_count }}</span>
+    {% if warning_delta > 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ warning_delta }}</span>
+    {% elif warning_delta < 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ warning_delta|abs }}</span>
+    {% endif %}
+    <span class="cc-status-label">Warning</span>
+    {% if sparkline_warning %}
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+      <polyline points="{{ sparkline_warning }}" fill="none" stroke="var(--color-warning)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
+  </div>
+  <div class="cc-status-item cc-status-item--healthy">
+    <span class="cc-status-count" data-count-to="{{ healthy_count }}">{{ healthy_count }}</span>
+    {% if healthy_delta > 0 %}
+    <span class="trend-arrow trend-arrow--down">&#9660;{{ healthy_delta }}</span>
+    {% elif healthy_delta < 0 %}
+    <span class="trend-arrow trend-arrow--up">&#9650;{{ healthy_delta|abs }}</span>
+    {% endif %}
+    <span class="cc-status-label">Healthy</span>
+    {% if sparkline_healthy %}
+    <svg class="sparkline-mini" viewBox="0 0 64 20" width="64" height="20">
+      <polyline points="{{ sparkline_healthy }}" fill="none" stroke="var(--color-healthy)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {% endif %}
+  </div>
+  <div class="cc-status-item">
+    <span class="cc-status-count" data-count-to="{{ total_resources }}">{{ total_resources }}</span>
+    <span class="cc-status-label">Total</span>
+  </div>
+  <div class="cc-status-badge cc-status-badge--{{ system_status_type }}">
+    <span class="status-banner-dot"></span>
+    {{ system_status_text }}
+  </div>
+</div>
+{{ severity_legend() }}
+
+{% if has_resources %}
+{# ── Two-Column Layout ── #}
+<div class="cc-columns">
+  {# ── LEFT COLUMN ── #}
+  <div class="cc-col-left">
+    {# Action Needed #}
+    <div class="cc-panel">
+      <div class="cc-panel-header">
+        <h3 class="cc-panel-title">Action Needed</h3>
+        {% if total_action_items > 0 %}
+        <span class="badge badge--{{ 'critical' if critical_count > 0 else 'warning' }}">{{ total_action_items }}</span>
+        {% endif %}
+      </div>
+      {% if action_items %}
+        {% for item in action_items %}
+        <div class="cc-action-item cc-action-item--{{ item.severity }}">
+          <div class="cc-action-body">
+            <div class="inline-actions">
+              <a href="{{ item.link }}" class="cc-action-name">{{ item.name }}</a>
+              <span class="badge badge--{{ item.severity }}">{{ item.severity }}</span>
+              {% if item.streak and item.streak > 1 %}
+              <span class="badge badge--muted" title="{{ item.severity }} for {{ item.streak }} consecutive runs">{{ item.streak }} runs</span>
+              {% endif %}
+            </div>
+            <div class="cc-action-explanation">{{ item.explanation }}</div>
+            <div class="cc-action-impact">{{ item.impact }}</div>
+          </div>
+          <div class="cc-action-buttons">
+            <a href="{{ item.link }}" class="btn btn-sm">{{ item.action_label }}</a>
+            {% if item.recheck_url %}
+            <button class="btn btn-sm btn-outline"
+                    hx-post="{{ item.recheck_url }}"
+                    hx-swap="none"
+                    data-action="check"
+                    data-success-msg="Health check started">
+              Verify Fix
+            </button>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% if total_action_items > 8 %}
+        <a href="/resources" class="cc-view-all">All {{ total_action_items }} issues &rarr;</a>
+        {% endif %}
+      {% else %}
+        <div class="cc-empty-panel">
+          All systems healthy &mdash; no issues need attention.
+          <div class="mt-2"><a href="/resources" class="text-sm text-link">View all resources</a></div>
+        </div>
+      {% endif %}
+    </div>
+
+    {# Quick Actions #}
+    <div class="cc-panel">
+      <h3 class="cc-panel-title mb-3">Quick Actions</h3>
+      <div class="cc-quick-actions">
+        <a href="/resources/new" class="cc-quick-action-btn">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+          Add Resource
+        </a>
+        <a href="/activity" class="cc-quick-action-btn">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4v4l3 1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          Recent Activity
+        </a>
+        <div class="cc-quick-action-btn cc-quick-action-btn--placeholder">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-1 4h2v1.5L8.5 8h-1l-.5-1.5V5zm-.25 5a1.25 1.25 0 112.5 0 1.25 1.25 0 01-2.5 0z"/></svg>
+          Ask Supavision
+          <span class="badge badge--unknown text-xs ml-auto">Soon</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── RIGHT COLUMN ── #}
+  <div class="cc-col-right">
+    {# Live Activity #}
+    <div class="cc-panel">
+      <div class="cc-panel-header">
+        <h3 class="cc-panel-title">Live Activity</h3>
+        <span class="live-indicator"><span class="live-dot"></span> Live</span>
+      </div>
+      <div id="cc-live-activity"
+           hx-get="/dashboard/live-activity"
+           hx-trigger="every 5s [document.visibilityState==='visible']"
+           hx-swap="innerHTML">
+        {# Initial content rendered inline from overview (no skeleton flash) #}
+        {% include "dashboard_live_activity.html" %}
+      </div>
+    </div>
+
+    {# Recent Events #}
+    <div class="cc-panel">
+      <div class="cc-panel-header">
+        <h3 class="cc-panel-title">Recent Events</h3>
+        <a href="/activity" class="text-sm text-link">Full timeline &rarr;</a>
+      </div>
+      {% if recent_events %}
+      <div class="cc-events-list">
+        {% for event in recent_events %}
+        <a href="{{ event.link }}" class="cc-event-item">
+          <span class="cc-event-dot cc-event-dot--{{ event.severity or 'info' }}"></span>
+          <div class="cc-event-body">
+            <span class="cc-event-title">{{ event.resource_name }}</span>
+            <span class="cc-event-summary">{{ event.type }} &mdash; {{ event.summary }}</span>
+          </div>
+          <span class="cc-event-time" data-timestamp="{{ event.created_at }}">{{ event.created_at }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="cc-empty-panel">
+        No events in the last 24 hours.
+        <div class="mt-2"><a href="/activity" class="text-sm text-link">View full history</a></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% else %}
+{# ── Welcome (no resources) ── #}
+<div class="welcome-card">
+  <svg class="welcome-illustration" viewBox="0 0 200 140" width="200" height="140" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <!-- Server rack -->
+    <rect x="40" y="30" width="100" height="80" rx="4" stroke="var(--color-text-2)" fill="var(--color-surface-2)"/>
+    <!-- Rack shelves -->
+    <line x1="48" y1="48" x2="132" y2="48" stroke="var(--color-border)"/>
+    <line x1="48" y1="66" x2="132" y2="66" stroke="var(--color-border)"/>
+    <line x1="48" y1="84" x2="132" y2="84" stroke="var(--color-border)"/>
+    <!-- Status LEDs -->
+    <circle cx="56" cy="39" r="2.5" fill="var(--color-healthy)" stroke="none"/>
+    <circle cx="56" cy="57" r="2.5" fill="var(--color-healthy)" stroke="none"/>
+    <circle cx="56" cy="75" r="2.5" fill="var(--color-warning)" stroke="none"/>
+    <circle cx="56" cy="93" r="2.5" fill="var(--color-critical)" stroke="none"/>
+    <!-- Rack detail lines -->
+    <line x1="70" y1="39" x2="120" y2="39" stroke="var(--color-border)"/>
+    <line x1="70" y1="57" x2="120" y2="57" stroke="var(--color-border)"/>
+    <line x1="70" y1="75" x2="110" y2="75" stroke="var(--color-border)"/>
+    <line x1="70" y1="93" x2="100" y2="93" stroke="var(--color-border)"/>
+    <!-- Magnifying glass -->
+    <circle cx="140" cy="90" r="22" fill="var(--color-surface)" stroke="var(--color-primary)" stroke-width="2.5"/>
+    <line x1="156" y1="106" x2="172" y2="122" stroke="var(--color-primary)" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- Sparkle reflections -->
+    <circle cx="134" cy="82" r="3" fill="var(--color-primary)" opacity="0.2" stroke="none"/>
+    <!-- Floating status dots -->
+    <circle cx="28" cy="24" r="3" fill="var(--color-healthy)" stroke="none" opacity="0.7"/>
+    <circle cx="180" cy="32" r="3" fill="var(--color-warning)" stroke="none" opacity="0.7"/>
+    <circle cx="20" cy="110" r="3" fill="var(--color-critical)" stroke="none" opacity="0.7"/>
+  </svg>
+  <h3>Welcome to Supavision</h3>
+  <p class="text-muted">AI-powered monitoring for your infrastructure and codebases. Add your first resource to get started.</p>
+  <div class="welcome-actions">
+    <a href="/resources/new?type=codebase" class="type-card">
+      <strong>Scan a Codebase</strong>
+      <span class="text-sm text-muted">Security patterns + AI evaluation</span>
+    </a>
+    <a href="/resources/new?type=server" class="type-card">
+      <strong>Monitor a Server</strong>
+      <span class="text-sm text-muted">SSH-based discovery + health checks</span>
+    </a>
+    <a href="/resources/new" class="type-card">
+      <strong>More Options</strong>
+      <span class="text-sm text-muted">AWS, Database, GitHub Org</span>
+    </a>
+  </div>
+  <p class="text-sm text-muted mt-4">
+    Want to see what it looks like first? Run <code>supavision seed-demo</code> to populate with sample data.
+  </p>
+</div>
+{% endif %}

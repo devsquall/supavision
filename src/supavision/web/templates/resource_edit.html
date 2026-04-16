@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ resource.name }} - Supavision{% endblock %}
+{% block content %}
+<ul class="breadcrumb" aria-label="Breadcrumb">
+  <li><a href="/">Dashboard</a></li>
+  <li><a href="/resources/{{ resource.id }}">{{ resource.name }}</a></li>
+  <li>Edit</li>
+</ul>
+
+<div class="page-header">
+  <h2>Edit Resource</h2>
+</div>
+
+{# ── General Settings ── #}
+<div class="settings-section">
+  <h4>General</h4>
+  <form method="post" action="/resources/{{ resource.id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="settings-row">
+      <div class="form-group form-col--2x">
+        <label class="form-label" for="name">Display Name</label>
+        <input class="form-input" type="text" id="name" name="name" value="{{ resource.name }}" required>
+      </div>
+      <div class="form-group form-col">
+        <label class="form-label">Type</label>
+        <input class="form-input" type="text" value="{{ resource.resource_type }}" disabled>
+      </div>
+    </div>
+    {% if resource_types[resource.resource_type].connection == 'ssh' %}
+    <div class="form-row mt-4">
+      <div class="form-group form-col--3x">
+        <label class="form-label" for="ssh_host">SSH Host</label>
+        <input class="form-input" type="text" id="ssh_host" name="ssh_host"
+               value="{{ resource.config.ssh_host or '' }}" placeholder="Leave empty for local">
+      </div>
+      <div class="form-group form-col">
+        <label class="form-label" for="ssh_port">Port</label>
+        <input class="form-input" type="number" id="ssh_port" name="ssh_port"
+               value="{{ resource.config.ssh_port or '22' }}" min="1" max="65535">
+      </div>
+      <div class="form-group form-col--2x">
+        <label class="form-label" for="ssh_user">SSH User</label>
+        <input class="form-input" type="text" id="ssh_user" name="ssh_user"
+               value="{{ resource.config.ssh_user or '' }}" placeholder="ubuntu">
+      </div>
+    </div>
+    <div class="form-group mt-4">
+      <label class="form-label" for="ssh_key_path">Key Path</label>
+      <input class="form-input" type="text" id="ssh_key_path" name="ssh_key_path"
+             value="{{ resource.config.ssh_key_path or '' }}" placeholder="~/.ssh/id_ed25519">
+    </div>
+    {% endif %}
+    <div class="actions mt-4">
+      <button type="submit" class="btn">Save Changes</button>
+    </div>
+  </form>
+</div>
+
+{# ── Schedule ── #}
+<div class="settings-section">
+  <h4>Schedule</h4>
+  <p class="text-muted text-sm mb-3">How often Supavision automatically checks this resource.</p>
+  {% if next_health_check %}
+  <p class="text-sm text-muted mb-4">Next health check: <span data-timestamp="{{ next_health_check }}">{{ next_health_check }}</span></p>
+  {% endif %}
+  <form hx-post="/resources/{{ resource.id }}/schedule" hx-swap="none"
+        data-action="schedule" data-success-msg="Schedule updated" data-error-msg="Failed to update schedule">
+    <div class="settings-row">
+      <div class="form-group">
+        <label class="form-label" for="health_cron">Health Check</label>
+        <select class="form-select" id="health_cron" name="health_cron">
+          <option value="">Disabled</option>
+          <option value="0 */6 * * *" {{ 'selected' if health_cron == '0 */6 * * *' }}>Every 6 hours</option>
+          <option value="0 */12 * * *" {{ 'selected' if health_cron == '0 */12 * * *' }}>Every 12 hours</option>
+          <option value="0 0 * * *" {{ 'selected' if health_cron == '0 0 * * *' }}>Daily</option>
+          <option value="0 0 * * 0" {{ 'selected' if health_cron == '0 0 * * 0' }}>Weekly</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="discovery_cron">Discovery</label>
+        <select class="form-select" id="discovery_cron" name="discovery_cron">
+          <option value="">Disabled</option>
+          <option value="0 0 * * 0" {{ 'selected' if discovery_cron == '0 0 * * 0' }}>Weekly</option>
+          <option value="0 0 1 * *" {{ 'selected' if discovery_cron == '0 0 1 * *' }}>Monthly</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-outline">Save</button>
+    </div>
+  </form>
+</div>
+
+{# ── Notifications ── #}
+<div class="settings-section">
+  <h4>Notifications</h4>
+  <form hx-post="/resources/{{ resource.id }}/notifications" hx-swap="none"
+        data-action="notify" data-success-msg="Notifications updated" data-error-msg="Failed to update">
+    <div class="settings-row">
+      <div class="form-group">
+        <label class="form-label" for="slack_webhook">Slack Webhook URL</label>
+        <input class="form-input" type="url" id="slack_webhook" name="slack_webhook"
+               value="{{ slack_webhook }}" placeholder="https://hooks.slack.com/services/...">
+        <span class="form-hint">Optional. Overrides the global webhook for this resource.</span>
+      </div>
+      <button type="submit" class="btn btn-outline">Save</button>
+      <button type="button" class="btn btn-outline"
+              hx-post="/resources/{{ resource.id }}/notify-test"
+              hx-swap="none"
+              data-action="test-notify"
+              data-success-msg="Test notification sent"
+              data-error-msg="Notification failed">Send Test</button>
+    </div>
+  </form>
+</div>
+
+{# ── Monitoring Requests ── #}
+<div class="settings-section">
+  <h4>Monitoring Requests</h4>
+  <p class="text-muted text-sm mb-3">Custom checks Claude will include during discovery and health checks.</p>
+  {% if resource.monitoring_requests %}
+  <ul class="mb-4 list-plain">
+    {% for req in resource.monitoring_requests %}
+    <li class="checklist-item">
+      <span class="text-sm">{{ req }}</span>
+      <button class="btn btn-outline btn-sm text-xs"
+              hx-post="/resources/{{ resource.id }}/checklist-remove"
+              hx-vals='{"index": "{{ loop.index0 }}"}'
+              hx-swap="none" data-confirm="Remove this monitoring request?"
+              data-action="remove-check" data-success-msg="Removed">x</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form hx-post="/resources/{{ resource.id }}/checklist" hx-swap="none"
+        hx-on::after-request="if(event.detail.successful) this.reset();"
+        data-action="checklist" data-success-msg="Checklist item added" data-error-msg="Failed to add">
+    <div class="settings-row">
+      <div class="form-group">
+        <label class="form-label" for="request">Add a check</label>
+        <input class="form-input" type="text" id="request" name="request"
+               placeholder="e.g. Verify SSL certificate expiry is > 30 days" required>
+        <span class="form-hint">Tell Claude what to check. These are incorporated into the next discovery run.</span>
+      </div>
+      <button type="submit" class="btn btn-outline">Add</button>
+    </div>
+  </form>
+</div>
+
+{# ── Status & Danger Zone ── #}
+<div class="settings-section">
+  <h4>Monitoring Status</h4>
+  <div class="settings-row">
+    <div class="form-group">
+      {% if resource.enabled %}
+      <span class="badge badge--healthy">Active</span>
+      <button class="btn btn-outline ml-2"
+              hx-post="/resources/{{ resource.id }}/toggle" hx-swap="none"
+              data-action="toggle" data-success-msg="Monitoring paused">
+        Pause
+      </button>
+      {% else %}
+      <span class="badge badge--unknown">Paused</span>
+      <button class="btn btn-outline ml-2"
+              hx-post="/resources/{{ resource.id }}/toggle" hx-swap="none"
+              data-action="toggle" data-success-msg="Monitoring resumed">
+        Resume
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="settings-section danger-zone mt-6">
+  <h4>Danger Zone</h4>
+  <p class="text-muted text-sm mb-4">Deleting a resource removes all its reports, baselines, and run history.</p>
+  <button type="button" class="btn btn-danger"
+          onclick="showConfirmModal('Delete {{ resource.name | e }}? This removes all reports, baselines, and history. This cannot be undone.', function() { document.getElementById('delete-form').submit(); })">
+    Delete Resource
+  </button>
+  <form id="delete-form" method="post" action="/resources/{{ resource.id }}/delete" class="hidden">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  </form>
+</div>
+{% endblock %}

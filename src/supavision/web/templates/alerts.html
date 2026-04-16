@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Alerts - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Alerts</h2>
+    <span class="page-subtitle">Notification history and delivery status</span>
+  </div>
+</div>
+
+{# ── Filters ── #}
+<div class="filter-bar mb-4">
+  <form method="get" action="/alerts" class="filter-form">
+    <select name="resource_id" class="form-select">
+      <option value="">All Resources</option>
+      {% for r in resources %}
+      <option value="{{ r.id }}" {{ 'selected' if filters.resource_id == r.id }}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="severity" class="form-select">
+      <option value="">All Severities</option>
+      {% for s in severities %}
+      <option value="{{ s }}" {{ 'selected' if filters.severity == s }}>{{ s | title }}</option>
+      {% endfor %}
+    </select>
+    <select name="channel" class="form-select">
+      <option value="">All Channels</option>
+      {% for c in channels %}
+      <option value="{{ c }}" {{ 'selected' if filters.channel == c }}>{{ c | title }}</option>
+      {% endfor %}
+    </select>
+    <select name="status" class="form-select">
+      <option value="">All Statuses</option>
+      {% for st in statuses %}
+      <option value="{{ st }}" {{ 'selected' if filters.status == st }}>{{ st | title }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline">Filter</button>
+    {% if filters.resource_id or filters.severity or filters.channel or filters.status %}
+    <a href="/alerts" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{# ── Alerts Timeline ── #}
+{% if items %}
+<div class="timeline">
+  {% for item in items %}
+  <div class="timeline-item">
+    <div class="timeline-dot timeline-dot--{{ item.severity }}"></div>
+    <div class="timeline-content">
+      <div class="timeline-header">
+        <span class="badge badge--{{ item.severity }}">{{ item.severity | title }}</span>
+        <strong>{{ item.resource_name }}</strong>
+        {% if item.channel == 'slack' %}
+        <span class="badge">Slack</span>
+        {% elif item.channel == 'webhook' %}
+        <span class="badge">Webhook</span>
+        {% else %}
+        <span class="badge">{{ item.channel }}</span>
+        {% endif %}
+        {% if item.status == 'sent' %}
+        <span class="badge badge--healthy">Sent</span>
+        {% elif item.status == 'failed' %}
+        <span class="badge badge--critical">Failed</span>
+        {% else %}
+        <span class="badge">{{ item.status }}</span>
+        {% endif %}
+      </div>
+      <p class="timeline-summary">{{ item.summary }}</p>
+      {% if item.status == 'failed' and item.error %}
+      <p class="timeline-error text-sm text-muted" title="{{ item.error }}">Error: {{ item.error[:200] }}{% if item.error|length > 200 %}…{% endif %}</p>
+      {% endif %}
+      <span class="timeline-time text-sm text-muted" data-timestamp="{{ item.created_at }}">{{ item.created_at }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Pagination ── #}
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&resource_id={{ filters.resource_id }}&severity={{ filters.severity }}&channel={{ filters.channel }}&status={{ filters.status }}" class="btn btn-outline btn-sm">&laquo; Prev</a>
+  {% endif %}
+  <span class="text-muted text-sm">Page {{ page }} of {{ (total + per_page - 1) // per_page }}</span>
+  {% if page * per_page < total %}
+  <a href="?page={{ page + 1 }}&resource_id={{ filters.resource_id }}&severity={{ filters.severity }}&channel={{ filters.channel }}&status={{ filters.status }}" class="btn btn-outline btn-sm">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M24 4l20 36H4L24 4z"/><path d="M24 20v8M24 32v2"/></svg>
+  <h3>No alerts sent yet</h3>
+  <p class="text-muted">Alerts are triggered when resource health changes to warning or critical.</p>
+  <div class="mt-4"><a href="/resources" class="btn">Configure a Resource</a></div>
+</div>
+{% endif %}
+{% endblock %}

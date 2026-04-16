@@ -1,0 +1,122 @@
+<div class="wizard-card">
+  <h3>Step {{ current_wizard_step }}: Resource Info</h3>
+
+  {% if errors %}
+  <div class="alert alert--danger mb-4">
+    {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if how_it_works %}
+  <div class="alert alert--info mb-4">{{ how_it_works }}</div>
+  {% endif %}
+
+  <form hx-post="/resources/wizard/next" hx-target="#wizard-content" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="_step" value="{{ current_wizard_step }}">
+    <input type="hidden" name="resource_type" value="{{ resource_type }}">
+    {% for key, val in data.items() %}
+    {% if key not in ('_step', 'resource_type', 'csrf_token') %}
+    <input type="hidden" name="{{ key }}" value="{{ val }}">
+    {% endif %}
+    {% endfor %}
+
+    <div class="form-group">
+      <label class="form-label" for="name">Display Name</label>
+      <input type="text" class="form-input" id="name" name="name" value="{{ data.get('name', '') }}" required>
+    </div>
+
+    {% if resource_type == 'server' %}
+    <div class="form-group">
+      <label class="form-label" for="host">SSH Host / IP</label>
+      <input type="text" class="form-input" id="host" name="host" value="{{ data.get('host', '') }}" required>
+      <span class="form-hint">IP address or hostname of the server.</span>
+    </div>
+
+    <div class="form-row">
+      <div class="form-col">
+        <div class="form-group">
+          <label class="form-label" for="port">Port</label>
+          <input type="text" class="form-input" id="port" name="port" value="{{ data.get('port', '22') }}">
+          <span class="form-hint">SSH port. Default is 22.</span>
+        </div>
+      </div>
+      <div class="form-col form-col--2x">
+        <div class="form-group">
+          <label class="form-label" for="user">SSH User</label>
+          <input type="text" class="form-input" id="user" name="user" value="{{ data.get('user', 'ubuntu') }}">
+          <span class="form-hint">SSH user with read access. Default is ubuntu.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="target_directory">Target Directory</label>
+      <input type="text" class="form-input" id="target_directory" name="target_directory" value="{{ data.get('target_directory', '') }}" required>
+      <span class="form-hint">Main application directory (e.g. /home/ubuntu/myapp).</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="slack_webhook">Slack Webhook URL</label>
+      <input type="text" class="form-input" id="slack_webhook" name="slack_webhook" value="{{ data.get('slack_webhook', '') }}">
+      <span class="form-hint">Optional. Receive alerts when issues are detected.</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-input" id="notes" name="notes" rows="3">{{ data.get('notes', '') }}</textarea>
+      <span class="form-hint">Optional. Internal notes for your team — context, special instructions.</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="monitoring_requests">Monitoring Requests</label>
+      <textarea class="form-input" id="monitoring_requests" name="monitoring_requests" rows="3">{{ data.get('monitoring_requests', '') }}</textarea>
+      <span class="form-hint">Optional. Specific things to check during health checks (one per line).</span>
+    </div>
+    {% endif %}
+
+    {% if resource_type == 'aws_account' %}
+    <div class="form-group">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-input" id="notes" name="notes" rows="3">{{ data.get('notes', '') }}</textarea>
+      <span class="form-hint">Optional. Internal notes for your team — context, special instructions.</span>
+    </div>
+    {% endif %}
+
+    {% if resource_type == 'github_org' %}
+    <div class="form-group">
+      <label class="form-label" for="github_org">Organization Name</label>
+      <input type="text" class="form-input" id="github_org" name="github_org" value="{{ data.get('github_org', '') }}" required>
+      <span class="form-hint">Your GitHub organization slug (e.g. my-company).</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-input" id="notes" name="notes" rows="3">{{ data.get('notes', '') }}</textarea>
+      <span class="form-hint">Optional. Internal notes for your team — context, special instructions.</span>
+    </div>
+    {% endif %}
+
+    {% if resource_type == 'database' %}
+    <div class="form-group">
+      <label class="form-label" for="db_engine">Database Engine</label>
+      <select class="form-select" id="db_engine" name="db_engine">
+        <option value="postgresql" {% if data.get('db_engine') == 'postgresql' %}selected{% endif %}>PostgreSQL</option>
+        <option value="mysql" {% if data.get('db_engine') == 'mysql' %}selected{% endif %}>MySQL</option>
+      </select>
+      <span class="form-hint">Which database engine is running.</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-input" id="notes" name="notes" rows="3">{{ data.get('notes', '') }}</textarea>
+      <span class="form-hint">Optional. Internal notes for your team — context, special instructions.</span>
+    </div>
+    {% endif %}
+
+    <div class="wizard-footer">
+      <a href="/resources/new" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn">{% if next_step_label %}Next: {{ next_step_label }}{% else %}Create Resource{% endif %}</button>
+    </div>
+  </form>
+</div>

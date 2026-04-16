@@ -1,0 +1,21 @@
+services:
+  supavision:
+    build: .
+    ports:
+      - "${SUPAVISION_PORT:-8080}:8080"
+    volumes:
+      - supavision-data:/app/.supavision
+      - ${HOME}/.ssh:/root/.ssh:ro
+    environment:
+      - SUPAVISION_BACKEND=${SUPAVISION_BACKEND:-claude_cli}
+      - SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  supavision-data:

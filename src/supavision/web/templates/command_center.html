@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Command Center - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Command Center</h2>
+    <span class="page-subtitle">Query your infrastructure and codebase</span>
+  </div>
+</div>
+
+{# ── Command Cards Grid ── #}
+<div class="command-grid">
+
+  <div class="command-card">
+    <div class="command-card-title">System Overview</div>
+    <div class="command-card-desc">Summary of all resources and their current health status</div>
+    <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="command" value="system_overview">
+      <button type="submit" class="btn btn-sm">Run</button>
+    </form>
+  </div>
+
+  <div class="command-card">
+    <div class="command-card-title">Resource Health</div>
+    <div class="command-card-desc">Latest health status, report, and metrics for a resource</div>
+    <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="command" value="resource_health">
+      <select name="resource_id" class="form-select" required>
+        <option value="">Select resource...</option>
+        {% for r in resources %}
+        <option value="{{ r.id }}">{{ r.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm">Run</button>
+    </form>
+  </div>
+
+  <div class="command-card">
+    <div class="command-card-title">Baseline Comparison</div>
+    <div class="command-card-desc">View the latest system baseline and configuration snapshot</div>
+    <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="command" value="baseline_diff">
+      <select name="resource_id" class="form-select" required>
+        <option value="">Select resource...</option>
+        {% for r in resources %}
+        <option value="{{ r.id }}">{{ r.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm">Run</button>
+    </form>
+  </div>
+
+  <div class="command-card">
+    <div class="command-card-title">Project Stats</div>
+    <div class="command-card-desc">Aggregate statistics across all monitored resources</div>
+    <form hx-post="/command-center/query" hx-target="#results-panel" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="command" value="project_stats">
+      <button type="submit" class="btn btn-sm">Run</button>
+    </form>
+  </div>
+
+</div>
+
+{# ── Results Panel ── #}
+<div class="results-panel" id="results-panel">
+  <div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="10" width="36" height="28" rx="3"/><path d="M14 22l4 4-4 4M22 30h10"/></svg>
+    <h3>Run a command</h3>
+    <p>Select a command above to query your infrastructure. Results will appear here.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+{% block title %}Ask Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Ask Supavision</h2>
+    <span class="page-subtitle">Ask questions about your infrastructure and codebase</span>
+  </div>
+</div>
+
+<div class="ask-layout">
+  {# ── Chat Panel ── #}
+  <div class="chat-panel">
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty" id="chat-empty">
+        <div class="chat-empty-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2C6.48 2 2 5.79 2 10.5c0 2.74 1.67 5.16 4.24 6.71L5 22l4.84-2.43C10.54 19.85 11.26 20 12 20c5.52 0 10-3.79 10-8.5S17.52 2 12 2z"/>
+          </svg>
+        </div>
+        <p>Query your resources, findings, and metrics using natural language</p>
+        <div class="chat-examples">
+          <button class="chat-example-btn" onclick="askExample(this)">What's wrong with my system?</button>
+          <button class="chat-example-btn" onclick="askExample(this)">What should I fix first?</button>
+          <button class="chat-example-btn" onclick="askExample(this)">Are there security concerns?</button>
+          <button class="chat-example-btn" onclick="askExample(this)">Show me all findings</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-row">
+      <textarea class="chat-input" id="chat-input"
+              placeholder="Ask about your infrastructure or codebase..."
+              rows="1"></textarea>
+      <button class="btn btn-primary chat-send-btn" id="chat-send-btn"
+              onclick="sendChatMessage()">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5V9l8-1-8-1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {# ── Context Panel ── #}
+  <aside class="context-panel" id="context-panel">
+    <div class="context-card">
+      <div class="context-card-header">Resources</div>
+      <div class="context-card-body" id="ctx-resources">
+        {% if context.resources %}
+        <ul class="context-list">
+          {% for r in context.resources %}
+          <li class="context-list-item" data-resource-id="{{ r.id }}" data-resource-name="{{ r.name }}">
+            <a href="/resources/{{ r.id }}">{{ r.name }}</a>
+            <span class="badge badge--{{ r.severity }}">{{ r.severity }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <span class="text-muted">No resources yet</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="context-card">
+      <div class="context-card-header">Findings <span class="text-muted">({{ context.findings_total }})</span></div>
+      <div class="context-card-body" id="ctx-findings">
+        {% if context.findings %}
+        <ul class="context-list">
+          {% for f in context.findings[:10] %}
+          <li class="context-list-item" data-finding-id="{{ f.id }}" data-finding-title="{{ f.title }}">
+            <span class="badge badge--{{ f.severity }}">{{ f.severity }}</span>
+            <span class="context-finding-title">{{ f.title }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if context.findings_total > 10 %}
+        <span class="text-muted">+ {{ context.findings_total - 10 }} more</span>
+        {% endif %}
+        {% else %}
+        <span class="text-muted">No findings yet</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Always render metrics card — JS can update it dynamically #}
+    {% set has_metrics = context.resources | selectattr('metrics') | list | length > 0 %}
+    <div class="context-card {{ '' if has_metrics else 'hidden' }}" id="ctx-metrics-card">
+      <div class="context-card-header">Metrics</div>
+      <div class="context-card-body" id="ctx-metrics">
+        {% if has_metrics %}
+        <ul class="context-list">
+          {% for r in context.resources %}
+          {% if r.metrics %}
+          <li class="context-list-item">
+            <strong>{{ r.name }}:</strong>
+            {% for k, v in r.metrics.items() %}
+            <span class="context-metric">{{ k }}={{ v }}</span>
+            {% endfor %}
+          </li>
+          {% endif %}
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function() {
+  var messagesEl = document.getElementById('chat-messages');
+  var inputEl = document.getElementById('chat-input');
+  var sendBtn = document.getElementById('chat-send-btn');
+  var emptyEl = document.getElementById('chat-empty');
+  var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+  var isBusy = false;
+  var contextData = {{ context | tojson }};
+
+  inputEl.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  inputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
+  window.askExample = function(btn) {
+    inputEl.value = btn.textContent;
+    sendChatMessage();
+  };
+
+  window.sendChatMessage = function() {
+    var question = inputEl.value.trim();
+    if (!question || isBusy) return;
+    if (emptyEl) emptyEl.style.display = 'none';
+    appendMessage('user', question);
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    var el = appendMessage('ai', '');
+    el.innerHTML = '<div class="chat-analyzing"><span class="chat-loading"><span></span><span></span><span></span></span> <span class="chat-analyzing-label">Analyzing</span></div>';
+    isBusy = true;
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    fetchQuery(question, el);
+  };
+
+  function appendMessage(role, content) {
+    var div = document.createElement('div');
+    div.className = 'chat-message chat-message--' + role;
+    if (role === 'user') div.textContent = content;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  async function fetchQuery(question, aiEl) {
+    var startTime = Date.now();
+    try {
+      var resp = await fetch('/api/mcp/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ question: question })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        aiEl.textContent = err.error || 'Something went wrong.';
+        aiEl.classList.add('chat-message--error');
+        finish();
+        return;
+      }
+      var data = await resp.json();
+      if (data.context) { contextData = data.context; updateContextPanel(contextData); }
+
+      // Minimum visible analyzing time
+      var elapsed = Date.now() - startTime;
+      var minDelay = 600;
+      if (elapsed < minDelay) {
+        await new Promise(function(r) { setTimeout(r, minDelay - elapsed); });
+      }
+
+      renderResponse(aiEl, data);
+    } catch (e) {
+      aiEl.textContent = 'Connection error. Please try again.';
+      aiEl.classList.add('chat-message--error');
+    }
+    finish();
+  }
+
+  // ── Response rendering: answer → evidence → next_step → details ──
+
+  function renderResponse(el, data) {
+    var html = '';
+
+    // 1. Direct answer
+    if (data.answer) {
+      html += '<p class="response-answer">' + esc(data.answer) + '</p>';
+    }
+
+    // 2. Evidence chips
+    if (data.evidence && data.evidence.length) {
+      html += '<div class="response-evidence">';
+      data.evidence.forEach(function(e) {
+        var tag = e.link ? 'a' : 'span';
+        html += '<' + tag + (e.link ? ' href="' + esc(e.link) + '"' : '') + ' class="evidence-chip">';
+        html += '<strong>' + esc(e.label) + '</strong>';
+        if (e.detail) html += ' <span class="text-muted">' + esc(e.detail) + '</span>';
+        html += '</' + tag + '>';
+      });
+      html += '</div>';
+    }
+
+    // 3. Next step suggestion
+    if (data.next_step) {
+      html += '<p class="response-next-step">' + esc(data.next_step) + '</p>';
+    }
+
+    // 4. Supporting data (collapsed)
+    if (data.sections && data.sections.length) {
+      var sectionsHtml = '';
+      data.sections.forEach(function(s) {
+        var rendered = renderSection(s);
+        if (rendered) sectionsHtml += rendered;
+      });
+      if (sectionsHtml) {
+        html += '<details class="response-details">';
+        html += '<summary class="response-details-toggle">View supporting data</summary>';
+        html += '<div class="response-details-body">' + sectionsHtml + '</div>';
+        html += '</details>';
+      }
+    }
+
+    if (!html) html = '<p class="text-muted">No data available.</p>';
+    el.innerHTML = html;
+    el.classList.add('chat-message--results');
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function renderSection(s) {
+    var type = s.type;
+    var d = s.data;
+    var title = s.title;
+
+    // ── Resources table ──
+    if (type === 'resources' && Array.isArray(d) && d.length) {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><table class="result-table"><thead><tr><th>Resource</th><th>Type</th><th>Status</th></tr></thead><tbody>';
+      d.forEach(function(r) {
+        var sev = r.severity || 'unknown';
+        h += '<tr><td><a href="/resources/' + encodeURIComponent(r.id) + '">' + esc(r.name) + '</a></td>';
+        h += '<td>' + esc(r.resource_type) + '</td>';
+        h += '<td><span class="badge badge--' + esc(sev) + '">' + esc(sev) + '</span></td></tr>';
+      });
+      return h + '</tbody></table></div>';
+    }
+
+    // ── Stats cards ──
+    if (type === 'stats' && typeof d === 'object' && !Array.isArray(d)) {
+      var stages = Object.keys(d);
+      if (!stages.length) return '';
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><div class="result-metrics">';
+      stages.forEach(function(st) {
+        if (d[st] > 0) {
+          h += '<div class="result-metric-card"><div class="result-metric-value">' + d[st] + '</div>';
+          h += '<div class="result-metric-name">' + esc(st) + '</div></div>';
+        }
+      });
+      return h + '</div></div>';
+    }
+
+    // ── Findings table ──
+    if (type === 'findings' && Array.isArray(d) && d.length) {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + ' (' + d.length + ')</div>';
+      h += '<table class="result-table"><thead><tr><th>Severity</th><th>Category</th><th>File</th><th>Stage</th></tr></thead><tbody>';
+      d.forEach(function(f) {
+        h += '<tr><td><span class="badge badge--' + esc(f.severity || '') + '">' + esc(f.severity || '') + '</span></td>';
+        h += '<td>' + esc(f.category || '') + '</td>';
+        h += '<td>' + esc(f.file_path || '') + (f.line_number ? ':' + f.line_number : '') + '</td>';
+        h += '<td>' + esc(f.stage || '') + '</td></tr>';
+      });
+      return h + '</tbody></table></div>';
+    }
+
+    // ── Report ──
+    if (type === 'report' && typeof d === 'object') {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div>';
+      if (d.severity) h += '<span class="badge badge--' + esc(d.severity) + '">' + esc(d.severity) + '</span> ';
+      if (d.report_content) {
+        var content = d.report_content;
+        if (content.length > 600) content = content.substring(0, 600) + '...';
+        h += '<pre class="result-pre">' + esc(content) + '</pre>';
+      }
+      return h + '</div>';
+    }
+
+    // ── Metrics ──
+    if (type === 'metrics' && typeof d === 'object' && !Array.isArray(d)) {
+      var keys = Object.keys(d);
+      if (!keys.length) return '';
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><div class="result-metrics">';
+      keys.forEach(function(k) {
+        var v = d[k];
+        var val = (typeof v === 'object' && v !== null) ? v.value : v;
+        var unit = (typeof v === 'object' && v !== null && v.unit) ? ' ' + v.unit : '';
+        h += '<div class="result-metric-card"><div class="result-metric-value">' + esc(String(val)) + esc(unit) + '</div>';
+        h += '<div class="result-metric-name">' + esc(k) + '</div></div>';
+      });
+      return h + '</div></div>';
+    }
+
+    // ── Run history ──
+    if (type === 'run_history' && Array.isArray(d) && d.length) {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><table class="result-table"><thead><tr><th>Type</th><th>Status</th><th>When</th></tr></thead><tbody>';
+      d.forEach(function(run) {
+        h += '<tr><td>' + esc(run.run_type || '') + '</td>';
+        h += '<td>' + esc(run.status || '') + '</td>';
+        h += '<td>' + esc(fmtTime(run.started_at)) + '</td></tr>';
+      });
+      return h + '</tbody></table></div>';
+    }
+
+    // ── Baseline ──
+    if (type === 'baseline' && typeof d === 'object') {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div>';
+      if (d.system_context) {
+        var ctx = d.system_context;
+        if (ctx.length > 600) ctx = ctx.substring(0, 600) + '...';
+        h += '<pre class="result-pre">' + esc(ctx) + '</pre>';
+      }
+      if (d.checklist_items && d.checklist_items.length) {
+        h += '<ul>';
+        d.checklist_items.forEach(function(item) { h += '<li>' + esc(item) + '</li>'; });
+        h += '</ul>';
+      }
+      return h + '</div>';
+    }
+
+    // ── Blocklist ──
+    if (type === 'blocklist' && Array.isArray(d) && d.length) {
+      var h = '<div class="result-section"><div class="result-label">' + esc(title) + '</div><table class="result-table"><thead><tr><th>Pattern</th><th>Category</th><th>Description</th></tr></thead><tbody>';
+      d.forEach(function(b) {
+        h += '<tr><td><code>' + esc(b.pattern_signature || '') + '</code></td>';
+        h += '<td>' + esc(b.category || '') + '</td>';
+        h += '<td>' + esc(b.description || '') + '</td></tr>';
+      });
+      return h + '</tbody></table></div>';
+    }
+
+    // ── Help examples ──
+    if (type === 'help' && Array.isArray(d)) {
+      var h = '<div class="chat-examples chat-examples--inline">';
+      d.forEach(function(q) {
+        h += '<button class="chat-example-btn" onclick="askExample(this)">' + esc(q) + '</button>';
+      });
+      return h + '</div>';
+    }
+
+    return '';
+  }
+
+  // ── Helpers ──
+
+  function fmtTime(ts) {
+    if (!ts) return '';
+    try { var d = new Date(ts); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+    catch(e) { return ts; }
+  }
+
+  function esc(text) {
+    var d = document.createElement('div');
+    d.textContent = text || '';
+    return d.innerHTML;
+  }
+
+  function finish() {
+    isBusy = false;
+    inputEl.disabled = false;
+    sendBtn.disabled = false;
+    inputEl.focus();
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function updateContextPanel(ctx) {
+    // Resources
+    var resEl = document.getElementById('ctx-resources');
+    if (ctx.resources && ctx.resources.length) {
+      var h = '<ul class="context-list">';
+      ctx.resources.forEach(function(r) {
+        h += '<li class="context-list-item" data-resource-id="' + esc(r.id) + '">';
+        h += '<a href="/resources/' + encodeURIComponent(r.id) + '">' + esc(r.name) + '</a>';
+        h += '<span class="badge badge--' + esc(r.severity) + '">' + esc(r.severity) + '</span></li>';
+      });
+      resEl.innerHTML = h + '</ul>';
+    }
+
+    // Findings
+    var findEl = document.getElementById('ctx-findings');
+    if (ctx.findings) {
+      var shown = ctx.findings.slice(0, 10);
+      var h = '<ul class="context-list">';
+      shown.forEach(function(f) {
+        h += '<li class="context-list-item" data-finding-id="' + esc(f.id) + '">';
+        h += '<span class="badge badge--' + esc(f.severity) + '">' + esc(f.severity) + '</span>';
+        h += '<span class="context-finding-title">' + esc(f.title) + '</span></li>';
+      });
+      h += '</ul>';
+      if (ctx.findings_total > 10) h += '<span class="text-muted">+ ' + (ctx.findings_total - 10) + ' more</span>';
+      findEl.innerHTML = h;
+    }
+
+    // Metrics — update and show/hide the card
+    var metCard = document.getElementById('ctx-metrics-card');
+    var metEl = document.getElementById('ctx-metrics');
+    if (metCard && ctx.resources) {
+      var hasMetrics = false;
+      var h = '<ul class="context-list">';
+      ctx.resources.forEach(function(r) {
+        if (r.metrics && Object.keys(r.metrics).length) {
+          hasMetrics = true;
+          h += '<li class="context-list-item"><strong>' + esc(r.name) + ':</strong> ';
+          Object.entries(r.metrics).forEach(function(e) {
+            h += '<span class="context-metric">' + esc(e[0]) + '=' + e[1] + '</span> ';
+          });
+          h += '</li>';
+        }
+      });
+      h += '</ul>';
+      if (hasMetrics) {
+        metEl.innerHTML = h;
+        metCard.classList.remove('hidden');
+      } else {
+        metCard.classList.add('hidden');
+      }
+    }
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} - Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>{{ status_code }}</h2>
+  </div>
+</div>
+
+<div class="alert alert--{{ 'danger' if status_code >= 500 else 'warning' }}">
+  <strong>{{ message }}</strong>
+  {% if status_code == 400 %}
+  The request was invalid. Check your input and try again.
+  {% elif status_code == 403 %}
+  You don't have permission to access this page. Contact an admin if you need access.
+  {% elif status_code == 404 %}
+  The page you're looking for doesn't exist or has been moved.
+  {% elif status_code == 429 %}
+  Too many requests. Wait a moment and try again.
+  {% elif status_code >= 500 %}
+  An internal error occurred. If this persists, check the server logs.
+  {% endif %}
+</div>
+
+<div class="error-actions" style="display:flex; gap:var(--sp-2); flex-wrap:wrap; margin-bottom: var(--sp-4);">
+  {% if status_code == 400 %}
+    <button type="button" class="btn" onclick="history.back()">Go Back</button>
+    <a href="/" class="btn btn-outline">Dashboard</a>
+  {% elif status_code == 403 %}
+    <a href="/" class="btn">Go to Dashboard</a>
+  {% elif status_code == 404 %}
+    <a href="/" class="btn">Go to Dashboard</a>
+    <a href="/resources" class="btn btn-outline">View Resources</a>
+  {% elif status_code == 429 %}
+    <a href="/" class="btn">Go to Dashboard</a>
+    <button type="button" class="btn btn-outline" onclick="location.reload()">Refresh</button>
+  {% elif status_code >= 500 %}
+    <button type="button" class="btn" onclick="location.reload()">Refresh</button>
+    <a href="/" class="btn btn-outline">Dashboard</a>
+  {% endif %}
+</div>
+
+{% if current_user and status_code in (400, 404) %}
+<p class="text-muted text-sm">
+  Tip: press <kbd>Ctrl</kbd>+<kbd>K</kbd> (or <kbd>⌘</kbd>+<kbd>K</kbd>) to open the command palette and jump anywhere.
+</p>
+{% endif %}
+{% endblock %}
