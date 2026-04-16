@@ -95,52 +95,48 @@
     </div>
   </section>
 
-  <!-- ── PROBLEM ─────────────────────────────────────────────── -->
-  <section class="lp-section lp-section--light">
-    <div class="lp-container lp-container--narrow" style="text-align:center">
-      <h2 class="lp-section-title lp-reveal">Monitoring tells you <em>what</em> broke.<br>Not <em>why</em>. Not <em>what to do</em>.</h2>
-      <p class="lp-section-sub lp-reveal" style="margin:0 auto">You get a 3am Slack alert: "disk usage warning." Then you SSH in, tail logs, check docker, look at cron. Same 20-minute routine, every page. Supavision does that investigation for you.</p>
-    </div>
-  </section>
-
   <!-- ── FEATURES (detailed with visuals) ────────────────────── -->
-  <section id="features" class="lp-section lp-section--light" style="padding-top:0">
+  <section id="features" class="lp-section lp-section--light">
+    <div class="lp-container lp-container--narrow" style="text-align:center; margin-bottom:var(--lp-sp-12)">
+      <h2 class="lp-section-title lp-reveal">Monitoring tells you <em>what</em> broke.<br>Not <em>why</em>. Not <em>what to do</em>.</h2>
+      <p class="lp-section-sub lp-reveal" style="margin:0 auto">You get a 3am Slack alert: "disk usage warning." Then you SSH in, tail logs, check docker, look at cron. Same 20-minute routine, every time. Supavision does that investigation for you.</p>
+    </div>
     <div class="lp-container">
       <!-- Feature 1: Structured reports -->
       <div class="lp-feature lp-reveal">
         <div>
           <span class="lp-eyebrow">Structured reports</span>
           <h3>Skim a report in 5 seconds.</h3>
-          <p>Every health check produces a typed payload: status, summary, metrics, and a list of issues with severity, evidence, and recommendations. No prose dumps to parse.</p>
+          <p>Every health check produces a typed payload: status, summary, metrics, and a list of issues with severity, evidence, and recommendations. Structured and scannable.</p>
           <ul class="lp-feature-list">
             <li>Pydantic-validated at the boundary</li>
-            <li>Dual-mode evaluator: structured primary, regex fallback</li>
-            <li>Raw narrative still available collapsed</li>
+            <li>Automatic severity assessment with structured + regex fallback</li>
+            <li>Full investigation narrative available on expand</li>
           </ul>
         </div>
         <div class="lp-feature-visual">
-          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
-            <rect x="20" y="28" width="200" height="20" rx="6" fill="#bf8700"/>
-            <rect x="20" y="68" width="440" height="12" rx="4" fill="#d0d7de"/>
-            <rect x="20" y="96" width="320" height="12" rx="4" fill="#d0d7de"/>
+          <svg viewBox="0 0 300 220" width="100%" aria-hidden="true">
+            <rect x="12" y="12" width="120" height="14" rx="4" fill="#bf8700"/>
+            <rect x="12" y="38" width="276" height="8" rx="3" fill="#d0d7de"/>
+            <rect x="12" y="54" width="200" height="8" rx="3" fill="#d0d7de"/>
             <g>
-              <rect x="20" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-              <text x="60" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">cpu 23%</text>
-              <rect x="108" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-              <text x="148" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">mem 61%</text>
-              <rect x="196" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-              <text x="236" y="164" font-family="Inter" font-size="11" fill="#bf8700" text-anchor="middle">disk 82%</text>
-              <rect x="284" y="136" width="80" height="44" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-              <text x="324" y="164" font-family="Inter" font-size="11" fill="#57606a" text-anchor="middle">load 0.7</text>
+              <rect x="12" y="76" width="58" height="30" rx="5" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="41" y="95" font-family="Inter" font-size="10" fill="#57606a" text-anchor="middle">cpu 23%</text>
+              <rect x="76" y="76" width="58" height="30" rx="5" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="105" y="95" font-family="Inter" font-size="10" fill="#57606a" text-anchor="middle">mem 61%</text>
+              <rect x="140" y="76" width="58" height="30" rx="5" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="169" y="95" font-family="Inter" font-size="10" fill="#bf8700" text-anchor="middle">disk 82%</text>
+              <rect x="204" y="76" width="58" height="30" rx="5" fill="#f6f8fa" stroke="#d0d7de"/>
+              <text x="233" y="95" font-family="Inter" font-size="10" fill="#57606a" text-anchor="middle">load 0.7</text>
             </g>
-            <rect x="20" y="200" width="440" height="48" rx="8" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
-            <rect x="20" y="200" width="6" height="48" fill="#bf8700"/>
-            <text x="40" y="224" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">Disk will be full in 28 days</text>
-            <text x="40" y="240" font-family="Inter" font-size="9" fill="#8b949e">Rotate /var/log/app/*.log — grew 4.1 GB/week</text>
-            <rect x="20" y="260" width="440" height="48" rx="8" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
-            <rect x="20" y="260" width="6" height="48" fill="#d1242f"/>
-            <text x="40" y="284" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">certbot SSL renewal failing</text>
-            <text x="40" y="300" font-family="Inter" font-size="9" fill="#8b949e">ACME challenges failing for master.devsquall.com</text>
+            <rect x="12" y="120" width="276" height="36" rx="5" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
+            <rect x="12" y="120" width="4" height="36" fill="#bf8700"/>
+            <text x="26" y="137" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">Disk will be full in 28 days</text>
+            <text x="26" y="151" font-family="Inter" font-size="9" fill="#8b949e">Rotate /var/log/app/*.log — grew 4.1 GB/week</text>
+            <rect x="12" y="164" width="276" height="36" rx="5" fill="#fff" stroke="#d0d7de" stroke-width="0.8"/>
+            <rect x="12" y="164" width="4" height="36" fill="#d1242f"/>
+            <text x="26" y="181" font-family="Inter" font-weight="700" font-size="11" fill="#57606a">certbot SSL renewal failing</text>
+            <text x="26" y="195" font-family="Inter" font-size="9" fill="#8b949e">ACME challenges failing for master.devsquall.com</text>
           </svg>
         </div>
       </div>
@@ -150,35 +146,35 @@
         <div>
           <span class="lp-eyebrow">Run-vs-run diffs</span>
           <h3>See what changed. Instantly.</h3>
-          <p>Stable issue IDs (derived from tag + scope slugs) make set-diffs across runs deterministic. New, resolved, and persisted counts show up in the dashboard and Slack alerts.</p>
+          <p>Stable issue IDs make set-diffs across runs deterministic. New, resolved, and persisted counts show up in the dashboard and Slack alerts.</p>
           <ul class="lp-feature-list">
             <li>Issue title drift does not break the diff</li>
-            <li>Cheap: plain set math, no LLM cost</li>
+            <li>No LLM cost — pure set math</li>
             <li>Visible in reports, timelines, and alerts</li>
           </ul>
         </div>
         <div class="lp-feature-visual">
-          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
-            <text x="40" y="50" font-family="Inter" font-weight="700" font-size="13" fill="#1a1a2e">What changed</text>
-            <g transform="translate(40 80)">
-              <rect x="0" y="0" width="110" height="48" rx="10" fill="#bf87001a" stroke="#bf8700" stroke-width="1"/>
-              <text x="55" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#bf8700" text-anchor="middle">+2 new</text>
+          <svg viewBox="0 0 300 220" width="100%" aria-hidden="true">
+            <text x="14" y="20" font-family="Inter" font-weight="700" font-size="13" fill="#1a1a2e">What changed</text>
+            <g transform="translate(14 32)">
+              <rect x="0" y="0" width="76" height="30" rx="6" fill="#bf87001a" stroke="#bf8700" stroke-width="1"/>
+              <text x="38" y="20" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#bf8700" text-anchor="middle">+2 new</text>
             </g>
-            <g transform="translate(165 80)">
-              <rect x="0" y="0" width="140" height="48" rx="10" fill="#1a7f371a" stroke="#1a7f37" stroke-width="1"/>
-              <text x="70" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#1a7f37" text-anchor="middle">−1 resolved</text>
+            <g transform="translate(98 32)">
+              <rect x="0" y="0" width="96" height="30" rx="6" fill="#1a7f371a" stroke="#1a7f37" stroke-width="1"/>
+              <text x="48" y="20" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#1a7f37" text-anchor="middle">−1 resolved</text>
             </g>
-            <g transform="translate(320 80)">
-              <rect x="0" y="0" width="110" height="48" rx="10" fill="#e9ecef" stroke="#d0d7de" stroke-width="1"/>
-              <text x="55" y="30" font-family="JetBrains Mono" font-size="13" font-weight="700" fill="#57606a" text-anchor="middle">=3 persisted</text>
+            <g transform="translate(202 32)">
+              <rect x="0" y="0" width="84" height="30" rx="6" fill="#e9ecef" stroke="#d0d7de" stroke-width="1"/>
+              <text x="42" y="20" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#57606a" text-anchor="middle">=3 persisted</text>
             </g>
-            <line x1="40" y1="155" x2="440" y2="155" stroke="#e9ecef" stroke-width="1"/>
-            <text x="40" y="185" font-family="Inter" font-size="11" fill="#bf8700">new: Disk will be full in 28 days</text>
-            <text x="40" y="210" font-family="Inter" font-size="11" fill="#bf8700">new: certbot SSL renewal failing</text>
-            <text x="40" y="245" font-family="Inter" font-size="11" fill="#1a7f37">resolved: nginx worker restart loop</text>
-            <text x="40" y="280" font-family="Inter" font-size="11" fill="#8b949e">persisted: ssh brute-force attempts (port 22)</text>
-            <text x="40" y="305" font-family="Inter" font-size="11" fill="#8b949e">persisted: unattended-upgrades disabled</text>
-            <text x="40" y="330" font-family="Inter" font-size="11" fill="#8b949e">persisted: /tmp not on tmpfs</text>
+            <line x1="14" y1="76" x2="286" y2="76" stroke="#e9ecef" stroke-width="1"/>
+            <text x="14" y="96" font-family="Inter" font-size="11" fill="#bf8700">new: Disk will be full in 28 days</text>
+            <text x="14" y="114" font-family="Inter" font-size="11" fill="#bf8700">new: certbot SSL renewal failing</text>
+            <text x="14" y="140" font-family="Inter" font-size="11" fill="#1a7f37">resolved: nginx worker restart loop</text>
+            <text x="14" y="166" font-family="Inter" font-size="11" fill="#8b949e">persisted: ssh brute-force attempts (port 22)</text>
+            <text x="14" y="184" font-family="Inter" font-size="11" fill="#8b949e">persisted: unattended-upgrades disabled</text>
+            <text x="14" y="202" font-family="Inter" font-size="11" fill="#8b949e">persisted: /tmp not on tmpfs</text>
           </svg>
         </div>
       </div>
@@ -188,27 +184,27 @@
         <div>
           <span class="lp-eyebrow">Actionable Slack alerts</span>
           <h3>Alerts that say what to do.</h3>
-          <p>When a critical issue appears, the Slack message cites the top issue, its recommendation, and the diff counts. Deep link back to the full report. Dedup prevents the same issue from alerting repeatedly.</p>
+          <p>When a critical issue appears, the Slack message cites the top issue, its recommendation, and the diff counts. Deep link back to the full report. Same issue across runs means one alert, not ten.</p>
           <ul class="lp-feature-list">
-            <li>Dedup keyed by stable issue ID</li>
+            <li>Same issue across runs triggers one alert, not ten</li>
             <li>Block Kit formatting with severity colors</li>
-            <li>Falls back to legacy format for older reports</li>
+            <li>Works with both structured and plain-text reports</li>
           </ul>
         </div>
         <div class="lp-feature-visual">
-          <svg viewBox="0 0 480 360" width="100%" aria-hidden="true">
-            <rect x="20" y="20" width="440" height="320" rx="16" fill="#fff" stroke="#d0d7de"/>
-            <rect x="20" y="20" width="10" height="320" rx="4 0 0 4" fill="#d1242f"/>
-            <text x="50" y="60" font-family="Inter" font-weight="700" font-size="14" fill="#1a1a2e">prod-01 · CRITICAL</text>
-            <text x="50" y="88" font-family="Inter" font-size="10" fill="#57606a">Disk at 99% on /var, 3 services crash-looping</text>
-            <rect x="50" y="110" width="390" height="70" rx="8" fill="#f6f8fa"/>
-            <text x="66" y="136" font-family="Inter" font-weight="700" font-size="11" fill="#1a1a2e">Top issue: Disk will be full in 28 days</text>
-            <text x="66" y="158" font-family="Inter" font-size="9.5" fill="#57606a">Rotate /var/log/app/*.log — /var grew 4.1 GB/week</text>
-            <text x="66" y="173" font-family="Inter" font-size="9.5" fill="#57606a">Consider moving docker volumes off /var</text>
-            <text x="50" y="215" font-family="JetBrains Mono" font-size="11" fill="#57606a">+2 new, −1 resolved, =3 persisted</text>
-            <rect x="50" y="240" width="160" height="40" rx="8" fill="#0969da"/>
-            <text x="130" y="265" font-family="Inter" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">View full report →</text>
-            <text x="50" y="310" font-family="Inter" font-size="9" fill="#8b949e">via Supavision · 2 min ago</text>
+          <svg viewBox="0 0 300 220" width="100%" aria-hidden="true">
+            <rect x="6" y="6" width="288" height="208" rx="10" fill="#fff" stroke="#d0d7de"/>
+            <rect x="6" y="6" width="6" height="208" rx="3 0 0 3" fill="#d1242f"/>
+            <text x="24" y="30" font-family="Inter" font-weight="700" font-size="14" fill="#1a1a2e">prod-01 · CRITICAL</text>
+            <text x="24" y="48" font-family="Inter" font-size="10" fill="#57606a">Disk at 99% on /var, 3 services crash-looping</text>
+            <rect x="24" y="60" width="260" height="50" rx="6" fill="#f6f8fa"/>
+            <text x="34" y="78" font-family="Inter" font-weight="700" font-size="11" fill="#1a1a2e">Top issue: Disk will be full in 28 days</text>
+            <text x="34" y="94" font-family="Inter" font-size="9.5" fill="#57606a">Rotate /var/log/app/*.log — /var grew 4.1 GB/week</text>
+            <text x="34" y="106" font-family="Inter" font-size="9.5" fill="#57606a">Consider moving docker volumes off /var</text>
+            <text x="24" y="132" font-family="JetBrains Mono" font-size="11" fill="#57606a">+2 new, −1 resolved, =3 persisted</text>
+            <rect x="24" y="146" width="120" height="30" rx="6" fill="#0969da"/>
+            <text x="84" y="166" font-family="Inter" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">View full report →</text>
+            <text x="24" y="198" font-family="Inter" font-size="9" fill="#8b949e">via Supavision · 2 min ago</text>
           </svg>
         </div>
       </div>
@@ -216,7 +212,7 @@
   </section>
 
   <!-- ── MORE CAPABILITIES (compact cards) ───────────────────── -->
-  <section class="lp-section lp-section--light" style="padding-top:0">
+  <section class="lp-section lp-section--light" style="padding-top:0; padding-bottom:var(--lp-sp-12)">
     <div class="lp-container">
       <div class="lp-cards-grid lp-reveal">
         <div class="lp-card">
@@ -227,22 +223,24 @@
           <p>Servers (SSH), AWS accounts, GitHub orgs, and databases. Each type has its own prompt templates and tool allowlist. Add custom types via templates.</p>
         </div>
         <div class="lp-card">
-          <div class="lp-card-icon">
+          <div class="lp-card-icon lp-card-icon--purple">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
           </div>
           <h3>Claude Code MCP</h3>
-          <p>Ships an MCP server so Claude Code can query your ops data directly. "How has prod-01 been trending this week?" Read-only by default.</p>
+          <p>Ships an MCP server so Claude Code can query your ops data directly. "How has prod-01 been trending this week?" Always read-only.</p>
         </div>
         <div class="lp-card">
-          <div class="lp-card-icon">
+          <div class="lp-card-icon lp-card-icon--green">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v4M16 2v4M4 10h16"/></svg>
           </div>
           <h3>Cron scheduling</h3>
-          <p>Set a cron expression per resource. Health checks run in the background with a concurrency limit. Miss nothing, waste no cycles.</p>
+          <p>Set a cron expression per resource. Health checks run in the background with a concurrency limit. Runs unattended in the background.</p>
         </div>
       </div>
     </div>
   </section>
+
+  <div class="lp-divider-fade" aria-hidden="true"></div>
 
   <!-- ── HOW IT WORKS ────────────────────────────────────────── -->
   <section id="how" class="lp-section">
@@ -291,22 +289,24 @@
       <p class="lp-section-sub lp-reveal" style="margin:0 auto">The agent runs from a curated allowlist of ~70 read-only commands. No shell chaining, no SQL writes, no destructive operations. Everything is auditable.</p>
     </div>
     <div class="lp-container">
-      <ul class="lp-security lp-reveal">
-        <li><strong>RBAC built in.</strong> Admin and viewer roles. Per-endpoint enforcement on every mutation route.</li>
-        <li><strong>CSRF tokens on every form.</strong> Double-submit cookie pattern, validated per request.</li>
-        <li><strong>SSRF prevention.</strong> Webhook URLs validated against private network ranges before DNS resolution.</li>
-        <li><strong>Credential isolation.</strong> Secrets stored as env var references, never as raw values in the database.</li>
-        <li><strong>SQLite WAL mode.</strong> Concurrent-safe, zero external dependencies. No database to misconfigure.</li>
-        <li><strong>Open source, MIT.</strong> Read the code. Audit the allowlist. Fork it.</li>
-      </ul>
+      <div class="lp-security-panel lp-reveal">
+        <ul class="lp-security">
+          <li><strong>RBAC built in.</strong> Admin and viewer roles. Per-endpoint enforcement on every mutation route.</li>
+          <li><strong>CSRF tokens on every form.</strong> Double-submit cookie pattern, validated per request.</li>
+          <li><strong>SSRF prevention.</strong> Webhook URLs validated against private network ranges before DNS resolution.</li>
+          <li><strong>Credential isolation.</strong> Secrets stored as env var references, never as raw values in the database.</li>
+          <li><strong>SQLite WAL mode.</strong> Concurrent-safe, zero external dependencies. No external database required.</li>
+          <li><strong>Open source, MIT.</strong> Read the code. Audit the allowlist. Fork it.</li>
+        </ul>
+      </div>
     </div>
   </section>
 
   <!-- ── FINAL CTA ──────────────────────────────────────────── -->
   <section class="lp-section" style="text-align:center">
     <div class="lp-container lp-container--narrow">
-      <h2 class="lp-section-title lp-reveal">Try it against a throwaway VM first.</h2>
-      <p class="lp-section-sub lp-reveal" style="margin:0 auto var(--lp-sp-6)">Open source. MIT licensed. Feedback and PRs welcome.</p>
+      <h2 class="lp-section-title lp-reveal">Get started in five minutes.</h2>
+      <p class="lp-section-sub lp-reveal" style="margin:0 auto var(--lp-sp-6)">Install from PyPI, create an admin user, and connect your first resource.</p>
       <div class="lp-reveal">
         <a href="https://github.com/devsquall/supavision" class="lp-btn lp-btn--primary">View on GitHub &rarr;</a>
         <a href="https://pypi.org/project/supavision/" class="lp-btn lp-btn--ghost" style="margin-left:var(--lp-sp-3)">View on PyPI</a>
@@ -321,7 +321,7 @@
     <div class="lp-footer-inner">
       <div>
         <span class="lp-logo" style="font-size:16px"><span class="lp-logo-accent">S</span>upavision</span>
-        <span style="margin-left:var(--lp-sp-3); color:var(--lp-text-dim); font-size:13px">Built with Claude</span>
+        <span style="margin-left:var(--lp-sp-3); color:var(--lp-text-dim); font-size:13px">v0.4.1 · Built with Claude</span>
       </div>
       <div class="lp-footer-links">
         <a href="#features">Features</a>

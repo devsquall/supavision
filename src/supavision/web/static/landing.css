@@ -280,8 +280,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
 
 .lp-feature {
   display: grid; grid-template-columns: 1fr 1fr;
-  gap: var(--lp-sp-12); align-items: center;
-  margin-bottom: var(--lp-sp-16);
+  gap: var(--lp-sp-10); align-items: center;
+  margin-bottom: var(--lp-sp-12);
 }
 .lp-feature:last-child { margin-bottom: 0; }
 .lp-feature--reverse .lp-feature-visual { order: -1; }
@@ -309,12 +309,12 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
   aspect-ratio: 4 / 3;
   max-width: 480px;
   margin-inline: auto;
-  background: linear-gradient(135deg, #f0f4ff, #e0e9ff);
-  border: 1px solid var(--lp-border-light);
+  background: linear-gradient(135deg, #eaf0ff, #dbe4ff);
+  border: 1px solid #c8d6e5;
   border-radius: var(--lp-radius-lg);
   padding: var(--lp-sp-4);
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 30px rgba(74, 158, 255, 0.08);
+  box-shadow: 0 8px 30px rgba(74, 158, 255, 0.10);
 }
 
 /* ── Compact cards (3-up grid) ───────────────────────────────── */
@@ -339,6 +339,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
   padding: 8px; border-radius: var(--lp-radius-sm);
   background: rgba(74, 158, 255, 0.1); color: var(--lp-accent);
 }
+.lp-card-icon--purple { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.lp-card-icon--green { background: rgba(26, 127, 55, 0.1); color: #1a7f37; }
 .lp-card h3 {
   font-size: 18px; margin-bottom: var(--lp-sp-2);
   color: var(--lp-text-dark);
@@ -421,6 +423,28 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
   color: var(--lp-accent); font-weight: 700; font-size: 13px;
 }
 .lp-security strong { color: var(--lp-text); font-weight: 600; }
+
+.lp-security-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--lp-border-dark);
+  border-radius: var(--lp-radius-lg);
+  padding: var(--lp-sp-6) var(--lp-sp-8) var(--lp-sp-5);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── Light→dark gradient divider ─────────────────────────────── */
+
+.lp-divider-fade {
+  height: 64px;
+  background: linear-gradient(to bottom, var(--lp-bg-light) 0%, var(--lp-bg) 100%);
+}
+
+/* ── Tighter spacing for bottom sections ─────────────────────── */
+
+#security.lp-section { padding-top: var(--lp-sp-12); padding-bottom: var(--lp-sp-12); }
+#security .lp-container--narrow { margin-bottom: var(--lp-sp-8); }
+#security + .lp-section { padding-top: var(--lp-sp-8); padding-bottom: var(--lp-sp-12); }
 
 /* ── Footer ──────────────────────────────────────────────────── */
 
