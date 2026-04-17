@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from ..models import (
     Resource,
@@ -89,14 +89,24 @@ async def system_status(request: Request):
 
 
 class CreateResourceRequest(BaseModel):
-    name: str
+    name: str = Field(..., max_length=200)
     resource_type: str
     parent_id: str = ""
     config: dict[str, str] = {}
 
+    @field_validator("config")
+    @classmethod
+    def validate_config(cls, v: dict) -> dict:
+        if len(v) > 50:
+            raise ValueError("config cannot have more than 50 entries")
+        for k, val in v.items():
+            if len(val) > 500:
+                raise ValueError(f"config value for '{k}' must be 500 characters or fewer")
+        return v
+
 
 class UpdateResourceRequest(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=200)
     config: dict | None = None
     parent_id: str | None = None
 

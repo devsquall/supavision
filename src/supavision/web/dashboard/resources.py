@@ -399,6 +399,8 @@ async def resource_edit_submit(resource_id: str, request: Request):
     form = await request.form()
     name = form.get("name", "").strip()
     if name:
+        if len(name) > 200:
+            raise HTTPException(400, "Resource name must be 200 characters or fewer.")
         resource.name = name
 
     ssh_host = form.get("ssh_host", "").strip()
@@ -410,6 +412,10 @@ async def resource_edit_submit(resource_id: str, request: Request):
     else:
         for k in ("ssh_host", "ssh_user", "ssh_key_path", "ssh_port"):
             resource.config.pop(k, None)
+
+    for ck, cv in resource.config.items():
+        if len(cv) > 500:
+            raise HTTPException(400, f"Config value for '{ck}' must be 500 characters or fewer.")
 
     store.save_resource(resource)
 
@@ -470,6 +476,8 @@ async def resource_new_submit(request: Request):
 
     if not name:
         raise HTTPException(400, "Name is required.")
+    if len(name) > 200:
+        raise HTTPException(400, "Resource name must be 200 characters or fewer.")
     if resource_type not in RESOURCE_TYPES:
         raise HTTPException(400, "Invalid resource type.")
 
@@ -517,12 +525,19 @@ async def resource_new_submit(request: Request):
     if notes:
         config["notes"] = notes
 
-    # Monitoring requests (textarea → list)
+    # Config size guard
+    if len(config) > 50:
+        raise HTTPException(400, "Config cannot have more than 50 entries.")
+    for ck, cv in config.items():
+        if len(cv) > 500:
+            raise HTTPException(400, f"Config value for '{ck}' must be 500 characters or fewer.")
+
+    # Monitoring requests (textarea → list); silently cap to avoid bad UX on free-text field
     monitoring_requests_raw = form.get("monitoring_requests", "").strip()
     monitoring_requests = [
-        line.strip() for line in monitoring_requests_raw.split("\n")
+        line.strip()[:500] for line in monitoring_requests_raw.split("\n")
         if line.strip()
-    ] if monitoring_requests_raw else []
+    ][:50] if monitoring_requests_raw else []
 
     # Slack webhook (with SSRF validation)
     slack = form.get("slack_webhook", "").strip()
@@ -872,6 +887,10 @@ async def add_checklist_item(resource_id: str, request: Request):
     item_text = form.get("request", "").strip()
     if not item_text:
         raise HTTPException(status_code=400, detail="Check description required")
+    if len(item_text) > 500:
+        raise HTTPException(status_code=400, detail="Monitoring request must be 500 characters or fewer.")
+    if len(resource.monitoring_requests) >= 50:
+        raise HTTPException(status_code=400, detail="Cannot have more than 50 monitoring requests.")
 
     if not resource.monitoring_requests:
         resource.monitoring_requests = []

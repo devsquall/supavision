@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supavision.db import Store
-from supavision.models import Resource, RunStatus, RunType
+from supavision.models import Resource, Run, RunStatus, RunType
 from supavision.web.auth import generate_api_key, hash_api_key
 from supavision.web.routes import health_router, router
 
@@ -692,3 +692,49 @@ class TestUpdateResource:
         store.save_resource(resource)
         resp = viewer.put(f"/api/v1/resources/{resource.id}", json={"name": "hacked"})
         assert resp.status_code == 403
+
+
+class TestTriggerRun:
+    """POST /api/v1/runs — unified run trigger endpoint."""
+
+    def test_trigger_discovery_returns_run_id(self, client, store):
+        resource = Resource(name="srv", resource_type="server")
+        store.save_resource(resource)
+        resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "discovery"})
+        assert resp.status_code == 200
+        assert "run_id" in resp.json()
+
+    def test_trigger_health_check_returns_run_id(self, client, store):
+        resource = Resource(name="srv", resource_type="server")
+        store.save_resource(resource)
+        resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "health_check"})
+        assert resp.status_code == 200
+        assert "run_id" in resp.json()
+
+    def test_trigger_creates_run_with_correct_type(self, client, store):
+        resource = Resource(name="srv", resource_type="server")
+        store.save_resource(resource)
+        resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "discovery"})
+        run_id = resp.json()["run_id"]
+        run = store.get_run(run_id)
+        assert run is not None
+        assert str(run.run_type) == "discovery"
+
+    def test_trigger_invalid_run_type_returns_400(self, client, store):
+        resource = Resource(name="srv", resource_type="server")
+        store.save_resource(resource)
+        resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "invalid"})
+        assert resp.status_code == 400
+
+    def test_trigger_unknown_resource_returns_404(self, client):
+        resp = client.post("/api/v1/runs", json={"resource_id": "does-not-exist", "run_type": "discovery"})
+        assert resp.status_code == 404
+
+    def test_trigger_run_in_progress_returns_409(self, client, store):
+        resource = Resource(name="srv", resource_type="server")
+        store.save_resource(resource)
+        # Create an in-progress run
+        run = Run(resource_id=resource.id, run_type=RunType.HEALTH_CHECK, status=RunStatus.RUNNING)
+        store.save_run(run)
+        resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "health_check"})
+        assert resp.status_code == 409

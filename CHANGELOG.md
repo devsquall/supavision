@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.4.2 (2026-04-17)
+
+### Bug Fixes
+- Scheduler: health check runs were silently dropped — RunType.HEALTH_CHECK branch
+  never matched in dispatch (only DISCOVERY ran); discovery also incorrectly triggered
+  a health check afterward
+- Command center: two duplicate class= HTML attributes caused mb-4/mt-3 spacing
+  classes to be ignored by browsers
+- Wizard: cancel button linked to /resources/new instead of /resources
+- profile.html alert class names fixed (alert-error → alert--danger)
+- Audit log badge fallback fixed (badge--type → badge--unknown)
+
+### Security
+- JS confirm modal: apply _esc() to message parameter (defense-in-depth)
+- Removed unauthenticated /api/v1/search endpoint exposure
+
+### Tests
+- Added test_scheduler.py: 18 tests covering dispatch correctness, due-job
+  scheduling logic, and stale run recovery (zero coverage previously)
+- Added TestTriggerRun: 6 tests for POST /api/v1/runs endpoint
+- Total: 754 → 778 tests
+
+### Accessibility
+- ask.html: added aria-label to send button and textarea
+
+### JavaScript
+- Fixed window resize listener memory leak in initLiveTerminal()
+- Replaced javascript: href with proper click event handler
+
+### CSS
+- Added 480px breakpoint for wizard step bar (overflow-x scroll on mobile)
+- Reduced wizard card padding on narrow screens
+
+### Cleanup
+- Removed stale blocklist CREATE TABLE (zero references in codebase)
+- Removed 7 dead CSS badge classes (badge--webhook, badge--discovery, etc.)
+- Removed stale _glossary.html run type labels for removed run types
+
+
+### Security
+- Input validation added to all resource form and API endpoints (name ≤200 chars, config values ≤500 chars, monitoring requests capped at 50 items / 500 chars each)
+- API rate limiting on mutating endpoints (60 req/min per IP)
+- Lock files created with `0o600` permissions; previously world-readable
+- Temp files created with `mkstemp()`, replacing a `mktemp()` TOCTOU race condition
+
+### Removed
+- Lane 2 / codebase-scanning subsystem fully removed (templates, CSS classes, JS functions, test helpers, prompt templates)
+- Dead `codebase/` and `example/` prompt template directories deleted
+
+### Improved
+- Self-documenting UI: inline descriptions and tooltips added to all 15 major pages (dashboard, resources, reports, sessions, metrics, schedules, activity, alerts, command center, ask)
+- MCP server: `supavision_get_severity_trend` tool added
+- MCP server: `datetime.now()` fixed to `datetime.now(timezone.utc)` in metrics trend handler
+
 ## 0.4.1 (2026-04-15)
 
 Docs-only patch release. No code changes.
@@ -62,7 +116,7 @@ Major release. Infrastructure-monitoring-only identity solidified. Findings / co
 - ~5,300 lines removed: 7 backend modules (scanner, codebase_engine, blocklist, code_evaluator, prompt_builder, agent_runner, models/work), 17 Store methods, 5 MCP tools, 8 CLI commands, scheduler codebase branch, ask.py dead composers, Agent Jobs tab from sessions.
 
 ### Test Coverage + CI
-- 755 tests passing.
+- 754 tests passing.
 - Added test suites: REST API endpoints, MCP Lane 2 tools, security edge cases, CLI coverage, dashboard routes, stream-json formatter.
 - RBAC enforcement tests (viewer → 403 on mutations).
 - CI lint cleaned: 25 accumulated pre-existing errors fixed.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "supavision"
-version = "0.4.1"
+version = "0.4.2"
 description = "AI-powered infrastructure monitoring that discovers and watches your servers intelligently"
 readme = "README.md"
 license = "MIT"
