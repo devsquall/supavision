@@ -112,7 +112,7 @@
     <tbody>
     {% for entry in audit_log %}
       <tr>
-        <td><span class="badge badge--{{ 'healthy' if 'success' in entry.event else ('critical' if 'failure' in entry.event else 'type') }}">{{ entry.event }}</span></td>
+        <td><span class="badge badge--{{ 'healthy' if 'success' in entry.event else ('critical' if 'failure' in entry.event else 'unknown') }}">{{ entry.event }}</span></td>
         <td>{{ entry.email or '—' }}</td>
         <td class="text-muted">{{ entry.ip or '—' }}</td>
         <td class="text-muted text-sm">{{ entry.detail or '—' }}</td>

@@ -1177,6 +1177,10 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
   border-top: 1px solid var(--color-border);
 }
 .wizard-footer-right { display: flex; gap: var(--sp-2); }
+@media (max-width: 480px) {
+  .wizard-steps { overflow-x: auto; padding-bottom: var(--sp-3); }
+  .wizard-card { padding: var(--sp-4); }
+}
 
 /* Guidance panel (instructions for setting up credentials) */
 .guidance-panel {

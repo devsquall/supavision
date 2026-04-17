@@ -142,13 +142,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_jobs_status ON agent_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_agent_jobs_work_item ON agent_jobs(work_item_id);
 CREATE INDEX IF NOT EXISTS idx_agent_jobs_resource ON agent_jobs(resource_id);
 
-CREATE TABLE IF NOT EXISTS blocklist (
-    id TEXT PRIMARY KEY,
-    pattern_signature TEXT NOT NULL UNIQUE,
-    category TEXT NOT NULL DEFAULT '',
-    data TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS work_feedback (
     id TEXT PRIMARY KEY,

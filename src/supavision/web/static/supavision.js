@@ -161,7 +161,9 @@ function initLiveTerminal(resourceId, runId) {
     term.loadAddon(fitAddon);
     term.open(container);
     fitAddon.fit();
-    window.addEventListener("resize", function() { fitAddon.fit(); });
+    if (window._termResizeListener) window.removeEventListener("resize", window._termResizeListener);
+    window._termResizeListener = function() { fitAddon.fit(); };
+    window.addEventListener("resize", window._termResizeListener);
   } else {
     term.open(container);
   }
@@ -200,7 +202,12 @@ function initLiveTerminal(resourceId, runId) {
     } else {
       var banner = document.createElement("div");
       banner.className = "terminal-complete-banner";
-      banner.innerHTML = 'Run completed \u2014 <a href="javascript:window.location.reload()">Refresh to see results</a>';
+      banner.textContent = "Run completed \u2014 ";
+      var reloadLink = document.createElement("a");
+      reloadLink.href = "#";
+      reloadLink.textContent = "Refresh to see results";
+      reloadLink.addEventListener("click", function(e) { e.preventDefault(); window.location.reload(); });
+      banner.appendChild(reloadLink);
       container.parentElement.appendChild(banner);
       if (window.sv && sv.fx) sv.fx.fadeSwap(banner);
     }
@@ -257,7 +264,7 @@ function showConfirmModal(message, onConfirm) {
   backdrop.innerHTML =
     '<div class="modal">' +
     '  <div class="modal-body">' +
-    '    <p style="margin-bottom:var(--sp-4);">' + message + '</p>' +
+    '    <p style="margin-bottom:var(--sp-4);">' + _esc(message) + '</p>' +
     '    <div style="display:flex;gap:var(--sp-2);justify-content:flex-end;">' +
     '      <button class="btn btn-outline" id="confirm-cancel">Cancel</button>' +
     '      <button class="btn btn-danger" id="confirm-ok">Confirm</button>' +
