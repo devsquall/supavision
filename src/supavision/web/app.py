@@ -20,7 +20,7 @@ from ..engine import Engine
 from ..models import User
 from ..scheduler import Scheduler
 from ..templates import TEMPLATE_DIR_DEFAULT
-from ..web.auth import hash_password
+from ..web.auth import hash_password, validate_password_strength
 from .dashboard import router as dashboard_router
 from .routes import health_router
 from .routes import router as api_router
@@ -61,6 +61,13 @@ def create_app(
 
         # Backward compatibility: auto-create admin from SUPAVISION_PASSWORD
         if DASHBOARD_PASSWORD and store.count_users() == 0:
+            strength_error = validate_password_strength(DASHBOARD_PASSWORD)
+            if strength_error:
+                logger.warning(
+                    "SUPAVISION_PASSWORD does not meet strength requirements (%s). "
+                    "Switch to 'supavision create-admin' for secure account creation.",
+                    strength_error,
+                )
             admin_email = f"{DASHBOARD_USER}@localhost"
             admin = User(
                 email=admin_email,

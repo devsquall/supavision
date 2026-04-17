@@ -419,3 +419,29 @@ class TestAdminActions:
         )
         assert resp.status_code == 200
         assert "Unknown" in resp.text
+
+
+# ── Form Input Validation ─────────────────────────────────────────
+
+
+class TestAdminFormValidation:
+    def test_new_resource_name_too_long_returns_400(self, client):
+        resp = client.post("/resources/new", data={"name": "x" * 201, "resource_type": "server"})
+        assert resp.status_code == 400
+
+    def test_edit_name_too_long_returns_400(self, client, store):
+        r = _seed_resource(store)
+        resp = client.post(f"/resources/{r.id}/edit", data={"name": "x" * 201})
+        assert resp.status_code == 400
+
+    def test_checklist_item_too_long_returns_400(self, client, store):
+        r = _seed_resource(store)
+        resp = client.post(f"/resources/{r.id}/checklist", data={"request": "x" * 501})
+        assert resp.status_code == 400
+
+    def test_checklist_too_many_items_returns_400(self, client, store):
+        r = _seed_resource(store)
+        r.monitoring_requests = [f"item {i}" for i in range(50)]
+        store.save_resource(r)
+        resp = client.post(f"/resources/{r.id}/checklist", data={"request": "one more"})
+        assert resp.status_code == 400

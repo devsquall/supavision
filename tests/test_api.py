@@ -738,3 +738,45 @@ class TestTriggerRun:
         store.save_run(run)
         resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "health_check"})
         assert resp.status_code == 409
+
+
+# ── Input Validation ─────────────────────────────────────────────
+
+
+class TestResourceValidation:
+    def test_name_too_long_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/resources",
+            json={"name": "x" * 201, "resource_type": "server"},
+        )
+        assert resp.status_code == 422
+
+    def test_name_at_limit_passes(self, client):
+        resp = client.post(
+            "/api/v1/resources",
+            json={"name": "x" * 200, "resource_type": "server"},
+        )
+        assert resp.status_code == 200
+
+    def test_config_value_too_long_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/resources",
+            json={"name": "ok", "resource_type": "server", "config": {"ssh_host": "h" * 501}},
+        )
+        assert resp.status_code == 422
+
+    def test_config_too_many_entries_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/resources",
+            json={"name": "ok", "resource_type": "server", "config": {f"k{i}": "v" for i in range(51)}},
+        )
+        assert resp.status_code == 422
+
+    def test_update_name_too_long_returns_422(self, client, store):
+        create = client.post(
+            "/api/v1/resources",
+            json={"name": "ok", "resource_type": "server"},
+        )
+        rid = create.json()["resource_id"]
+        resp = client.put(f"/api/v1/resources/{rid}", json={"name": "x" * 201})
+        assert resp.status_code == 422

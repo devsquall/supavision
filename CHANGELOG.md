@@ -33,19 +33,16 @@
 - Added 480px breakpoint for wizard step bar (overflow-x scroll on mobile)
 - Reduced wizard card padding on narrow screens
 
-### Cleanup
-- Removed stale blocklist CREATE TABLE (zero references in codebase)
-- Removed 7 dead CSS badge classes (badge--webhook, badge--discovery, etc.)
-- Removed stale _glossary.html run type labels for removed run types
-
-
-### Security
-- Input validation added to all resource form and API endpoints (name ≤200 chars, config values ≤500 chars, monitoring requests capped at 50 items / 500 chars each)
+### Security (continued)
+- Input validation on all resource form and API endpoints (name ≤200 chars, config values ≤500 chars, monitoring requests capped at 50 items / 500 chars each)
 - API rate limiting on mutating endpoints (60 req/min per IP)
 - Lock files created with `0o600` permissions; previously world-readable
 - Temp files created with `mkstemp()`, replacing a `mktemp()` TOCTOU race condition
 
-### Removed
+### Cleanup
+- Removed stale blocklist CREATE TABLE (zero references in codebase)
+- Removed 7 dead CSS badge classes (badge--webhook, badge--discovery, etc.)
+- Removed stale _glossary.html run type labels for removed run types
 - Lane 2 / codebase-scanning subsystem fully removed (templates, CSS classes, JS functions, test helpers, prompt templates)
 - Dead `codebase/` and `example/` prompt template directories deleted
 

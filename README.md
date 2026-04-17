@@ -111,10 +111,19 @@ print(f"Status: {run.status}")
 ## Docker
 
 ```bash
+# 1. Start the container
 docker compose up -d
+
+# 2. Authenticate Claude Code (one-time — opens browser)
+docker exec -it supavision-supavision-1 claude login
+
+# 3. Create your admin account (one-time)
+docker exec -it supavision-supavision-1 supavision create-admin
 ```
 
 Dashboard at `http://localhost:8080`. Data persists in the `supavision-data` volume.
+
+Set `ANTHROPIC_API_KEY` in your environment before `docker compose up` if you prefer key-based auth over `claude login`.
 
 ## Configuration
 
@@ -191,7 +200,7 @@ See [CONTRIBUTING.md](https://github.com/devsquall/supavision/blob/main/CONTRIBU
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 755 tests
+pytest tests/ -v          # 778 tests
 ruff check src/ tests/    # Linting
 ```
 
