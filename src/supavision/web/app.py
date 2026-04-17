@@ -37,7 +37,11 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup
-        store = Store(db_path)
+        try:
+            store = Store(db_path)
+        except Exception as e:
+            logger.critical("Failed to initialize database at %s: %s", db_path, e)
+            raise RuntimeError(f"Database initialization failed: {e}") from e
 
         # Infrastructure engine (requires Claude CLI — optional)
         try:
@@ -113,9 +117,13 @@ def create_app(
         # Check if any users exist — if not, allow unauthenticated access
         # (first-time setup before create-admin has been run)
         if store.count_users() == 0:
+            logger.critical(
+                "NO USERS CONFIGURED — running in open-access mode. "
+                "Create an admin now: supavision create-admin"
+            )
             request.state.csrf_token = ""
             request.state.current_user = None
-            request.state.is_admin = True  # No users = unrestricted access
+            request.state.is_admin = True
             return await call_next(request)
 
         # Check session cookie

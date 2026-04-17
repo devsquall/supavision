@@ -48,7 +48,12 @@ async def health():
 
 @health_router.get("/search")
 async def global_search(request: Request, q: str = ""):
-    """Global search across resources."""
+    """Global search across resources. Requires session or API key auth."""
+    # Reject unauthenticated requests (no session and no API key)
+    has_session = getattr(request.state, "user", None) is not None
+    has_api_key = request.headers.get("x-api-key")
+    if not has_session and not has_api_key:
+        raise HTTPException(status_code=401, detail="Authentication required")
     if not q or len(q) < 2:
         return {"ok": True, "results": []}
     store = _get_store(request)

@@ -939,14 +939,16 @@ class Store:
 
     def touch_session(self, session_id: str) -> None:
         """Update last_activity_at to now (for idle timeout tracking)."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         row = self._execute("SELECT data FROM sessions WHERE id = ?", (session_id,)).fetchone()
         if row:
             session = Session.model_validate(json.loads(row[0]))
-            session.last_activity_at = datetime.now(timezone.utc)
+            if session.expires_at < now or session.revoked_at:
+                return  # Don't revive expired or revoked sessions
+            session.last_activity_at = now
             self._execute(
                 "UPDATE sessions SET data=?, last_activity_at=? WHERE id=?",
-                (json.dumps(session.model_dump(mode="json")), now, session_id),
+                (json.dumps(session.model_dump(mode="json")), now.isoformat(), session_id),
             )
             self._commit()
 

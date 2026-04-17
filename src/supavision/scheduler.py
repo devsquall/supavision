@@ -197,7 +197,7 @@ class Scheduler:
                 elif last_run and not last_run.completed_at:
                     # Run is still in progress — skip
                     continue
-
+                else:
                     # Never run before — due immediately
                     due.append((resource, run_type))
 

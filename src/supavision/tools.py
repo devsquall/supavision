@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shlex
 from dataclasses import dataclass, field
 
 from .executor import CommandResult, Executor
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # ── Validation helpers ────────────────────────────────────────────
 
 _SAFE_SERVICE_NAME = re.compile(r"^[a-zA-Z0-9._-]+$")
-_SAFE_PATH = re.compile(r"^/[a-zA-Z0-9_./ -]+$")
+_SAFE_PATH = re.compile(r"^/[a-zA-Z0-9_./ :@+,-]+$")
 
 # Commands allowed via run_diagnostic (read-only system inspection)
 _DIAGNOSTIC_ALLOWLIST = {
@@ -177,7 +178,7 @@ def _is_diagnostic_allowed(command: str) -> bool:
     cmd = command.strip()
 
     # Block shell chaining (;, &&, ||, |, backticks, $())
-    if any(c in cmd for c in [";", "&&", "||", "|", "`"]):
+    if any(c in cmd for c in [";", "&&", "||", "|", "`", ">", "<", "&"]):
         return False
     if "$(" in cmd:
         return False
@@ -608,12 +609,12 @@ class ToolDispatcher:
         if db_type == "mysql":
             if conn_str:
                 # Parse user:pass@host/dbname
-                cmd = f"mysql {conn_str} -e {query!r} 2>&1"
+                cmd = f"mysql {shlex.quote(conn_str)} -e {query!r} 2>&1"
             else:
                 cmd = f"mysql -e {query!r} 2>&1"
         elif db_type == "postgresql":
             if conn_str:
-                cmd = f"psql {conn_str!r} -c {query!r} 2>&1"
+                cmd = f"psql {shlex.quote(conn_str)} -c {query!r} 2>&1"
             else:
                 cmd = f"psql -c {query!r} 2>&1"
         else:

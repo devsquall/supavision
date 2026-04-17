@@ -74,9 +74,10 @@ def _inline(text: str) -> str:
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
 
     def _link(m):
+        import html as html_mod
         label, url = m.group(1), m.group(2)
         if url.startswith(("http://", "https://", "http%3A", "https%3A")):
-            return f'<a href="{url}" rel="noopener" target="_blank">{label}</a>'
+            return f'<a href="{html_mod.escape(url)}" rel="noopener" target="_blank">{html_mod.escape(label)}</a>'
         return m.group(0)
 
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, text)

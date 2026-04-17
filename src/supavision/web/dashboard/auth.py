@@ -18,7 +18,9 @@ router = APIRouter()
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, next: str = "/"):
     """Show login form."""
-    if not next.startswith("/") or next.startswith("//") or "://" in next:
+    from urllib.parse import urlparse
+    parsed = urlparse(next)
+    if parsed.scheme or parsed.netloc or not next.startswith("/"):
         next = "/"
     if hasattr(request.state, "current_user") and request.state.current_user:
         from fastapi.responses import RedirectResponse
@@ -42,7 +44,9 @@ async def login_submit(request: Request):
     next_url = form.get("next", "/")
 
     # Validate redirect URL
-    if not next_url.startswith("/") or next_url.startswith("//") or "://" in next_url:
+    from urllib.parse import urlparse
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc or not next_url.startswith("/"):
         next_url = "/"
 
     # Rate limit (configurable via SUPAVISION_RATE_LIMIT_LOGIN, default 5/min per IP)

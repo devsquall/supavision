@@ -309,11 +309,16 @@ class Engine:
         executor = self._create_executor(resource)
 
         try:
-            # Test connection first — fail fast before wasting tokens
+            # Test connection first — retry once on transient failure
             if executor.connection:
                 ok, msg = await executor.test_connection()
                 if not ok:
-                    raise ConnectionError(f"Cannot reach {resource.name}: {msg}")
+                    import asyncio as _aio
+                    logger.info("Connection test failed for %s, retrying in 2s: %s", resource.name, msg)
+                    await _aio.sleep(2)
+                    ok, msg = await executor.test_connection()
+                    if not ok:
+                        raise ConnectionError(f"Cannot reach {resource.name}: {msg}")
                 await executor.setup_multiplexing()
 
             # Resolve credentials from parent chain
@@ -482,7 +487,12 @@ class Engine:
             if executor.connection:
                 ok, msg = await executor.test_connection()
                 if not ok:
-                    raise ConnectionError(f"Cannot reach {resource.name}: {msg}")
+                    import asyncio as _aio
+                    logger.info("Connection test failed for %s, retrying in 2s: %s", resource.name, msg)
+                    await _aio.sleep(2)
+                    ok, msg = await executor.test_connection()
+                    if not ok:
+                        raise ConnectionError(f"Cannot reach {resource.name}: {msg}")
                 await executor.setup_multiplexing()
 
             creds = self._resolve_full_credentials(resource)
