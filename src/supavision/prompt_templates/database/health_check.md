@@ -36,7 +36,10 @@ Compare current database state against the discovery baseline.
 
 ## Output Format
 
-- **Status**: Overall health (healthy / warning / critical)
+Your output MUST begin with a status line:
+## Status: **healthy** | **warning** | **critical**
+
+Then include:
 - **Connections**: Current vs max, any connection pool issues
 - **Storage**: Current sizes vs baseline, growth rate
 - **Performance**: Long-running queries, lock contention

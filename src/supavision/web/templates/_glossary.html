@@ -26,13 +26,9 @@
 {%- endmacro %}
 
 {% macro run_type_label(rtype) -%}
-{%- if rtype == "discovery" -%}Initial scan
+{%- if rtype == "discovery" -%}Discovery
 {%- elif rtype == "health_check" -%}Health check
-{%- elif rtype == "scan" -%}Code scan
-{%- elif rtype == "evaluate" -%}AI evaluation
-{%- elif rtype == "implement" -%}AI fix (legacy)
-{%- elif rtype == "scout" -%}Scout
-{%- else -%}{{ rtype }}
+{%- else -%}{{ rtype | replace('_', ' ') | capitalize }}
 {%- endif -%}
 {%- endmacro %}
 

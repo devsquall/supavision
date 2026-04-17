@@ -2293,37 +2293,9 @@ a.evidence-chip:hover { border-color: var(--color-link); color: var(--color-link
   background: rgba(74, 21, 75, 0.3);
   color: #e0a0e5;
 }
-.badge--webhook {
-  background: var(--color-info-dim);
-  color: var(--color-info);
-}
 .badge--sent {
   background: var(--color-healthy-dim);
   color: var(--color-healthy);
-}
-.badge--discovery {
-  background: var(--color-info-dim);
-  color: var(--color-info);
-}
-.badge--health_check {
-  background: var(--color-healthy-dim);
-  color: var(--color-healthy);
-}
-.badge--evaluate {
-  background: var(--color-warning-dim);
-  color: var(--color-warning);
-}
-.badge--implement {
-  background: var(--color-info-dim);
-  color: var(--color-info);
-}
-.badge--scout {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
-}
-.badge--scan {
-  background: var(--color-warning-dim);
-  color: var(--color-warning);
 }
 
 /* ── Responsive stacking ── */
