@@ -68,12 +68,6 @@ METRIC_SCHEMAS: dict[str, list[MetricDef]] = {
         {"name": "workflow_failures_7d", "unit": "count", "required": False, "min": 0, "max": None},
         {"name": "members_without_2fa", "unit": "count", "required": False, "min": 0, "max": None},
     ],
-    "codebase": [
-        {"name": "total_findings", "unit": "count", "required": True, "min": 0, "max": None},
-        {"name": "critical_findings", "unit": "count", "required": False, "min": 0, "max": None},
-        {"name": "high_findings", "unit": "count", "required": False, "min": 0, "max": None},
-        {"name": "files_scanned", "unit": "count", "required": False, "min": 0, "max": None},
-    ],
 }
 
 

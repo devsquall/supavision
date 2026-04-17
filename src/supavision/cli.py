@@ -793,7 +793,7 @@ def main() -> None:
     # resource add
     p = sub.add_parser("resource-add", help="Register a new resource to monitor")
     p.add_argument("name", help="Human-readable name for the resource")
-    p.add_argument("--type", required=True, help="Resource type: server, aws_account, database, github_org, codebase")
+    p.add_argument("--type", required=True, help="Resource type: server, aws_account, database, github_org")
     p.add_argument("--parent", default="", help="Parent resource ID for hierarchical grouping")
     p.add_argument("--config", nargs="*", default=[], help="Key=value pairs (e.g., ssh_host=10.0.1.5)")
     p.set_defaults(func=cmd_resource_add)

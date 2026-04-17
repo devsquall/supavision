@@ -71,7 +71,7 @@ class Resource(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     resource_type: str = Field(
-        description="Resource type identifier, e.g. 'aws_account', 'codebase'"
+        description="Resource type identifier, e.g. 'aws_account', 'server', 'database'"
     )
 
     @field_validator("resource_type")

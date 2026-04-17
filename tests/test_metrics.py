@@ -18,7 +18,7 @@ class TestMetricSchemas:
         assert SCHEMA_VERSION >= 1
 
     def test_all_resource_types_have_schemas(self):
-        for rtype in ("server", "aws_account", "database", "github_org", "codebase"):
+        for rtype in ("server", "aws_account", "database", "github_org"):
             assert len(get_schema(rtype)) > 0, f"No schema for {rtype}"
 
     def test_database_subtypes_use_base_schema(self):
@@ -39,7 +39,7 @@ class TestMetricSchemas:
         assert "bogus" not in names
 
     def test_each_schema_has_at_least_one_required(self):
-        for rtype in ("server", "aws_account", "database", "github_org", "codebase"):
+        for rtype in ("server", "aws_account", "database", "github_org"):
             schema = get_schema(rtype)
             required = [m for m in schema if m.get("required")]
             assert len(required) >= 1, f"{rtype} has no required metrics"
