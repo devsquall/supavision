@@ -237,9 +237,9 @@ class Scheduler:
                     run_type, resource.name,
                 )
                 return
-            elif run_type == RunType.DISCOVERY:
+            if run_type == RunType.DISCOVERY:
                 self.engine.run_discovery(resource.id)
-
+            elif run_type == RunType.HEALTH_CHECK:
                 self.engine.run_health_check(resource.id)
         except Exception as e:
             logger.error("Scheduled %s failed for %s: %s", run_type, resource.name, e)
@@ -254,9 +254,9 @@ class Scheduler:
                     run_type, resource.name,
                 )
                 return
-            elif run_type == RunType.DISCOVERY:
+            if run_type == RunType.DISCOVERY:
                 await self.engine.run_discovery_async(resource.id)
-
+            elif run_type == RunType.HEALTH_CHECK:
                 await self.engine.run_health_check_async(resource.id)
         except Exception as e:
             logger.error("Scheduled %s failed for %s: %s", run_type, resource.name, e)

@@ -31,10 +31,11 @@
     <div class="chat-input-row">
       <textarea class="chat-input" id="chat-input"
               placeholder="Ask about your infrastructure..."
+              aria-label="Ask about your infrastructure"
               rows="1"></textarea>
       <p class="text-muted text-xs mt-1" style="position:absolute;bottom:-18px;left:0">Try: "Which resources have warnings?" or "What changed since yesterday?"</p>
       <button class="btn btn-primary chat-send-btn" id="chat-send-btn"
-              onclick="sendChatMessage()">
+              aria-label="Send" onclick="sendChatMessage()">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5V9l8-1-8-1z"/></svg>
       </button>
     </div>
@@ -363,7 +364,7 @@
           hasMetrics = true;
           h += '<li class="context-list-item"><strong>' + esc(r.name) + ':</strong> ';
           Object.entries(r.metrics).forEach(function(e) {
-            h += '<span class="context-metric">' + esc(e[0]) + '=' + e[1] + '</span> ';
+            h += '<span class="context-metric">' + esc(e[0]) + '=' + esc(String(e[1])) + '</span> ';
           });
           h += '</li>';
         }

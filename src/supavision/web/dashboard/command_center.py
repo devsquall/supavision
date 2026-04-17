@@ -108,7 +108,7 @@ def _cmd_system_overview(store, now: str) -> dict:
         )
 
     html = (
-        f'<div class="cc-status-badge cc-status-badge--{status_cls}" class="mb-4">'
+        f'<div class="cc-status-badge cc-status-badge--{status_cls} mb-4">'
         f'<span class="status-banner-dot"></span> {status_text}</div>'
         f'<div class="stat-grid">'
         f'<div class="stat-card"><span class="stat-value">{total}</span>'
@@ -171,7 +171,7 @@ def _cmd_resource_health(store, resource_id: str, now: str) -> dict:
     if health_reports:
         rpt = health_reports[0]
         parts.append(
-            f'<p class="text-sm text-muted" class="mt-3">'
+            f'<p class="text-sm text-muted mt-3">'
             f'Last health check: {html_mod.escape(str(rpt.created_at))}</p>'
         )
     if discovery_reports:
