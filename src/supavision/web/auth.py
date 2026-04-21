@@ -42,7 +42,11 @@ def validate_password_strength(password: str) -> str | None:
     if len(password) < 8:
         return "Password must be at least 8 characters."
     if password.lower() in _COMMON_PASSWORDS:
-        return "Password is too common. Choose a stronger password."
+        return (
+            "Password is too common. Choose something less predictable — "
+            "mix uppercase, lowercase, digits, and symbols, and avoid names "
+            "like 'password', 'admin', or 'supavision'."
+        )
     return None
 
 

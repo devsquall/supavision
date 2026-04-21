@@ -126,13 +126,13 @@ def cmd_resource_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
     _json_out({"ok": True, "command": "resource_show", "resource": resource.model_dump(mode="json")})
 def cmd_resource_set_schedule(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
     from croniter import croniter
 
@@ -155,7 +155,7 @@ def cmd_resource_add_credential(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
     resource.credentials[args.name] = Credential(env_var=args.env_var)
     store.save_resource(resource)
@@ -251,7 +251,7 @@ def cmd_checklist_add(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
     resource.monitoring_requests.append(args.request)
     store.save_resource(resource)
@@ -334,7 +334,7 @@ def cmd_notify_test(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
     from .models import Evaluation, Report, RunType, Severity
     from .notifications import send_alert
@@ -368,7 +368,7 @@ def cmd_notify_configure(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
-        _error(f"Resource {args.resource_id} not found. Run 'supavisionresource-list' to see available resources.")
+        _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
     updated = []
 
