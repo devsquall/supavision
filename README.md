@@ -144,6 +144,16 @@ Set `ANTHROPIC_API_KEY` in your environment before `docker compose up` if you pr
 | `SUPAVISION_SSH_MUX_DIR` | `/tmp/supavision-ssh-mux` | SSH multiplexing socket directory |
 | `WEBHOOK_ALLOWED_DOMAINS` | *(none)* | Comma-separated webhook domain allowlist |
 
+## Backup
+
+The database lives at `.supavision/supavision.db` (override with `SUPAVISION_DB_PATH`). SQLite's `.backup` command produces a consistent snapshot even while Supavision is running:
+
+```bash
+sqlite3 .supavision/supavision.db ".backup backup-$(date +%F).db"
+```
+
+To restore: stop Supavision, replace the live DB file with the backup, restart.
+
 ## MCP Server
 
 Supavision includes an MCP server that lets Claude CLI query your monitoring data in conversations.
@@ -200,7 +210,7 @@ See [CONTRIBUTING.md](https://github.com/devsquall/supavision/blob/main/CONTRIBU
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 778 tests
+pytest tests/ -v          # 787 tests
 ruff check src/ tests/    # Linting
 ```
 

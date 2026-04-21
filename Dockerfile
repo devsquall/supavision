@@ -8,9 +8,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Node.js + Claude Code CLI
+# Pinned to major version 2 — bump after testing against new Claude Code releases
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    npm install -g @anthropic-ai/claude-code@latest && \
+    npm install -g @anthropic-ai/claude-code@^2 && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
