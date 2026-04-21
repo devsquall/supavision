@@ -64,6 +64,7 @@
 
 {% elif last_run and last_run.status.value == 'failed' and (last_run.output or last_run.error) %}
 {# STATE: FAILED — frozen output with error #}
+{% set retry_url = '/resources/' + resource.id + ('/discover' if last_run.run_type.value == 'discovery' else '/health-check') %}
 <div class="settings-section">
   <div class="terminal-header">
     <h4>Last Run</h4>
@@ -71,6 +72,12 @@
     {% if last_run.completed_at and last_run.started_at %}
     <span class="terminal-status">{{ ((last_run.completed_at - last_run.started_at).total_seconds() | int) }}s</span>
     {% endif %}
+    <button class="btn btn-sm"
+            hx-post="{{ retry_url }}"
+            hx-swap="none"
+            data-action="check"
+            data-success-msg="Retry started"
+            title="Run the same {{ last_run.run_type.value.replace('_', ' ') }} again">Retry</button>
     <button class="btn btn-sm btn-outline" onclick="copyTerminalOutput()" title="Copy output">Copy</button>
   </div>
   {% if last_run.recording %}
