@@ -204,6 +204,24 @@ Supavision runs AI agents that execute read-only commands on your infrastructure
 - Database files restricted to owner-only permissions (0600)
 - API keys inherit the creating user's role; `last_used_at` tracked for auditability
 
+### Deploying SSH access safely
+
+Supavision connects to monitored servers over SSH. The SSH user you configure is the blast radius if anything goes wrong — scope it tightly:
+
+- **Create a dedicated read-only user** on the monitored host (e.g. `supavision-monitor`). Do not reuse a user with sudo, admin, or shell-script execution privileges.
+- **Disable sudo for that user.** No `NOPASSWD`, no sudoers entry.
+- **Pin the SSH key to a restricted command set** (optional but strongly recommended for production). Prepend the user's `~/.ssh/authorized_keys` entry with `command="..."` to limit which commands the key can run. Example allowlisting only inspection commands:
+
+  ```
+  command="/usr/local/bin/supavision-readonly-shell",no-port-forwarding,no-X11-forwarding,no-agent-forwarding ssh-ed25519 AAAA... supavision
+  ```
+
+  where `supavision-readonly-shell` is a small wrapper that rejects any command not in your approved set.
+- **Separate keys per environment.** One keypair for staging, one for prod. Rotate on breach.
+- **Network-scope the SSH port** — restrict TCP/22 on the monitored host to the Supavision host's IP only.
+
+The combined effect: even if an attacker manages to influence the Claude CLI prompt, the SSH channel can only execute what the target host's OS allows that user to run.
+
 ## Contributing
 
 See [CONTRIBUTING.md](https://github.com/devsquall/supavision/blob/main/CONTRIBUTING.md) for setup, testing, and architecture conventions.
