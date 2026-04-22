@@ -479,3 +479,34 @@ class TestReportExport:
     def test_export_nonexistent_report_returns_404(self, client):
         resp = client.get("/reports/does-not-exist/export.md")
         assert resp.status_code == 404
+
+
+# ── Resource Freshness ─────────────────────────────────────────────
+
+
+class TestResourceFreshness:
+    def test_resources_list_shows_aging_freshness(self, client, store):
+        """A resource with a run completed 2 hours ago should bucket as 'aging'."""
+        from datetime import datetime, timedelta, timezone
+
+        from supavision.models import Run, RunStatus, RunType
+        r = _seed_resource(store, name="prod-server")
+        completed_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        run = Run(
+            resource_id=r.id,
+            run_type=RunType.HEALTH_CHECK,
+            status=RunStatus.COMPLETED,
+            started_at=completed_at - timedelta(minutes=1),
+            completed_at=completed_at,
+        )
+        store.save_run(run)
+
+        resp = client.get("/resources")
+        assert resp.status_code == 200
+        assert "freshness-dot--aging" in resp.text
+
+    def test_resources_list_shows_never_freshness_for_no_runs(self, client, store):
+        _seed_resource(store, name="brand-new")
+        resp = client.get("/resources")
+        assert resp.status_code == 200
+        assert "freshness-dot--never" in resp.text

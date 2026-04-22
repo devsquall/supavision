@@ -955,6 +955,20 @@ summary { cursor: pointer; font-weight: 500; padding: var(--sp-2) 0; }
 }
 .resource-card__actions { display: flex; gap: var(--sp-2); flex-shrink: 0; }
 
+.freshness-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: var(--sp-1);
+  vertical-align: middle;
+  background: var(--color-muted);
+}
+.freshness-dot--fresh  { background: var(--color-healthy); }
+.freshness-dot--aging  { background: var(--color-muted); }
+.freshness-dot--stale  { background: var(--color-warning); }
+.freshness-dot--never  { background: var(--color-critical); }
+
 @media (max-width: 480px) {
   .resource-cards { grid-template-columns: 1fr; }
   .resource-card__footer { flex-direction: column; align-items: stretch; }

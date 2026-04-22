@@ -32,8 +32,9 @@
       <div class="resource-card__impact text-sm text-muted">{{ r.impact }}</div>
     </div>
     <div class="resource-card__footer">
-      <span class="text-sm text-muted" {% if r.last_run_at %}data-timestamp="{{ r.last_run_at }}"{% endif %}>
-        {% if r.last_run_at %}{{ r.last_run_at }}{% else %}Never checked{% endif %}
+      <span class="text-sm text-muted">
+        <span class="freshness-dot freshness-dot--{{ r.freshness }}" aria-hidden="true"></span>
+        <span {% if r.last_run_at %}data-timestamp="{{ r.last_run_at }}"{% endif %}>{% if r.last_run_at %}{{ r.last_run_at }}{% else %}Never checked{% endif %}</span>
       </span>
       <span class="btn btn-sm">{{ r.action_label }}</span>
     </div>

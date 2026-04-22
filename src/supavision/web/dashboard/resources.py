@@ -32,6 +32,29 @@ _IMPACT_MAP = {
 }
 
 
+def _freshness(last_run_at_iso: str | None) -> str:
+    """Bucket a last-run timestamp into fresh / aging / stale / never.
+
+    Fixed absolute thresholds (not schedule-relative): users want to know
+    "how recent is this data, period?" — schedule-relative would mark a
+    weekly-cadence resource fresh for 6 days even when stale.
+    """
+    if not last_run_at_iso:
+        return "never"
+    try:
+        ts = datetime.fromisoformat(last_run_at_iso)
+    except (TypeError, ValueError):
+        return "never"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - ts).total_seconds()
+    if age < 3600:
+        return "fresh"
+    if age < 86400:
+        return "aging"
+    return "stale"
+
+
 @router.get("/resources", response_class=HTMLResponse)
 async def resources_page(request: Request):
     """Dedicated resource list page."""
@@ -91,6 +114,7 @@ async def resources_page(request: Request):
             "severity": severity,
             "summary": summary,
             "last_run_at": last_run_at,
+            "freshness": _freshness(last_run_at),
             "enabled": r.enabled,
             "explanation": explanation,
             "impact": impact,
