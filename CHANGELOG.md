@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.3 (2026-04-22)
+
+### Features
+- **Retry button** on failed runs in resource detail — one click to re-run the same `discovery` or `health_check` from the failure context (no navigation required)
+- **Export report as Markdown** via `GET /reports/{id}/export.md` — clean, self-contained .md file with summary, metrics table, payload diff, full issues, and raw report. Sanitized filename, viewer-allowed
+- **Copy report summary to clipboard** — Slack-pasteable short format (severity + summary + top 5 issues + URL); reuses existing `copyText()` helper
+- **Freshness color coding** on resource cards — 6px dot signals fresh (<1h, green) / aging (<24h, neutral) / stale (>24h, yellow) / never (red); a11y-safe (relative text already conveys the same info)
+
+### Security
+- Input validation on all resource form and API endpoints (name ≤200 chars, config values ≤500 chars, monitoring requests capped at 50 items / 500 chars each); enforced in API request models and form handlers
+- `SUPAVISION_PASSWORD` boot-time admin auto-creation now logs a WARNING when the supplied password fails strength checks (no longer silently accepts weak credentials; deprecated path still works)
+- 26 prompt-injection regression tests guard against attempts to override the system prompt, exfiltrate credentials, or escalate to write commands
+- README "Deploying SSH access safely" section with concrete guidance: dedicated read-only user, no sudo, `authorized_keys` command restriction, per-environment keys, network-scoped SSH port
+
+### Fixes
+- CLI error messages: 6 instances of `supavisionresource-list` (missing space) → `supavision resource-list`. Copy-pasting from doctor/discover errors no longer fails with "command not found"
+- Password strength hint surfaced in CLI on weak input
+- Docker `compose.yml`: `ANTHROPIC_API_KEY` and `SUPAVISION_COOKIE_SECURE` now pass through from host env (Claude CLI couldn't auth in container without it)
+
+### Documentation
+- README **Backup** section with WAL-safe `sqlite3 .backup` command and restore steps
+- README **Docker** section expanded from 1 line to a 3-step first-time setup (`up` → `claude login` → `create-admin`) plus `ANTHROPIC_API_KEY` note for key-based auth
+
+### Infrastructure
+- `Dockerfile` pins `@anthropic-ai/claude-code@^2` (was `@latest`) — reproducible builds, comment notes maintenance bump
+
+### Accessibility
+- `aria-hidden="true"` on 49 decorative SVGs across 15 templates (empty-state icons, sparklines, sidebar/topbar icons, landing-page card icons, send button) — screen readers no longer announce noise
+
+### Tests
+- 778 → 817 tests (input validation, scheduler, trigger_run, prompt injection, report export, resource freshness, additional coverage)
+
 ## 0.4.2 (2026-04-17)
 
 ### Bug Fixes

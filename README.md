@@ -228,7 +228,7 @@ See [CONTRIBUTING.md](https://github.com/devsquall/supavision/blob/main/CONTRIBU
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 787 tests
+pytest tests/ -v          # 817 tests
 ruff check src/ tests/    # Linting
 ```
 
