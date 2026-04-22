@@ -1031,7 +1031,42 @@ async def report_detail(report_id: str, request: Request):
         "evaluation": evaluation,
         "resource_name": resource_name,
         "base_url": os.environ.get("SUPAVISION_BASE_URL", "").rstrip("/"),
+        "summary_text": _report_to_summary(report, evaluation, resource),
     })
+
+
+def _report_to_summary(report, evaluation, resource) -> str:
+    """Short Slack-pasteable summary. Issue list capped at 5 entries."""
+    name = resource.name if resource else report.resource_id
+    severity = None
+    if evaluation is not None and evaluation.severity:
+        severity = str(evaluation.severity).upper()
+    elif report.payload is not None:
+        severity = str(report.payload.status).upper()
+
+    header = f"**{name}**"
+    if severity and severity.lower() != "unknown":
+        header += f" — {severity}"
+
+    parts: list[str] = [header]
+
+    summary_text = None
+    if evaluation is not None and evaluation.summary:
+        summary_text = evaluation.summary
+    elif report.payload is not None and report.payload.summary:
+        summary_text = report.payload.summary
+    if summary_text:
+        parts.extend(["", summary_text])
+
+    if report.payload is not None and report.payload.issues:
+        parts.append("")
+        for issue in report.payload.issues[:5]:
+            parts.append(f"- [{issue.severity}] {issue.title}")
+        extra = len(report.payload.issues) - 5
+        if extra > 0:
+            parts.append(f"- …and {extra} more")
+
+    return "\n".join(parts)
 
 
 def _report_to_markdown(report, evaluation, resource) -> str:

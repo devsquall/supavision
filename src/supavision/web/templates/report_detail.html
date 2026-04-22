@@ -42,6 +42,24 @@
       </svg>
       Copy link
     </button>
+    <button type="button" class="btn btn-outline btn-sm" id="copy-summary-btn" title="Copy a Slack-pasteable summary">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <rect x="4" y="4" width="9" height="10" rx="1"/>
+        <path d="M6 4V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-2"/>
+      </svg>
+      Copy summary
+    </button>
+    <script type="text/plain" id="report-summary-text">{{ summary_text }}</script>
+    <script>
+      document.getElementById("copy-summary-btn").addEventListener("click", function () {
+        var summary = document.getElementById("report-summary-text").textContent.trim();
+        var text = summary + "\n\n" + window.location.href;
+        copyText(text).then(
+          function () { showToast("Summary copied to clipboard", "success"); },
+          function () { showToast("Could not copy — press ⌘C", "error"); }
+        );
+      });
+    </script>
     <a href="/reports/{{ report.id }}/export.md" class="btn btn-outline btn-sm" title="Download as Markdown">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
         <path d="M8 2v9"/><path d="M4 8l4 4 4-4"/><path d="M2 14h12"/>
