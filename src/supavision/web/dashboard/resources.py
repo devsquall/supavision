@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from ...models import RunStatus
 from ...resource_types import RESOURCE_TYPES, WIZARD_FLOWS
@@ -1031,6 +1032,94 @@ async def report_detail(report_id: str, request: Request):
         "resource_name": resource_name,
         "base_url": os.environ.get("SUPAVISION_BASE_URL", "").rstrip("/"),
     })
+
+
+def _report_to_markdown(report, evaluation, resource) -> str:
+    """Render a Report (+ optional Evaluation, Resource) as a self-contained Markdown document."""
+    name = resource.name if resource else report.resource_id
+    parts: list[str] = [f"# Health Check: {name}", ""]
+
+    parts.append(f"- **Generated:** {report.created_at}")
+    if evaluation is not None:
+        parts.append(f"- **Severity:** {evaluation.severity}")
+    elif report.payload is not None:
+        parts.append(f"- **Status:** {report.payload.status}")
+    parts.append(f"- **Run type:** {report.run_type}")
+    parts.append("")
+
+    summary = None
+    if evaluation is not None and evaluation.summary:
+        summary = evaluation.summary
+    elif report.payload is not None and report.payload.summary:
+        summary = report.payload.summary
+    if summary:
+        parts.extend(["## Summary", "", summary, ""])
+
+    payload = report.payload
+    if payload is not None and payload.metrics:
+        parts.extend(["## Metrics", "", "| Metric | Value |", "|--------|-------|"])
+        for key, val in payload.metrics.items():
+            parts.append(f"| {key} | {val} |")
+        parts.append("")
+
+    if report.payload_diff is not None:
+        diff = report.payload_diff
+        if diff.new:
+            parts.extend(["## New Issues", ""])
+            for item in diff.new:
+                parts.append(f"- [{item.severity}] {item.title}")
+            parts.append("")
+        if diff.resolved:
+            parts.extend(["## Resolved Issues", ""])
+            for item in diff.resolved:
+                parts.append(f"- [{item.severity}] {item.title}")
+            parts.append("")
+
+    if payload is not None and payload.issues:
+        parts.extend(["## Issues", ""])
+        for issue in payload.issues:
+            parts.append(f"### [{issue.severity}] {issue.title}")
+            parts.append("")
+            if issue.scope:
+                parts.append(f"**Scope:** {issue.scope}")
+                parts.append("")
+            if issue.evidence:
+                parts.extend(["**Evidence:**", "", issue.evidence, ""])
+            if issue.recommendation:
+                parts.extend(["**Recommendation:**", "", issue.recommendation, ""])
+
+    if report.content:
+        parts.extend(["---", "", "## Full Report", "", report.content])
+
+    return "\n".join(parts).rstrip() + "\n"
+
+
+@router.get("/reports/{report_id}/export.md")
+async def report_export_markdown(report_id: str, request: Request):
+    """Download a report as a .md file. Read-only; viewers allowed."""
+    store = request.app.state.store
+    report = store.get_report(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    evaluation = None
+    for ev in store.get_recent_evaluations(report.resource_id, limit=20):
+        if ev.report_id == report_id:
+            evaluation = ev
+            break
+
+    resource = store.get_resource(report.resource_id)
+    body = _report_to_markdown(report, evaluation, resource)
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", resource.name if resource else report.resource_id)
+    date_str = report.created_at.strftime("%Y-%m-%d") if hasattr(report.created_at, "strftime") else "report"
+    filename = f"report-{safe_name}-{date_str}.md"
+
+    return PlainTextResponse(
+        content=body,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Health Check triggers ─────────────────────────

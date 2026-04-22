@@ -445,3 +445,37 @@ class TestAdminFormValidation:
         store.save_resource(r)
         resp = client.post(f"/resources/{r.id}/checklist", data={"request": "one more"})
         assert resp.status_code == 400
+
+
+# ── Report Export ─────────────────────────────────────────────────
+
+
+class TestReportExport:
+    def test_export_markdown_returns_attachment(self, client, store):
+        from supavision.models import Evaluation, Report, RunType, Severity
+        r = _seed_resource(store, name="prod-web")
+        report = Report(resource_id=r.id, run_type=RunType.HEALTH_CHECK, content="Report body here")
+        store.save_report(report)
+        evaluation = Evaluation(
+            report_id=report.id,
+            resource_id=r.id,
+            severity=Severity.WARNING,
+            summary="Disk usage at 88% on /",
+            should_alert=False,
+        )
+        store.save_evaluation(evaluation)
+
+        resp = client.get(f"/reports/{report.id}/export.md")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "attachment" in resp.headers["content-disposition"]
+        assert "report-prod-web-" in resp.headers["content-disposition"]
+        body = resp.text
+        assert "# Health Check: prod-web" in body
+        assert "warning" in body
+        assert "Disk usage at 88% on /" in body
+        assert "Report body here" in body
+
+    def test_export_nonexistent_report_returns_404(self, client):
+        resp = client.get("/reports/does-not-exist/export.md")
+        assert resp.status_code == 404
