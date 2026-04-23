@@ -884,6 +884,12 @@ class Engine:
 
             if proc.returncode != 0:
                 stderr_text = stderr_buf.decode("utf-8", errors="replace")[:2000]
+                _AUTH_SIGNALS = ("not logged in", "unauthorized", "login required", "api key", "authentication")
+                if any(sig in stderr_text.lower() for sig in _AUTH_SIGNALS):
+                    raise RuntimeError(
+                        "Claude CLI is not authenticated. Run 'claude login' (OAuth) or set "
+                        "ANTHROPIC_API_KEY, then retry. Detail: " + stderr_text[:200]
+                    )
                 raise RuntimeError(
                     f"Claude CLI exited with code {proc.returncode}: {stderr_text}"
                 )

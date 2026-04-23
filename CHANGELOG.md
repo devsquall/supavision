@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.4 (2026-04-23)
+
+### Features
+- **`supavision setup`** — guided first-run wizard: checks Claude CLI binary, detects auth state, and offers to run `claude login` interactively. Docker-aware (prints `docker exec` instructions instead of opening a browser). Non-TTY safe (prints manual instructions and exits cleanly in CI/scripted environments)
+- **`supavision doctor` auth check** — new `claude_auth` check alongside the binary check. Reports `[OK] authenticated (OAuth)` or `[FAIL] not authenticated — run 'supavision setup' or 'claude login'`. File-based detection (no subprocess hang)
+- **`supavision serve` startup warning** — logs a warning at startup if the Claude CLI backend is active but not authenticated, catching the case where users skip `doctor`/`setup` and go straight to `serve`
+
+### Fixes
+- Engine now detects auth-related errors in Claude CLI stderr and surfaces a human-readable message ("Claude CLI is not authenticated. Run 'claude login'...") instead of a raw exit code dump
+- Docker `docker-compose.yml`: mounts `${HOME}/.claude:/root/.claude:rw` so OAuth credentials persist across container restarts — users no longer need to re-authenticate after every `docker compose down/up`
+
+### Documentation
+- README Docker section updated: documents the `~/.claude` volume mount and clarifies that `claude login` is a one-time step
+
 ## 0.4.3 (2026-04-22)
 
 ### Features

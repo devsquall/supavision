@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
+from .._auth_check import check_claude_auth
 from ..config import DASHBOARD_PASSWORD, DASHBOARD_USER
 from ..db import Store
 from ..engine import Engine
@@ -87,6 +88,18 @@ def create_app(
                 "This auto-migration will be removed in a future version."
             )
             logger.info("Auto-created admin user from SUPAVISION_PASSWORD (email=%s)", admin_email)
+
+        # Warn early if Claude CLI backend is not authenticated
+        import os
+        if os.environ.get("SUPAVISION_BACKEND", "claude_cli") == "claude_cli" and engine is not None:
+            auth_ok, auth_detail = check_claude_auth()
+            if not auth_ok:
+                logger.warning(
+                    "Claude CLI is not authenticated (%s). "
+                    "Discovery and health check runs will fail. "
+                    "Run 'supavision setup' or 'claude login' to authenticate.",
+                    auth_detail,
+                )
 
         logger.info("API server started with scheduler")
 

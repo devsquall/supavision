@@ -1,6 +1,6 @@
 """Supavision: AI-powered infrastructure monitoring."""
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 from .db import Store
 from .engine import Engine

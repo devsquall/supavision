@@ -6,6 +6,7 @@ services:
     volumes:
       - supavision-data:/app/.supavision
       - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.claude:/root/.claude:rw
     environment:
       - SUPAVISION_BACKEND=${SUPAVISION_BACKEND:-claude_cli}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

@@ -123,7 +123,7 @@ docker exec -it supavision-supavision-1 supavision create-admin
 
 Dashboard at `http://localhost:8080`. Data persists in the `supavision-data` volume.
 
-Set `ANTHROPIC_API_KEY` in your environment before `docker compose up` if you prefer key-based auth over `claude login`.
+**Claude auth persists across restarts.** `docker-compose.yml` mounts `~/.claude` from your host into the container (`${HOME}/.claude:/root/.claude:rw`), so you only need to run `claude login` once. If you prefer API key auth, set `ANTHROPIC_API_KEY` before `docker compose up` and the mount is unused.
 
 ## Configuration
 

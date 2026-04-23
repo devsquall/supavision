@@ -12,6 +12,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from ._auth_check import check_claude_auth
+
 
 def _load_dotenv() -> None:
     """Load .env file if it exists. Simple key=value parser, no dependency."""
@@ -292,6 +294,9 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         claude_path = shutil.which("claude")
         has_claude = bool(claude_path)
         checks.append({"check": "claude_cli", "ok": has_claude, "detail": claude_path or "not found in PATH"})
+        if has_claude:
+            auth_ok, auth_detail = check_claude_auth()
+            checks.append({"check": "claude_auth", "ok": auth_ok, "detail": auth_detail})
     else:
         # OPENROUTER_API_KEY (needed for openrouter backend)
         key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -329,6 +334,83 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     _json_out({"ok": all_ok, "command": "doctor", "checks": checks})
     if not all_ok:
         sys.exit(1)
+# ── Setup wizard ─────────────────────────────────────────────────────
+def cmd_setup(args: argparse.Namespace) -> None:
+    """Guided first-run setup: checks prerequisites and authenticates Claude CLI."""
+    def _print(msg: str) -> None:
+        print(msg, file=sys.stderr)
+
+    backend = os.environ.get("SUPAVISION_BACKEND", "claude_cli")
+    _print(f"  Backend: {backend}")
+
+    if backend != "claude_cli":
+        _print("  OpenRouter backend selected — skipping Claude CLI auth check.")
+        _print("  Ensure OPENROUTER_API_KEY is set, then run: supavision create-admin")
+        return
+
+    # Check binary
+    claude_path = shutil.which("claude")
+    if not claude_path:
+        _print("  [FAIL] Claude CLI not found in PATH.")
+        _print("         Install it: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+    _print(f"  [OK]   Claude CLI: {claude_path}")
+
+    # Check auth
+    auth_ok, auth_detail = check_claude_auth()
+    if auth_ok:
+        _print(f"  [OK]   Claude CLI auth: {auth_detail}")
+    else:
+        _print(f"  [WARN] Claude CLI auth: {auth_detail}")
+
+        # Docker: can't open a browser inside the container
+        if Path("/.dockerenv").exists():
+            _print("")
+            _print("  Running inside Docker. Authenticate from outside the container:")
+            _print("    docker exec -it <container-name> claude login")
+            _print("")
+            _print("  Or mount your host credentials at startup (see docker-compose.yml).")
+            sys.exit(0)
+
+        # Non-interactive environment
+        if not sys.stdin.isatty():
+            _print("")
+            _print("  Non-interactive environment detected. Run manually:")
+            _print("    claude login")
+            _print("  Or set ANTHROPIC_API_KEY in your environment.")
+            sys.exit(1)
+
+        # Offer to authenticate interactively
+        try:
+            answer = input("  Authenticate now with 'claude login'? [Y/n]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            _print("")
+            sys.exit(1)
+
+        if answer in ("", "y", "yes"):
+            import subprocess
+            _print("")
+            result = subprocess.run([claude_path, "login"])
+            _print("")
+            if result.returncode == 0:
+                auth_ok, auth_detail = check_claude_auth()
+                if auth_ok:
+                    _print(f"  [OK]   Claude CLI auth: {auth_detail}")
+                else:
+                    _print("  [WARN] Authentication may not have completed. Run 'supavision doctor' to verify.")
+            else:
+                _print("  [FAIL] 'claude login' exited with an error. Try running it manually.")
+                sys.exit(1)
+        else:
+            _print("  Skipped. Run 'claude login' or set ANTHROPIC_API_KEY before triggering runs.")
+
+    _print("")
+    _print("  Setup complete.")
+    _print("  Next steps:")
+    _print("    supavision create-admin   # create your first admin user")
+    _print("    supavision serve          # start the web dashboard")
+
+
 # ── Notification commands ────────────────────────────────────────────
 def cmd_notify_test(args: argparse.Namespace) -> None:
     store = _get_store(args)
@@ -877,6 +959,11 @@ def main() -> None:
 
     # doctor
     sub.add_parser("doctor", help="Check system dependencies and configuration").set_defaults(func=cmd_doctor)
+
+    # setup
+    sub.add_parser(
+        "setup", help="Guided first-run setup: check prerequisites and authenticate Claude CLI"
+    ).set_defaults(func=cmd_setup)
 
     # notify-test
     p = sub.add_parser("notify-test", help="Send a test notification for a resource")
