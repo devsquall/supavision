@@ -112,6 +112,14 @@ The web dashboard uses session-based authentication:
 
 Bootstrap authentication with `supavision create-admin`. The legacy `SUPAVISION_PASSWORD` environment variable is deprecated and only used for backward-compatible auto-migration of existing deployments.
 
+**First-run lockdown (since 0.4.5.dev0).** When the users table is empty, the session middleware refuses to serve any dashboard URL — every request redirects to `/landing?setup=1`, which renders a "run `supavision create-admin` first" banner. `/login` stays reachable structurally but no credentials match the empty users table. Previously the middleware logged CRITICAL and served the dashboard with `is_admin=True`, so anyone hitting the port before bootstrap got open admin.
+
+**OpenAPI docs (`/docs`, `/redoc`, `/openapi.json`) are admin-only.** FastAPI's built-in docs surface is disabled and re-mounted behind a role check, so a viewer-role session user cannot enumerate the API surface. The underlying endpoints (`/api/v1/*`) are unaffected — they remain accessible to anyone with a valid API key of the appropriate role.
+
+**Audit log dashboard (since 0.4.5.dev0).** All auth events (login success/failure, user create/deactivate/role-change, password change, session revoke) are written to `auth_audit_log` and visible at `/settings/audit-log` (admin-only). Use this for security review and incident investigation. Events are also written by the CLI bootstrap path (`supavision create-admin` logs `user_created`).
+
+**Webhook URL redaction in logs.** `notifications.py` log statements that mention webhook URLs (Slack, Teams, PagerDuty, Opsgenie) funnel through `_log_redact.redact_url()`, which strips the path/query/fragment for the known credential-bearing hostnames. The hostname is preserved for debugging. Non-credential hosts (your internal webhook URLs) are left intact.
+
 ### Role-Based Access Control
 
 Two roles exist: **admin** and **viewer**.
