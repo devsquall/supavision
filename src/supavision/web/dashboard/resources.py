@@ -737,6 +737,16 @@ async def resource_new_submit(request: Request):
     )
     store.save_resource(resource)
 
+    # Audit log: who created what.
+    user = getattr(request.state, "current_user", None)
+    store.log_auth_event(
+        "resource_created",
+        user_id=user.id if user else None,
+        email=user.email if user else None,
+        ip_address=request.client.host,
+        detail=f"resource_id={resource.id} type={resource_type} name={name!r}",
+    )
+
     from fastapi.responses import RedirectResponse
 
     return RedirectResponse(url=f"/resources/{resource.id}?new=1", status_code=303)
@@ -1218,6 +1228,18 @@ async def delete_resource(resource_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Resource not found")
 
     store.delete_resource(resource_id)
+
+    # Audit log: capture who deleted what (and the resource type / name, which
+    # the row no longer exists to tell you afterwards).
+    user = getattr(request.state, "current_user", None)
+    store.log_auth_event(
+        "resource_deleted",
+        user_id=user.id if user else None,
+        email=user.email if user else None,
+        ip_address=request.client.host,
+        detail=f"resource_id={resource_id} type={resource.resource_type} name={resource.name!r}",
+    )
+
     from fastapi.responses import RedirectResponse
 
     return RedirectResponse(url="/", status_code=303)

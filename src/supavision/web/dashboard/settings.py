@@ -154,17 +154,24 @@ async def settings_audit_log(request: Request, page: int = 1, event: str = ""):
         event=event_filter,
     )
 
-    # Known events (kept short — read from existing audit entries if you add new ones).
+    # Known events. Keep alphabetized within each category for the dropdown.
     event_choices = [
+        # Auth flow
         "login_success",
         "login_failure",
         "logout",
+        # User management
         "user_created",
         "user_activated",
         "user_deactivated",
         "role_changed",
         "password_changed",
         "session_revoked",
+        # Admin actions (added 0.4.5.dev0 — Phase 9)
+        "api_key_created",
+        "api_key_revoked",
+        "resource_created",
+        "resource_deleted",
     ]
 
     return _render(
@@ -201,6 +208,18 @@ async def settings_create_api_key(request: Request):
     role = user.role if user else "admin"
     store.save_api_key(key_id, key_hash, label=label, role=role)
 
+    # Audit: who created which key and with what role. The raw key is never
+    # logged — only the key_id, which is non-secret. Role is part of the
+    # detail string so an operator scanning the audit log can spot
+    # "viewer just minted an admin key" patterns.
+    store.log_auth_event(
+        "api_key_created",
+        user_id=user.id if user else None,
+        email=user.email if user else None,
+        ip_address=request.client.host,
+        detail=f"key_id={key_id} label={label!r} role={role}",
+    )
+
     # Redirect back to settings with the raw key displayed once
     return RedirectResponse(url=f"/settings?new_key={raw_key}", status_code=303)
 
@@ -212,6 +231,15 @@ async def settings_revoke_api_key(key_id: str, request: Request):
 
     store = request.app.state.store
     if store.revoke_api_key(key_id):
+        # Audit so operators can later answer "who revoked which key when".
+        user = getattr(request.state, "current_user", None)
+        store.log_auth_event(
+            "api_key_revoked",
+            user_id=user.id if user else None,
+            email=user.email if user else None,
+            ip_address=request.client.host,
+            detail=f"key_id={key_id}",
+        )
         # Return empty content — HTMX removes the row
         if request.headers.get("HX-Request"):
             return HTMLResponse(content="", status_code=200)
