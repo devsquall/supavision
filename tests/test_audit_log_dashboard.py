@@ -127,6 +127,27 @@ def test_list_auth_events_paginated_returns_count_and_rows(tmp_path):
     s.close()
 
 
+def test_pagination_links_present_when_more_than_one_page(db_path):
+    """50 events per page; seed 75 so we get 2 pages and a "Next" link."""
+    session_id = _seed(db_path, role="admin")
+    s = Store(db_path)
+    for i in range(75):
+        s.log_auth_event("login_success", email=f"u{i}@test.com")
+    s.close()
+    app = create_app(db_path=db_path)
+    with TestClient(app, follow_redirects=False) as c:
+        c.cookies.set("session_id", session_id)
+        r = c.get("/settings/audit-log")
+        assert r.status_code == 200
+        assert "Next" in r.text
+        assert "Page 1 of 2" in r.text
+
+        r2 = c.get("/settings/audit-log?page=2")
+        assert r2.status_code == 200
+        assert "Prev" in r2.text
+        assert "Page 2 of 2" in r2.text
+
+
 def test_list_auth_events_paginated_filter(tmp_path):
     db_path = tmp_path / "unit_filter.db"
     s = Store(str(db_path))
