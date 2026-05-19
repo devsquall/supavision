@@ -209,12 +209,19 @@
   {% if api_keys %}
   <table class="table">
     <thead>
-      <tr><th>Label</th><th>Created</th><th>Last used</th><th>Status</th><th></th></tr>
+      <tr><th>Label</th><th>Role</th><th>Created</th><th>Last used</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
       {% for k in api_keys %}
       <tr>
         <td>{{ k.label or '(no label)' }}</td>
+        <td>
+          {% if k.role == 'admin' %}
+          <span class="badge badge--critical" title="Can mutate any resource via /api/v1/*">admin</span>
+          {% else %}
+          <span class="badge" title="Read-only">{{ k.role or 'viewer' }}</span>
+          {% endif %}
+        </td>
         <td class="text-sm text-muted"><span data-timestamp="{{ k.created_at }}">{{ k.created_at }}</span></td>
         <td class="text-sm text-muted">{% if k.last_used_at %}<span data-timestamp="{{ k.last_used_at }}">{{ k.last_used_at }}</span>{% else %}Never{% endif %}</td>
         <td>

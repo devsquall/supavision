@@ -19,6 +19,7 @@ This is a pre-release marker (PEP 440 `.dev0`). The codebase contains all of v0.
 ### Admin tooling
 - **Audit log dashboard.** New `/settings/audit-log` page surfaces the `auth_audit_log` table (login successes/failures, user creates, role changes). Previously the data was written but never displayed — operators had to read sqlite manually. Admin-only; viewers see 403. Supports event-type filtering and pagination.
 - **Operational metrics panel on /settings.** `GET /api/v1/system/metrics` previously had no UI surface — operators had to curl to see "how many runs failed in the last 24h" or "what's p95 run duration". The settings page now renders the same data (failed runs 24h, in-flight runs, run duration p50/p95, notifications sent, scheduler ticks) using a shared `compute_system_metrics(store)` helper, so the JSON API and the dashboard panel can't drift.
+- **API key role badge.** The settings page's API key table now shows each key's role (admin / viewer) with the admin badge styled critical so accidentally-created admin keys stand out. Previously the role column existed in the DB but wasn't surfaced — operators couldn't audit which keys could mutate state without reading sqlite.
 
 ### Documentation
 - **`docs/QUICKSTART.md`** — full zero-to-Slack-alert walkthrough (install, Claude login, create-admin, add resource, run discovery, run health check, wire alerts, run scheduler). Linked from the top of the README.

@@ -818,7 +818,7 @@ class Store:
 
     def list_api_keys(self) -> list[dict]:
         rows = self._execute(
-            "SELECT id, label, created_at, revoked_at, last_used_at FROM api_keys ORDER BY created_at DESC"
+            "SELECT id, label, created_at, revoked_at, last_used_at, role FROM api_keys ORDER BY created_at DESC"
         ).fetchall()
         return [
             {
@@ -827,6 +827,10 @@ class Store:
                 "created_at": r[2],
                 "revoked": bool(r[3]),
                 "last_used_at": r[4] if len(r) > 4 else None,
+                # Default to "admin" for legacy pre-0.3.1 rows where the
+                # column was added by ALTER TABLE — the migration filled
+                # missing values with 'admin', but defending here too.
+                "role": (r[5] if len(r) > 5 else None) or "admin",
             }
             for r in rows
         ]
