@@ -1,0 +1,20 @@
+{# HTMX-friendly error fragment for /dashboard/overview.
+
+Rendered when the control-center handler raises. Replaces the skeleton
+loaders with a real "something went wrong" message + retry button so the
+page doesn't sit on a perpetual loading spinner. #}
+<div class="alert alert--critical mt-2" role="alert" aria-live="polite">
+  <h3 class="mb-1">Control center failed to load</h3>
+  <p class="text-sm text-muted mb-2">
+    A backend error prevented the dashboard from rendering. The full stack
+    trace is in the <code>supavision serve</code> log under
+    <code>dashboard_overview handler failed</code>.
+  </p>
+  <button
+    type="button"
+    class="btn btn-sm btn-outline"
+    hx-get="/dashboard/overview"
+    hx-target="#cc-overview"
+    hx-swap="innerHTML"
+  >Retry</button>
+</div>

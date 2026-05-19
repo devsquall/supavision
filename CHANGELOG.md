@@ -16,13 +16,20 @@ This is a pre-release marker (PEP 440 `.dev0`). The codebase contains all of v0.
 - **Smarter empty states.** `/sessions`, `/schedules`, `/alerts`, `/activity` now branch on `resources_count`: a fresh install pushes users to "Add a Resource", while a user with existing resources gets page-specific guidance (trigger a run, configure a webhook, etc.).
 - **Sidebar accessibility.** Active sidebar items carry `aria-current="page"`. Nav sections are wrapped in `role="group"` with `aria-labelledby` pointing at the section heading, so screen readers announce section context before listing items. Collapse-toggle has an explicit `aria-label`.
 
+### Admin tooling
+- **Audit log dashboard.** New `/settings/audit-log` page surfaces the `auth_audit_log` table (login successes/failures, user creates, role changes). Previously the data was written but never displayed — operators had to read sqlite manually. Admin-only; viewers see 403. Supports event-type filtering and pagination.
+
 ### Documentation
 - **`docs/QUICKSTART.md`** — full zero-to-Slack-alert walkthrough (install, Claude login, create-admin, add resource, run discovery, run health check, wire alerts, run scheduler). Linked from the top of the README.
 - **Credentials section in README** — table of `KNOWN_SECRET_KEYS`, three ways to attach (CLI / REST / wizard), notification credentials, legacy-row migration path.
 
 ### Internal
+- **Cron expression validation at write boundary.** Dashboard `POST /resources` (wizard final submit) and `POST /resources/{id}/schedule` now reject invalid cron expressions with a 400 explaining the syntax. Previously a malformed cron was persisted and only failed inside the scheduler tick — invisible to the user.
+- **Graceful failure on `/dashboard/overview` HTMX target.** The control-center handler now catches its own exceptions and returns an inline "control center failed to load — retry?" fragment instead of raising a 500 (which left the dashboard's skeleton loaders frozen forever, since HTMX doesn't swap on 5xx). Full exception is logged.
+- **Removed silent `except Exception: pass` in dashboard handlers.** Settings page Claude auth / Claude --version subprocess failures, resource-detail cron parse, and the `_render` `count_resources` fallback now all log via `logger.exception`/`logger.warning` so debugging is possible.
 - **`SUPAVISION_DB_PATH` honored by `create_app()`** — previously `uvicorn supavision.web.app:create_app --factory` silently ignored the env var and used `.supavision/supavision.db`. Resolution order is now: explicit `db_path=` kwarg → `SUPAVISION_DB_PATH` → fallback default.
 - **`Store.count_resources()`** — used by the global `_render` helper to inject `resources_count` into every template context for empty-state branching.
+- **`Store.list_auth_events_paginated()`** — clean replacement for an orphaned function body left over from a previous refactor. Powers the audit-log dashboard.
 
 ### Bug fixes
 - **Engine no longer writes ghost FAILED runs on lock contention.** When the scheduler or dashboard triggers a run, the engine acquires the per-resource lock *before* persisting the Run row. If another run is in flight, the new trigger raises without leaving a noise row. (API triggers still mark the pre-existing PENDING row FAILED so the API caller has a terminal state to poll.)

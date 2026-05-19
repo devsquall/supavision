@@ -1243,16 +1243,46 @@ class Store:
         runs = [Run.model_validate(json.loads(r[0])) for r in rows]
         return runs, total
 
-        """List auth audit events for the activity page."""
+    def list_auth_events_paginated(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        event: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """List auth audit events for the audit-log dashboard page.
+
+        Returns (rows, total). `event` filters to a single event type
+        ("login_success", "login_failure", "user_created", "logout", …).
+        """
+        conditions: list[str] = []
+        params: list = []
+        if event:
+            conditions.append("event = ?")
+            params.append(event)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        count_row = self._execute(f"SELECT COUNT(*) FROM auth_audit_log {where}", params).fetchone()
+        total = int(count_row[0]) if count_row else 0
+
         rows = self._execute(
-            "SELECT event, user_id, email, ip_address, detail, created_at "
-            "FROM auth_audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"SELECT event, user_id, email, ip_address, detail, created_at "
+            f"FROM auth_audit_log {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
         ).fetchall()
-        return [
-            {"event": r[0], "user_id": r[1], "email": r[2], "ip": r[3], "detail": r[4], "created_at": r[5]}
-            for r in rows
-        ]
+        return (
+            [
+                {
+                    "event": r[0],
+                    "user_id": r[1],
+                    "email": r[2],
+                    "ip": r[3],
+                    "detail": r[4],
+                    "created_at": r[5],
+                }
+                for r in rows
+            ],
+            total,
+        )
 
     def list_notifications_extended(
         self,

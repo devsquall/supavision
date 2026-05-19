@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Audit log — Supavision{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h2>Audit log</h2>
+    <span class="page-subtitle">Authentication and account events. Use for security review and incident investigation.</span>
+  </div>
+  <div class="page-header-right">
+    <a href="/settings" class="btn btn-outline btn-sm">← Back to Settings</a>
+  </div>
+</div>
+
+<div class="filter-bar mb-4">
+  <form method="get" action="/settings/audit-log" class="filter-form">
+    <select name="event" class="form-select">
+      <option value="">All events</option>
+      {% for ev in event_choices %}
+      <option value="{{ ev }}" {{ 'selected' if event_filter == ev }}>{{ ev | replace('_', ' ') | capitalize }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+    {% if event_filter %}
+    <a href="/settings/audit-log" class="btn btn-outline btn-sm">Clear</a>
+    {% endif %}
+    <span class="text-muted text-sm" style="margin-left: auto;">{{ total }} event{{ 's' if total != 1 else '' }}</span>
+  </form>
+</div>
+
+{% if rows %}
+<div class="table-wrap">
+  <table class="table table--stack">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Event</th>
+        <th>User</th>
+        <th>IP</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td data-label="When"><span data-timestamp="{{ row.created_at }}">{{ row.created_at }}</span></td>
+        <td data-label="Event">
+          {% set badge_class = 'badge--critical' if row.event == 'login_failure' else 'badge--healthy' if row.event == 'login_success' else '' %}
+          <span class="badge {{ badge_class }}">{{ row.event | replace('_', ' ') }}</span>
+        </td>
+        <td data-label="User">
+          {% if row.email %}{{ row.email }}{% elif row.user_id %}<code class="text-xs">{{ row.user_id[:8] }}</code>{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+        </td>
+        <td data-label="IP">{{ row.ip or '—' }}</td>
+        <td data-label="Detail"><span class="text-muted text-sm">{{ row.detail or '' }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > per_page %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&event={{ event_filter or '' }}" class="btn btn-outline btn-sm">&laquo; Prev</a>
+  {% endif %}
+  <span class="text-muted text-sm">Page {{ page }} of {{ (total + per_page - 1) // per_page }}</span>
+  {% if page * per_page < total %}
+  <a href="?page={{ page + 1 }}&event={{ event_filter or '' }}" class="btn btn-outline btn-sm">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <svg class="empty-state-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="8" y="6" width="32" height="36" rx="2"/>
+    <path d="M14 14h20M14 22h20M14 30h14"/>
+  </svg>
+  {% if event_filter %}
+  <h3>No "{{ event_filter | replace('_', ' ') }}" events</h3>
+  <p class="text-muted">Try a different filter or clear the filter to see all events.</p>
+  <a href="/settings/audit-log" class="btn">Clear filter</a>
+  {% else %}
+  <h3>No audit events yet</h3>
+  <p class="text-muted">Auth events (logins, user creates, role changes) appear here as users interact with Supavision. If you've already used the dashboard, this is unexpected — check that the <code>auth_audit_log</code> table has entries.</p>
+  <a href="/settings" class="btn">Back to Settings</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

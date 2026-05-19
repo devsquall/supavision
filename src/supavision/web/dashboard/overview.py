@@ -77,6 +77,7 @@ def _severity_streak(store, resource_id: str, current_severity: str, max_lookbac
     try:
         evals = store.get_recent_evaluations(resource_id, limit=max_lookback)
     except Exception:
+        logger.exception("Could not fetch recent evaluations for streak (resource=%s)", resource_id)
         return 1
     count = 0
     for ev in evals:
@@ -294,8 +295,13 @@ async def dashboard_overview(request: Request):
             },
         )
     except Exception:
+        # Don't raise — this endpoint is the HTMX target on the dashboard
+        # control-center page. A raise leaves the skeleton-pulse loaders
+        # frozen indefinitely (HTMX won't swap on a 500 response by
+        # default), so serve a 200 with a "something failed, retry?"
+        # fragment, and log full context for debugging.
         logger.exception("dashboard_overview handler failed")
-        raise
+        return _render(request, "dashboard_overview_error.html", {})
 
 
 @router.get("/dashboard/live-activity", response_class=HTMLResponse)

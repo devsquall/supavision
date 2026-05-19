@@ -39,6 +39,10 @@ def _render(request: Request, template: str, context: dict | None = None, **kwar
         try:
             ctx["resources_count"] = store.count_resources() if store else 0
         except Exception:
+            # Don't break template rendering if the count query fails — log
+            # so the failure is visible, then degrade to 0 (empty-state UIs
+            # still render, just without the personalised branching).
+            logger.exception("Failed to compute resources_count for template context")
             ctx["resources_count"] = 0
     return templates.TemplateResponse(request, template, ctx, **kwargs)
 

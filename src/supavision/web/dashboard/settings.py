@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from . import _render, _require_admin
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,7 +37,9 @@ async def settings_page(request: Request, new_key: str = ""):
             )
             claude_version = r.stdout.strip() if r.returncode == 0 else None
         except Exception:
-            pass
+            # claude --version timed out or threw; show "unknown" but log so
+            # the operator can see what went wrong in supavision serve logs.
+            logger.exception("Failed to read 'claude --version'")
 
     db_path = store.db_path
     db_size = "unknown"
@@ -69,6 +75,7 @@ async def settings_page(request: Request, new_key: str = ""):
 
         claude_auth_ok, claude_auth_detail = check_claude_auth()
     except Exception:
+        logger.exception("check_claude_auth failed unexpectedly")
         claude_auth_ok, claude_auth_detail = False, "auth check failed"
 
     # Setup checklist (P2 #14) — derived from current system state.
@@ -109,6 +116,55 @@ async def settings_page(request: Request, new_key: str = ""):
                 "resource_count": len(resources),
             },
             "setup_checklist": setup_checklist,
+        },
+    )
+
+
+@router.get("/settings/audit-log", response_class=HTMLResponse)
+async def settings_audit_log(request: Request, page: int = 1, event: str = ""):
+    """Auth audit log viewer — admin only.
+
+    Surfaces the `auth_audit_log` table (login successes/failures, user
+    creates, role changes, etc.). Previously this data was written on every
+    auth event but never displayed; operators had to read sqlite manually.
+    """
+    _require_admin(request)
+    store = request.app.state.store
+
+    per_page = 50
+    page = max(1, int(page or 1))
+    offset = (page - 1) * per_page
+
+    event_filter = event.strip() or None
+    rows, total = store.list_auth_events_paginated(
+        limit=per_page,
+        offset=offset,
+        event=event_filter,
+    )
+
+    # Known events (kept short — read from existing audit entries if you add new ones).
+    event_choices = [
+        "login_success",
+        "login_failure",
+        "logout",
+        "user_created",
+        "user_activated",
+        "user_deactivated",
+        "role_changed",
+        "password_changed",
+        "session_revoked",
+    ]
+
+    return _render(
+        request,
+        "settings_audit_log.html",
+        {
+            "rows": rows,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "event_filter": event_filter,
+            "event_choices": event_choices,
         },
     )
 

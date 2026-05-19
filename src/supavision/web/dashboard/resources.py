@@ -476,7 +476,10 @@ async def resource_edit_form(resource_id: str, request: Request):
             cron = croniter(health_cron, datetime.now(timezone.utc))
             next_health_check = cron.get_next(datetime).isoformat()
         except Exception:
-            pass
+            # Malformed cron from a legacy row — surface in the log so an
+            # operator can spot it, then let the edit form render with no
+            # "next run" preview (the user can fix the cron in the form).
+            logger.warning("Invalid health_cron on resource %s: %r", resource.id, health_cron)
 
     return _render(
         request,
@@ -704,9 +707,23 @@ async def resource_new_submit(request: Request):
         else []
     )
 
-    # Schedules
+    # Schedules — validate cron expressions before persisting so a typo
+    # surfaces as a 400 rather than silently saving a malformed schedule
+    # that fails inside the scheduler tick.
+    from croniter import croniter
+
     health_cron = form.get("health_cron", "").strip()
     discovery_cron = form.get("discovery_cron", "").strip()
+    for label, expr in [("Health-check", health_cron), ("Discovery", discovery_cron)]:
+        if expr and not croniter.is_valid(expr):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{label} cron expression '{expr}' is not valid. "
+                    "Use 5-field cron syntax (e.g. '0 */6 * * *') or a shortcut "
+                    "like '@hourly', '@daily', '@weekly'."
+                ),
+            )
 
     credentials = {name: Credential(env_var=ev) for name, ev in credentials_env_vars.items()}
     resource = Resource(
@@ -793,7 +810,7 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
             c = croniter(health_cron, datetime.now(timezone.utc))
             next_health_check = c.get_next(datetime).strftime("%Y-%m-%dT%H:%M:%SZ")
         except Exception:
-            pass
+            logger.warning("Invalid health_cron on resource %s: %r", resource_id, health_cron)
 
     # Alert history from evaluations where should_alert=True
     all_evals = store.get_recent_evaluations(resource_id, limit=30)
@@ -1041,6 +1058,8 @@ async def toggle_resource(resource_id: str, request: Request):
 @router.post("/resources/{resource_id}/schedule")
 async def update_schedule(resource_id: str, request: Request):
     _require_admin(request)
+    from croniter import croniter
+
     from ...models import Schedule
 
     store = request.app.state.store
@@ -1051,6 +1070,20 @@ async def update_schedule(resource_id: str, request: Request):
     form = await request.form()
     health_cron = form.get("health_cron", "").strip()
     discovery_cron = form.get("discovery_cron", "").strip()
+
+    # Validate cron expressions before saving — previously a malformed cron
+    # was accepted, persisted, and only blew up later in the scheduler with
+    # a generic error the user never saw. Surface the failure inline.
+    for label, expr in [("Health-check", health_cron), ("Discovery", discovery_cron)]:
+        if expr and not croniter.is_valid(expr):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{label} cron expression '{expr}' is not valid. "
+                    "Use 5-field cron syntax (e.g. '0 */6 * * *' for every six hours) "
+                    "or a shortcut like '@hourly', '@daily', '@weekly'."
+                ),
+            )
 
     resource.health_check_schedule = Schedule(cron=health_cron, enabled=True) if health_cron else None
     resource.discovery_schedule = Schedule(cron=discovery_cron, enabled=True) if discovery_cron else None
