@@ -136,6 +136,10 @@ def cmd_resource_add(args: argparse.Namespace) -> None:
         config=config,
     )
     store.save_resource(resource)
+    store.log_auth_event(
+        "resource_created",
+        detail=f"resource_id={resource.id} type={args.type} name={args.name!r} source=cli",
+    )
     _json_out({"ok": True, "command": "resource_add", "resource_id": resource.id, "name": resource.name})
 
 
@@ -889,6 +893,14 @@ def cmd_api_key_create(args: argparse.Namespace) -> None:
     key_id, raw_key, key_hash = generate_api_key()
     store.save_api_key(key_id, key_hash, label=args.label)
 
+    # Audit log: keep CLI key creation visible to /settings/audit-log too,
+    # so an operator inspecting the audit trail isn't blind to admin actions
+    # taken via the CLI. The raw key is NEVER written to the audit log.
+    store.log_auth_event(
+        "api_key_created",
+        detail=f"key_id={key_id} label={args.label!r} role=admin source=cli",
+    )
+
     print("\nAPI Key created. Save this — it cannot be retrieved again:\n", file=sys.stderr)
     print(f"  {raw_key}\n", file=sys.stderr)
     _json_out({"ok": True, "command": "api_key_create", "key_id": key_id, "key": raw_key})
@@ -906,6 +918,10 @@ def cmd_api_key_list(args: argparse.Namespace) -> None:
 def cmd_api_key_revoke(args: argparse.Namespace) -> None:
     store = _get_store(args)
     if store.revoke_api_key(args.key_id):
+        store.log_auth_event(
+            "api_key_revoked",
+            detail=f"key_id={args.key_id} source=cli",
+        )
         print(f"API key {args.key_id} revoked.", file=sys.stderr)
         _json_out({"ok": True, "command": "api_key_revoke", "key_id": args.key_id})
     else:
