@@ -667,6 +667,65 @@ def cmd_purge(args: argparse.Namespace) -> None:
         )
 
 
+def cmd_backup(args: argparse.Namespace) -> None:
+    """Snapshot the SQLite database to a file using `.backup` (consistent
+    while Supavision is running).
+
+    The backup is a separate, complete SQLite database file — restore it by
+    stopping Supavision and copying it to wherever `SUPAVISION_DB_PATH`
+    points (default `.supavision/supavision.db`).
+    """
+    import sqlite3 as _sqlite3
+    from datetime import datetime, timezone
+
+    db_path = args.db
+    if not Path(db_path).exists():
+        _error(f"Database file not found: {db_path}")
+
+    out_path = args.output
+    if not out_path:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out_path = f"{db_path}.backup-{ts}"
+
+    # Refuse to overwrite an existing file unless --force is set; backups
+    # should never silently clobber.
+    out_pathobj = Path(out_path)
+    if out_pathobj.exists() and not args.force:
+        _error(
+            f"Refusing to overwrite existing file: {out_path}. "
+            "Pass --force to allow, or pick a different --output path."
+        )
+
+    # Make sure the destination dir exists.
+    out_pathobj.parent.mkdir(parents=True, exist_ok=True)
+
+    # With --force, delete the existing destination before opening it as a
+    # fresh sqlite connection. Without this, if the existing file is NOT a
+    # valid SQLite database (e.g. a stale text file with the same name),
+    # sqlite3.Connection.backup() fails with "file is not a database".
+    if out_pathobj.exists() and args.force:
+        out_pathobj.unlink()
+
+    src = _sqlite3.connect(db_path)
+    dst = _sqlite3.connect(out_path)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+    print(f"Database backed up to {out_path}", file=sys.stderr)
+    _json_out(
+        {
+            "ok": True,
+            "command": "backup",
+            "source": db_path,
+            "destination": out_path,
+        }
+    )
+
+
 def cmd_seed_demo(args: argparse.Namespace) -> None:
     """Populate the database with sample data for demo/evaluation."""
     from datetime import timedelta
@@ -1060,6 +1119,7 @@ commands by area:
     doctor                Check system dependencies and configuration
     seed-demo             Populate database with sample data for demo
     purge                 Delete old reports and runs
+    backup                Snapshot the SQLite database to a file
 
 run 'supavision <command> --help' for command-specific options.
 """
@@ -1232,6 +1292,16 @@ run 'supavision <command> --help' for command-specific options.
     p.add_argument("--days", type=int, default=90, help="Delete data older than N days (default: 90)")
     p.add_argument("--dry-run", action="store_true", help="Show what would be deleted without deleting")
     p.set_defaults(func=cmd_purge)
+
+    # backup
+    p = sub.add_parser("backup", help="Snapshot the SQLite database to a file")
+    p.add_argument(
+        "--output",
+        default="",
+        help="Destination path. Default: <db>.backup-<UTC-timestamp>",
+    )
+    p.add_argument("--force", action="store_true", help="Overwrite the destination if it already exists")
+    p.set_defaults(func=cmd_backup)
 
     # serve (API server)
     p = sub.add_parser("serve", help="Start the REST API server")

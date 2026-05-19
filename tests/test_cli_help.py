@@ -67,6 +67,7 @@ COMMAND_GROUPS = {
         "doctor",
         "seed-demo",
         "purge",
+        "backup",
     ],
 }
 

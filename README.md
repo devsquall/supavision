@@ -220,7 +220,16 @@ Resources created before 0.4.5 with raw secrets in `config` continue to load and
 
 ## Backup
 
-The database lives at `.supavision/supavision.db` (override with `SUPAVISION_DB_PATH`). SQLite's `.backup` command produces a consistent snapshot even while Supavision is running:
+The database lives at `.supavision/supavision.db` (override with `SUPAVISION_DB_PATH`).
+
+```bash
+# One-command snapshot — uses SQLite's online .backup, safe while serve/scheduler are running.
+supavision backup                                       # writes <db>.backup-<UTC-timestamp>
+supavision backup --output /backups/nightly.db          # explicit destination
+supavision backup --output /backups/nightly.db --force  # overwrite an existing snapshot
+```
+
+Or the raw form, equivalent to what `supavision backup` does internally:
 
 ```bash
 sqlite3 .supavision/supavision.db ".backup backup-$(date +%F).db"
