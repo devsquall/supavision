@@ -446,9 +446,14 @@ class PagerDutyChannel(NotificationChannel):
         self.integration_key = integration_key
 
     async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
+        """Post a `trigger` event to PagerDuty Events API v2.
+
+        Callers must filter on severity BEFORE invoking this channel — this
+        method does not silently no-op for healthy/info. (Pre-0.4.5.dev0
+        behavior returned True for non-alertable severities, which made
+        `send_alert` log them as "sent" even though nothing was posted.)
+        """
         sev = str(evaluation.severity)
-        if sev not in ("critical", "warning"):
-            return True  # not alertable — treat as success, nothing to do
         try:
             payload = {
                 "routing_key": self.integration_key,
@@ -614,20 +619,25 @@ async def send_alert(
         except ValueError as e:
             logger.warning("Teams webhook rejected (SSRF): %s", e)
 
-    # PagerDuty (Events API v2 — integration key, not a URL)
-    pd_key = ""
-    pd_cred = resource.credentials.get("pagerduty_integration_key")
-    if pd_cred and pd_cred.env_var:
-        pd_key = os.environ.get(pd_cred.env_var, "")
-    if not pd_key:
-        pd_key = os.environ.get("PAGERDUTY_INTEGRATION_KEY", "")
-    if pd_key:
-        try:
-            channel = PagerDutyChannel(pd_key)
-            if await channel.send(resource, report, evaluation):
-                succeeded.append("pagerduty")
-        except ValueError as e:
-            logger.warning("PagerDuty integration key invalid: %s", e)
+    # PagerDuty (Events API v2 — integration key, not a URL).
+    # Severity-gated at the dispatcher: PagerDuty pages people, so we only
+    # fire on critical/warning. The channel itself is now a "post or fail"
+    # primitive with no implicit no-op.
+    pd_severity = str(evaluation.severity)
+    if pd_severity in ("critical", "warning"):
+        pd_key = ""
+        pd_cred = resource.credentials.get("pagerduty_integration_key")
+        if pd_cred and pd_cred.env_var:
+            pd_key = os.environ.get(pd_cred.env_var, "")
+        if not pd_key:
+            pd_key = os.environ.get("PAGERDUTY_INTEGRATION_KEY", "")
+        if pd_key:
+            try:
+                channel = PagerDutyChannel(pd_key)
+                if await channel.send(resource, report, evaluation):
+                    succeeded.append("pagerduty")
+            except ValueError as e:
+                logger.warning("PagerDuty integration key invalid: %s", e)
 
     # Update in-memory dedup tracking
     if succeeded and not skip_dedup:

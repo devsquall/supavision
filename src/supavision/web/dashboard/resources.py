@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from ...models import Credential, RunStatus
+from ...models import Credential, RunStatus, RunType
 from ...resource_types import RESOURCE_TYPES, WIZARD_FLOWS
 from ...secrets_policy import (
     is_valid_env_var_name,
@@ -19,6 +19,7 @@ from ...secrets_policy import (
     validate_credentials_env_vars,
     validate_no_raw_secrets,
 )
+from ..run_triggers import trigger_run_or_409
 from . import _check_rate_limit, _md_to_html, _render, _require_admin
 
 logger = logging.getLogger(__name__)
@@ -842,12 +843,16 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
     #   2. Fallback for legacy reports: Evaluation.summary as a single
     #      severity-coloured note. (Evaluation only carries resource-level
     #      severity + summary; it is NOT a substitute for an issue list.)
+    # Use dedicated single-row lookups for workflow + latest-report derivation.
+    # The paginated `recent_runs` slice is for the history table only — for
+    # a resource with >per_page health-check runs since its last discovery,
+    # `recent_runs` won't contain the discovery row, and a naive
+    # `any(... for r in recent_runs)` check would wrongly say "needs discovery".
+    latest_discovery_run = store.get_latest_run(resource.id, RunType.DISCOVERY)
+    latest_health_run = store.get_latest_run(resource.id, RunType.HEALTH_CHECK)
+
     active_issues: list[dict] = []
     legacy_issue_summary: str | None = None
-    latest_health_run = next(
-        (r for r in recent_runs if str(r.run_type) == "health_check" and r.report_id),
-        None,
-    )
     if latest_health_run and latest_health_run.report_id:
         latest_report = store.get_report(latest_health_run.report_id)
         if latest_report and latest_report.payload and latest_report.payload.issues:
@@ -872,8 +877,8 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
             legacy_issue_summary = latest_eval[0].summary
 
     # Workflow step indicator: where is this resource in the flagship journey?
-    has_discovery = any(str(r.run_type) == "discovery" and str(r.status) == "completed" for r in recent_runs)
-    has_health_check = any(str(r.run_type) == "health_check" and str(r.status) == "completed" for r in recent_runs)
+    has_discovery = latest_discovery_run is not None and str(latest_discovery_run.status) == "completed"
+    has_health_check = latest_health_run is not None and str(latest_health_run.status) == "completed"
     if not has_discovery:
         workflow_step = "needs_discovery"
         recommended_action = {
@@ -1004,15 +1009,9 @@ async def trigger_discover(resource_id: str, request: Request):
     engine = request.app.state.engine
     if not store.get_resource(resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
-
-    async def _run():
-        try:
-            await engine.run_discovery_async(resource_id)
-        except Exception as e:
-            logger.error("Dashboard discovery failed for %s: %s", resource_id, e)
-
-    asyncio.create_task(_run())
-    return Response(status_code=204)
+    # 202 with {ok, run_id} on success; 409 with {error, active_run_id, hint}
+    # if a PENDING/RUNNING run already exists.
+    return trigger_run_or_409(store, engine, resource_id, RunType.DISCOVERY)
 
 
 @router.post("/resources/{resource_id}/health-check")
@@ -1024,15 +1023,7 @@ async def trigger_health_check(resource_id: str, request: Request):
     engine = request.app.state.engine
     if not store.get_resource(resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
-
-    async def _run():
-        try:
-            await engine.run_health_check_async(resource_id)
-        except Exception as e:
-            logger.error("Dashboard health check failed for %s: %s", resource_id, e)
-
-    asyncio.create_task(_run())
-    return Response(status_code=204)
+    return trigger_run_or_409(store, engine, resource_id, RunType.HEALTH_CHECK)
 
 
 @router.post("/resources/{resource_id}/toggle")

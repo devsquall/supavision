@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -20,7 +19,9 @@ from ..models import (
     RunType,
     Severity,
 )
+from ..models.health import IssueSeverity
 from ..secrets_policy import (
+    is_secret_key,
     validate_credentials_env_vars,
     validate_no_raw_secrets,
 )
@@ -244,11 +245,6 @@ def _reject_raw_secrets_or_400(config: dict | None, credentials: dict[str, str] 
         )
 
 
-class TriggerResponse(BaseModel):
-    ok: bool = True
-    run_id: str
-
-
 class TriggerRunRequest(BaseModel):
     """Request body for POST /runs (Workstream E3)."""
 
@@ -359,10 +355,13 @@ async def get_resource(resource_id: str, request: Request):
     checklist = store.get_latest_checklist(resource_id)
     recent_runs = store.get_runs(resource_id, limit=5)
 
-    # Filter sensitive fields from config before returning
+    # Filter secret-shaped fields and the internal _last_alert_key marker
+    # from the response. Legacy rows may still hold raw secrets in config
+    # (we don't migrate on load); the API must never serve them back.
     resource_data = resource.model_dump(mode="json")
-    sensitive_keys = {"ssh_key_path", "slack_webhook", "_last_alert_key"}
-    resource_data["config"] = {k: v for k, v in resource_data.get("config", {}).items() if k not in sensitive_keys}
+    resource_data["config"] = {
+        k: v for k, v in resource_data.get("config", {}).items() if not is_secret_key(k) and k != "_last_alert_key"
+    }
 
     return {
         "ok": True,
@@ -413,45 +412,9 @@ async def update_resource(
 # ── Trigger Runs ────────────────────────────────────────────────
 
 
-def _trigger_run_or_409(store, engine, resource_id: str, run_type: RunType) -> TriggerResponse:
-    """Shared logic for all three API trigger endpoints.
-
-    Atomically creates a PENDING Run for this resource, schedules the engine
-    background task with that run_id (so the engine updates the same row instead
-    of creating a duplicate), and returns the run_id.
-
-    Returns 409 with `{"error": "run_in_flight", "active_run_id": ...}` if a
-    PENDING/RUNNING run already exists for the resource.
-    """
-    run = store.create_pending_run_if_no_active(resource_id, run_type)
-    if run is None:
-        active_id = store.get_active_run_id_for_resource(resource_id) or ""
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "run_in_flight",
-                "active_run_id": active_id,
-                "hint": "Poll GET /runs/<active_run_id> to track the existing run.",
-            },
-        )
-
-    async def _bg():
-        try:
-            if run_type == RunType.DISCOVERY:
-                await engine.run_discovery_async(resource_id, run_id=run.id)
-            else:
-                await engine.run_health_check_async(resource_id, run_id=run.id)
-        except Exception as e:
-            logger.error(
-                "Background run failed: resource=%s type=%s run_id=%s error=%s",
-                resource_id,
-                run_type,
-                run.id,
-                e,
-            )
-
-    asyncio.create_task(_bg())
-    return TriggerResponse(run_id=run.id)
+# Trigger logic lives in web/run_triggers.py — single source of truth shared
+# by the API and the dashboard. Re-export here for backwards-compat imports.
+from .run_triggers import trigger_run_or_409 as _trigger_run_or_409  # noqa: E402
 
 
 @router.post("/resources/{resource_id}/discover")
@@ -636,7 +599,9 @@ async def get_incidents(resource_id: str, request: Request, limit: int = 10):
 class CreateIncidentRequest(BaseModel):
     resource_id: str
     title: str = Field(..., min_length=1, max_length=200)
-    severity: str = "warning"
+    # Enum: pydantic validates "warning"/"critical"/"info" → returns IssueSeverity;
+    # anything else → 422 ValidationError (FastAPI returns 422 by default).
+    severity: IssueSeverity = IssueSeverity.WARNING
     evaluation_id: str | None = None
 
 
@@ -646,6 +611,17 @@ class IncidentTransitionRequest(BaseModel):
     owner_user_id: str | None = None
     snoozed_until: datetime | None = None
     note: str | None = None
+
+    @field_validator("snoozed_until")
+    @classmethod
+    def _future_only(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return v
+        # Compare in UTC so naive timestamps are treated as UTC for the check.
+        comparable = v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        if comparable <= datetime.now(timezone.utc):
+            raise ValueError("snoozed_until must be in the future")
+        return v
 
 
 def _serialize_incident(inc: Incident) -> dict:
@@ -683,14 +659,46 @@ async def create_incident(body: CreateIncidentRequest, request: Request, _admin=
     store = _get_store(request)
     if not store.get_resource(body.resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
+
+    # If an evaluation is linked, verify it exists AND belongs to this resource
+    # (otherwise the incident would reference a stranger eval). Cheap single lookup.
+    if body.evaluation_id:
+        ev = store.get_evaluation(body.evaluation_id)
+        if ev is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "unknown_evaluation_id", "evaluation_id": body.evaluation_id},
+            )
+        if ev.resource_id != body.resource_id:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "evaluation_resource_mismatch",
+                    "evaluation_id": body.evaluation_id,
+                    "evaluation_resource_id": ev.resource_id,
+                    "incident_resource_id": body.resource_id,
+                },
+            )
+
     inc = Incident(
         resource_id=body.resource_id,
         title=body.title,
-        severity=body.severity,
+        severity=str(body.severity),
         evaluation_id=body.evaluation_id,
     )
     store.save_incident(inc)
     return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+def _verify_user_or_400(store, user_id: str) -> None:
+    """Ensure `user_id` exists in the users table; raise 400 if not."""
+    if not user_id:
+        return
+    if store.get_user(user_id) is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "unknown_owner_user_id", "owner_user_id": user_id},
+        )
 
 
 def _get_incident_or_404(store, incident_id: str) -> Incident:
@@ -714,6 +722,8 @@ async def incident_acknowledge(
     _admin=Depends(require_api_key_admin),
 ):
     store = _get_store(request)
+    if body.owner_user_id:
+        _verify_user_or_400(store, body.owner_user_id)
     inc = _get_incident_or_404(store, incident_id)
     inc.state = IncidentState.ACKNOWLEDGED
     if body.owner_user_id:
@@ -733,6 +743,7 @@ async def incident_assign(
     if not body.owner_user_id:
         raise HTTPException(status_code=400, detail="owner_user_id is required")
     store = _get_store(request)
+    _verify_user_or_400(store, body.owner_user_id)
     inc = _get_incident_or_404(store, incident_id)
     inc.owner_user_id = body.owner_user_id
     _touch(inc, note=body.note)

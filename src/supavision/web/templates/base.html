@@ -9,16 +9,15 @@
   <title>{% block title %}Supavision{% endblock %}</title>
   {% block og_meta %}{% endblock %}
   <link rel="icon" href="data:image/svg+xml,<svg aria-hidden="true" xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  {# Fonts: system stack via CSS (see --font-sans / --font-mono in style.css);
+     no Google Fonts, no off-host requests. See web/static/vendor/README.md. #}
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <link rel="stylesheet" href="/static/vendor/xterm-5.5.0.css">
+  <script src="/static/vendor/htmx-2.0.4.min.js"></script>
   <script>htmx.config.globalViewTransitions = true;</script>
   <style>@view-transition{navigation:auto}::view-transition-old(root){animation:150ms ease-out both fade-out}::view-transition-new(root){animation:150ms ease-in both fade-in}@keyframes fade-out{to{opacity:0}}@keyframes fade-in{from{opacity:0}}</style>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+  <script src="/static/vendor/xterm-5.5.0.js"></script>
+  <script src="/static/vendor/xterm-addon-fit-0.10.0.js"></script>
   <script>
     // Restore theme before paint to avoid flash
     (function() {
@@ -66,8 +65,8 @@
         <span class="sidebar-item-text">Metrics</span>
       </a>
 
-      {# ── Incidents & Runs (what's happened / happening) ── #}
-      <div class="sidebar-section-label">Incidents &amp; Runs</div>
+      {# ── Runs (what's happened / happening) ── #}
+      <div class="sidebar-section-label">Runs</div>
       <a href="/alerts" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/alerts') }}" title="Notification delivery history">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 01.993.883L9 2v.5A4.5 4.5 0 0112.5 7v3l1.354 1.354A.5.5 0 0113.5 12H2.5a.5.5 0 01-.354-.854L3.5 10V7A4.5 4.5 0 017 2.5V2a1 1 0 011-1zM6.5 13a1.5 1.5 0 003 0h-3z"/></svg>
         <span class="sidebar-item-text">Alerts</span>

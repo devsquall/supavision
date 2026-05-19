@@ -139,6 +139,41 @@ class TestRestApiSecretStorage:
         resource = store.get_resource(rid)
         assert resource.credentials["slack_webhook"].env_var == "OPS_SLACK_URL"
 
+    @pytest.mark.parametrize(
+        "leaked_key,leaked_value",
+        [
+            ("aws_secret_key", "AKIAEXAMPLE_LEAK_TEST"),
+            ("github_token", "ghp_LEAK_TEST"),
+            ("db_password", "hunter2_LEAK_TEST"),
+            ("slack_webhook", "https://hooks.slack.com/LEAK"),
+            ("webhook_url", "https://example.com/LEAK"),
+            ("teams_webhook", "https://outlook.office.com/LEAK"),
+            ("pagerduty_integration_key", "LEAK_PD_INTEGRATION_KEY_32CHARS"),
+        ],
+    )
+    def test_get_resource_filters_legacy_raw_secrets_from_response(self, api_client, store, leaked_key, leaked_value):
+        """Legacy rows with raw secrets in config must NOT leak through GET /resources/{id}.
+
+        Bypasses the write-boundary (it now rejects all these keys) by writing
+        directly through the store, then verifies the API response strips them.
+        """
+        legacy = Resource(
+            name="legacy",
+            resource_type="server",
+            config={"ssh_host": "1.2.3.4", leaked_key: leaked_value},
+        )
+        store.save_resource(legacy)
+
+        r = api_client.get(f"/api/v1/resources/{legacy.id}")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        cfg = body["resource"]["config"]
+        assert leaked_key not in cfg, f"{leaked_key!r} leaked through GET response"
+        # Sanity: non-secret config keys still pass through.
+        assert cfg.get("ssh_host") == "1.2.3.4"
+        # Belt-and-suspenders: scan the entire response body for the raw value.
+        assert leaked_value not in r.text, f"raw value of {leaked_key!r} appeared somewhere in the response body"
+
     def test_db_serialized_resource_has_no_known_secret_keys_in_config(self, api_client, store, tmp_path):
         """Acceptance check from the plan: after each create path the raw DB JSON must
         not contain any KNOWN_SECRET_KEYS member as a config key."""

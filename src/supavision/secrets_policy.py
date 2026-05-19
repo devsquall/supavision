@@ -29,6 +29,12 @@ KNOWN_SECRET_KEYS: frozenset[str] = frozenset(
         "github_token",
         "db_password",
         "slack_webhook",
+        # Notification channel credentials. URLs are credentials (anyone with
+        # the URL can post to the channel); the PagerDuty integration key is
+        # the routing key for Events API v2.
+        "webhook_url",
+        "teams_webhook",
+        "pagerduty_integration_key",
     }
 )
 

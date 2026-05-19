@@ -108,6 +108,64 @@ class TestPrepareRun:
             engine._prepare_run(resource.id, RunType.DISCOVERY, run_id=completed.id)
 
 
+class TestRunSlotLockContention:
+    """The lock-before-prepare fix (4.3): on contention the engine must NOT
+    write a phantom FAILED Run for the run_id=None path. For the run_id-given
+    path, the pre-existing PENDING row must be transitioned to FAILED so the
+    API caller can still poll it.
+    """
+
+    def test_without_run_id_lock_contention_does_not_create_row(self, engine, resource, store):
+        # Acquire the resource lock ourselves and hold it.
+        held_fd = engine._acquire_resource_lock(resource.id)
+        assert held_fd, "test setup: could not acquire lock"
+        try:
+            before = len(store.get_runs(resource.id, limit=100))
+            with pytest.raises(RuntimeError, match="Another run is in progress"):
+                with engine._run_slot(resource.id, RunType.DISCOVERY, run_id=None) as _:
+                    pytest.fail("body should not execute under contention")
+            after = len(store.get_runs(resource.id, limit=100))
+            assert after == before, "no Run row should have been created"
+        finally:
+            engine._release_resource_lock(held_fd)
+
+    def test_with_run_id_lock_contention_marks_existing_run_failed(self, engine, resource, store):
+        # Pre-create a PENDING row as the API trigger would.
+        pending = store.create_pending_run_if_no_active(resource.id, RunType.DISCOVERY)
+        assert pending is not None
+
+        # Hold the resource lock so the engine can't acquire it.
+        held_fd = engine._acquire_resource_lock(resource.id)
+        assert held_fd
+        try:
+            with pytest.raises(RuntimeError, match="Another run is in progress"):
+                with engine._run_slot(resource.id, RunType.DISCOVERY, run_id=pending.id) as _:
+                    pytest.fail("body should not execute under contention")
+
+            reloaded = store.get_run(pending.id)
+            assert reloaded is not None
+            assert reloaded.status == RunStatus.FAILED
+            assert "Another run is in progress" in (reloaded.error or "")
+        finally:
+            engine._release_resource_lock(held_fd)
+
+    def test_without_run_id_happy_path_creates_running_row_under_lock(self, engine, resource, store):
+        before = len(store.get_runs(resource.id, limit=100))
+        with engine._run_slot(resource.id, RunType.DISCOVERY, run_id=None) as run:
+            assert run.status == RunStatus.RUNNING
+            assert run.started_at is not None
+            # Inside the with block, attempting to acquire the lock from
+            # another caller would fail. Use _acquire/_release directly.
+            other_fd = engine._acquire_resource_lock(resource.id)
+            assert not other_fd, "lock should be held while in the slot"
+        # After exit, the lock is released.
+        re_fd = engine._acquire_resource_lock(resource.id)
+        assert re_fd
+        engine._release_resource_lock(re_fd)
+        after = len(store.get_runs(resource.id, limit=100))
+        assert after == before + 1
+
+
 # ── Atomic Store helper ───────────────────────────────────────────
 
 
@@ -192,7 +250,7 @@ class TestApiTriggerEndpoints:
             "/api/v1/runs",
             json={"resource_id": resource.id, "run_type": "health_check"},
         )
-        assert r.status_code == 200, r.text
+        assert r.status_code == 202, r.text
         returned_id = r.json()["run_id"]
         # Give the background task a moment to complete.
         for _ in range(20):
@@ -209,7 +267,7 @@ class TestApiTriggerEndpoints:
 
     def test_post_resource_discover_returns_run_id(self, api_client, store, resource):
         r = api_client.post(f"/api/v1/resources/{resource.id}/discover")
-        assert r.status_code == 200, r.text
+        assert r.status_code == 202, r.text
         body = r.json()
         assert "run_id" in body
         # No duplicate row
@@ -219,7 +277,7 @@ class TestApiTriggerEndpoints:
 
     def test_post_resource_health_check_returns_run_id(self, api_client, store, resource):
         r = api_client.post(f"/api/v1/resources/{resource.id}/health-check")
-        assert r.status_code == 200, r.text
+        assert r.status_code == 202, r.text
         body = r.json()
         assert "run_id" in body
         runs = store.get_runs(resource.id, limit=100)

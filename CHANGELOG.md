@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased — 0.4.5.dev0 (in-flight release-gate follow-ups)
+
+This is a pre-release marker (PEP 440 `.dev0`). The codebase contains all of v0.4.5's planned work plus the dev-team-review follow-ups that close the release gates. When all gates pass, drop `.dev0` and tag v0.4.5.
+
+### Security
+- **Complete the secrets policy.** GET `/api/v1/resources/{id}` no longer leaks legacy raw values (`aws_secret_key`, `github_token`, `db_password`, …) from rows created before v0.4.5 — the response filter now uses `secrets_policy.is_secret_key(k)` instead of a hard-coded 3-key set. `webhook_url`, `teams_webhook`, and `pagerduty_integration_key` are now `KNOWN_SECRET_KEYS`, so the write-boundary rejects them at the wizard, edit form, REST API, and CLI alike.
+- **Frontend supply chain.** Dashboard now loads zero third-party JS/CSS by default. `htmx@2.0.4` and `xterm@5.5.0` are vendored to `web/static/vendor/` with provenance (source URL, version, license, SHA-256). Google Fonts is replaced by a system-font stack — no privacy concern, no off-host requests.
+
+### Bug fixes
+- **Engine no longer writes ghost FAILED runs on lock contention.** When the scheduler or dashboard triggers a run, the engine acquires the per-resource lock *before* persisting the Run row. If another run is in flight, the new trigger raises without leaving a noise row. (API triggers still mark the pre-existing PENDING row FAILED so the API caller has a terminal state to poll.)
+- **Scheduler skips resources with PENDING or RUNNING runs.** Previously `get_latest_runs_batch()` returned only COMPLETED runs, so a resource whose only run was still in flight looked "never run before" to `_get_due_jobs` and got queued for a duplicate.
+- **Dashboard trigger buttons share the same atomic flow as the API.** Both dashboard handlers now go through a new `web/run_triggers.py` helper, return 202 with a `run_id` on success and 409 with `active_run_id` on conflict. No more silent double-clicks.
+- **Resource-detail workflow state is correct on busy resources.** `workflow_step` / `recommended_action` were derived from the first page of the run history, so a resource with >10 health-check runs since its last discovery was wrongly marked "needs discovery". Now derived from `store.get_latest_run(resource_id, run_type)`.
+- **PagerDuty no longer reports "sent" for healthy/info events.** Severity gating moved out of `PagerDutyChannel.send` and into `send_alert`, so the notification log only records actual delivery attempts.
+
+### API
+- **Trigger endpoints now return 202 Accepted** (previously 200). The work is queued in the background; 202 is the canonical "accepted, not yet done" status. The 409 conflict shape is unchanged.
+
+### UX
+- **Sidebar nav cleanup.** "Incidents & Runs" renamed to "Runs" — the incidents REST API is a power-user surface for now (no auto-create on severity transitions, no dashboard page).
+
+### Internal
+- **Incident API validation tightened.** `CreateIncidentRequest.severity` is now an enum (`critical | warning | info`); `snoozed_until` must be future-dated; `evaluation_id` must exist and belong to the named resource; `owner_user_id` must reference an existing user.
+- **Notification adapters covered.** `TeamsChannel` and `PagerDutyChannel` now have unit tests for payload shape, severity mapping, and failure handling. Both adapters remain env-var-configured (no settings UI surface).
+
 ## 0.4.5 (2026-05-18)
 
 ### Security

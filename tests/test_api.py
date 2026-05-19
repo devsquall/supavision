@@ -361,7 +361,8 @@ class TestTriggers:
         store.save_resource(resource)
 
         resp = client.post(f"/api/v1/resources/{resource.id}/discover")
-        assert resp.status_code == 200
+        # 202 Accepted since 0.4.5.dev0 — work is queued for background execution.
+        assert resp.status_code == 202
         data = resp.json()
         assert data["ok"] is True
         assert "run_id" in data
@@ -375,7 +376,7 @@ class TestTriggers:
         store.save_resource(resource)
 
         resp = client.post(f"/api/v1/resources/{resource.id}/health-check")
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
         assert data["ok"] is True
         assert "run_id" in data
@@ -729,14 +730,15 @@ class TestTriggerRun:
         resource = Resource(name="srv", resource_type="server")
         store.save_resource(resource)
         resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "discovery"})
-        assert resp.status_code == 200
+        # 202 Accepted since 0.4.5.dev0.
+        assert resp.status_code == 202
         assert "run_id" in resp.json()
 
     def test_trigger_health_check_returns_run_id(self, client, store):
         resource = Resource(name="srv", resource_type="server")
         store.save_resource(resource)
         resp = client.post("/api/v1/runs", json={"resource_id": resource.id, "run_type": "health_check"})
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         assert "run_id" in resp.json()
 
     def test_trigger_creates_run_with_correct_type(self, client, store):

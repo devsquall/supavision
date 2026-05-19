@@ -21,6 +21,10 @@ class TestKnownSecretKeys:
         assert "github_token" in KNOWN_SECRET_KEYS
         assert "db_password" in KNOWN_SECRET_KEYS
         assert "slack_webhook" in KNOWN_SECRET_KEYS
+        # Notification-channel credentials added in 0.4.5.dev0.
+        assert "webhook_url" in KNOWN_SECRET_KEYS
+        assert "teams_webhook" in KNOWN_SECRET_KEYS
+        assert "pagerduty_integration_key" in KNOWN_SECRET_KEYS
 
     def test_suffix_password(self):
         assert is_secret_key("db_password")

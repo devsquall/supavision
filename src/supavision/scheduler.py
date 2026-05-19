@@ -152,7 +152,13 @@ class Scheduler:
     _JITTER_SECONDS = 30  # random delay to spread out simultaneous runs
 
     def _get_due_jobs(self) -> list[tuple[Resource, RunType]]:
-        """Check all resources' schedules in one batch (no N+1 queries)."""
+        """Check all resources' schedules in one batch (no N+1 queries).
+
+        Filters out resources that already have a PENDING/RUNNING run — without
+        this, `get_latest_runs_batch()` (which returns only COMPLETED runs) would
+        treat a resource with an in-flight run as "never run before" and queue
+        another one.
+        """
         now = datetime.now(timezone.utc)
         due: list[tuple[Resource, RunType]] = []
 
@@ -161,6 +167,12 @@ class Scheduler:
 
         for resource in resources:
             if not resource.enabled:
+                continue
+
+            # Resource has any pending/running run → don't queue another for
+            # any run_type on this resource. The engine's per-resource lock
+            # would already serialize, but skipping here saves a wasted tick.
+            if self.store.get_active_run_id_for_resource(resource.id):
                 continue
 
             schedule_pairs = [
@@ -181,11 +193,9 @@ class Scheduler:
                         next_run = next_run.replace(tzinfo=timezone.utc)
                     if now >= next_run:
                         due.append((resource, run_type))
-                elif last_run and not last_run.completed_at:
-                    # Run is still in progress — skip
-                    continue
                 else:
-                    # Never run before — due immediately
+                    # Never run before (and no active run for this resource per
+                    # the early-exit above) — due immediately.
                     due.append((resource, run_type))
 
         # Add jitter to spread simultaneous runs

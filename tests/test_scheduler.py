@@ -203,6 +203,52 @@ class TestGetDueJobs:
         due = scheduler._get_due_jobs()
         assert not any(r.id == resource.id for r, _ in due)
 
+    def test_resource_with_pending_run_is_skipped(self, scheduler, store):
+        """4.4: a PENDING run blocks scheduler-triggered duplicates even though
+        the resource has no completed run (which the legacy logic treated as
+        'never run before' and queued)."""
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=True))
+        store.save_resource(resource)
+        pending = Run(
+            resource_id=resource.id,
+            run_type=RunType.HEALTH_CHECK,
+            status=RunStatus.PENDING,
+        )
+        store.save_run(pending)
+
+        due = scheduler._get_due_jobs()
+        assert not any(r.id == resource.id for r, _ in due), "resource with PENDING run should not be queued"
+
+    def test_resource_with_running_run_is_skipped(self, scheduler, store):
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=True))
+        store.save_resource(resource)
+        running = Run(
+            resource_id=resource.id,
+            run_type=RunType.HEALTH_CHECK,
+            status=RunStatus.RUNNING,
+        )
+        store.save_run(running)
+
+        due = scheduler._get_due_jobs()
+        assert not any(r.id == resource.id for r, _ in due)
+
+    def test_resource_with_only_failed_run_is_still_due(self, scheduler, store):
+        """FAILED is a terminal state — a resource with no PENDING/RUNNING runs
+        should still be considered for scheduling."""
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=True))
+        store.save_resource(resource)
+        failed = Run(
+            resource_id=resource.id,
+            run_type=RunType.HEALTH_CHECK,
+            status=RunStatus.FAILED,
+        )
+        store.save_run(failed)
+
+        due = scheduler._get_due_jobs()
+        # No completed_at on FAILED run → falls into "never run before" branch
+        # (now correctly gated only by active-run check, not by FAILED status).
+        assert any(r.id == resource.id for r, _ in due)
+
 
 # ── TestRecoverStaleRuns ─────────────────────────────────────────────────
 

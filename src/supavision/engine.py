@@ -18,6 +18,8 @@ import logging
 import os
 import shutil
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -313,6 +315,83 @@ class Engine:
         self.store.save_run(existing)
         return existing
 
+    @contextmanager
+    def _run_slot(
+        self,
+        resource_id: str,
+        run_type: RunType,
+        run_id: str | None,
+    ) -> Iterator[Run]:
+        """Acquire the per-resource lock and prepare/transition the Run row.
+
+        Two paths:
+
+        - `run_id is None` (scheduler / dashboard): acquire the lock FIRST. On
+          contention, raise ``RuntimeError`` without persisting any Run — no
+          phantom FAILED rows from concurrent triggers. With the lock held,
+          create a RUNNING Run via `_prepare_run` and yield it.
+
+        - `run_id` given (API trigger flow): validate the pre-existing PENDING
+          Run synchronously so 404/4xx surfaces cleanly. Then acquire the lock;
+          on contention, mark the existing PENDING row FAILED (the API caller
+          has already been handed `run_id` and needs a terminal state to poll)
+          and re-raise.
+
+        The yielded Run is the in-DB row callers should mutate inside the
+        ``with`` block. Lock release is guaranteed on context exit; transition
+        to COMPLETED/FAILED is still the caller's responsibility.
+        """
+        resource = self.store.get_resource(resource_id)
+        resource_name = resource.name if resource else resource_id
+
+        if run_id is None:
+            lock_fd = self._acquire_resource_lock(resource_id)
+            if not lock_fd:
+                raise RuntimeError(
+                    f"Another run is in progress for resource {resource_name}. "
+                    "Wait for it to complete or check for stale locks."
+                )
+            try:
+                run = self._prepare_run(resource_id, run_type, run_id=None)
+                yield run
+            finally:
+                self._release_resource_lock(lock_fd)
+            return
+
+        # run_id given — validate first (synchronous errors surface to the
+        # API caller before any lock work).
+        existing = self.store.get_run(run_id)
+        if existing is None:
+            raise RunNotFoundError(f"Run {run_id!r} not found")
+        if existing.resource_id != resource_id:
+            raise RunMismatchError(f"Run {run_id!r} belongs to resource {existing.resource_id!r}, not {resource_id!r}")
+        if str(existing.run_type) != str(run_type):
+            raise RunMismatchError(f"Run {run_id!r} is a {existing.run_type!s} run, not {run_type!s}")
+        if existing.status != RunStatus.PENDING:
+            raise RunMismatchError(
+                f"Run {run_id!r} status is {existing.status!s}; expected PENDING. Re-execution must create a new Run."
+            )
+
+        lock_fd = self._acquire_resource_lock(resource_id)
+        if not lock_fd:
+            # API caller is holding run_id; flip it to FAILED so they can observe.
+            existing.status = RunStatus.FAILED
+            existing.error = (
+                f"Another run is in progress for resource {resource_name}. "
+                "Wait for it to complete or check for stale locks."
+            )
+            existing.completed_at = datetime.now(timezone.utc)
+            self.store.save_run(existing)
+            raise RuntimeError(existing.error)
+
+        try:
+            existing.status = RunStatus.RUNNING
+            existing.started_at = datetime.now(timezone.utc)
+            self.store.save_run(existing)
+            yield existing
+        finally:
+            self._release_resource_lock(lock_fd)
+
     def run_discovery(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute discovery (sync wrapper — use run_discovery_async from async code)."""
         return asyncio.run(self.run_discovery_async(resource_id, run_id=run_id))
@@ -340,22 +419,20 @@ class Engine:
         if not resource:
             raise ValueError(f"Resource {resource_id} not found")
 
-        # Prepare/transition the Run FIRST so validation errors surface before
-        # we grab the per-resource lock.
-        run = self._prepare_run(resource_id, RunType.DISCOVERY, run_id)
+        # _run_slot acquires the per-resource lock (raising on contention before
+        # any Run row is written for the run_id=None path), prepares/transitions
+        # the Run, yields it, and releases the lock on context exit. The Run's
+        # final transition to COMPLETED/FAILED still happens in the helper.
+        with self._run_slot(resource_id, RunType.DISCOVERY, run_id) as run:
+            return await self._do_discovery(resource_id, resource, run)
 
-        lock_fd = self._acquire_resource_lock(resource_id)
-        if not lock_fd:
-            # Roll the prepared run back to PENDING/FAILED so we don't leave it RUNNING.
-            run.status = RunStatus.FAILED
-            run.error = (
-                f"Another run is in progress for resource {resource.name}. "
-                "Wait for it to complete or check for stale locks."
-            )
-            run.completed_at = datetime.now(timezone.utc)
-            self.store.save_run(run)
-            raise RuntimeError(run.error)
+    async def _do_discovery(self, resource_id: str, resource: Resource, run: Run) -> Run:
+        """Discovery body. Runs under the per-resource lock held by `_run_slot`.
 
+        Owns: executor setup/teardown, template resolution, agent loop, parsing,
+        report/eval persistence, drift detection, and the run's final
+        COMPLETED/FAILED transition.
+        """
         _run_pending.add(run.id)
 
         executor = self._create_executor(resource)
@@ -516,7 +593,7 @@ class Engine:
             raise
         finally:
             await executor.teardown_multiplexing()
-            self._release_resource_lock(lock_fd)
+            # Lock release moved to _run_slot's __exit__.
 
     async def run_health_check_async(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute Phase 2: Health Check.
@@ -531,16 +608,11 @@ class Engine:
         if not resource:
             raise ValueError(f"Resource {resource_id} not found")
 
-        run = self._prepare_run(resource_id, RunType.HEALTH_CHECK, run_id)
+        with self._run_slot(resource_id, RunType.HEALTH_CHECK, run_id) as run:
+            return await self._do_health_check(resource_id, resource, run)
 
-        lock_fd = self._acquire_resource_lock(resource_id)
-        if not lock_fd:
-            run.status = RunStatus.FAILED
-            run.error = f"Another run is in progress for resource {resource.name}."
-            run.completed_at = datetime.now(timezone.utc)
-            self.store.save_run(run)
-            raise RuntimeError(run.error)
-
+    async def _do_health_check(self, resource_id: str, resource: Resource, run: Run) -> Run:
+        """Health-check body. Runs under the per-resource lock held by `_run_slot`."""
         _run_pending.add(run.id)
 
         executor = self._create_executor(resource)
@@ -737,7 +809,7 @@ class Engine:
             raise
         finally:
             await executor.teardown_multiplexing()
-            self._release_resource_lock(lock_fd)
+            # Lock release moved to _run_slot's __exit__.
 
     @staticmethod
     def _persist_run_output(run: Run) -> None:

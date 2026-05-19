@@ -86,6 +86,8 @@ A 19-payload adversarial corpus is committed in the same file and grows over tim
 
 ### Network Security
 
+**Frontend supply chain (since 0.4.5.dev0).** The dashboard loads zero third-party JS/CSS at runtime. `htmx` and `xterm` are vendored to `src/supavision/web/static/vendor/` with provenance recorded (source URL, version, license, SHA-256 — see `vendor/README.md`). Google Fonts is replaced by a CSS system-font stack so the browser uses the OS's installed fonts — no off-host requests, no privacy concern. Self-hosted deployments inherit this directly; no CSP or Subresource Integrity work is required because nothing crosses the network for the dashboard chrome.
+
 **SSRF Protection:** All webhook URLs are validated against blocked IP ranges before HTTP requests are sent:
 - Private ranges: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
 - Loopback: `127.0.0.0/8`
