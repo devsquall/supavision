@@ -322,6 +322,11 @@ class Store:
             rows = self._execute("SELECT data FROM resources ORDER BY created_at").fetchall()
         return [Resource.model_validate(json.loads(r[0])) for r in rows]
 
+    def count_resources(self) -> int:
+        """Total resource count. Used by dashboard empty-state branching."""
+        row = self._execute("SELECT COUNT(*) FROM resources").fetchone()
+        return int(row[0]) if row else 0
+
     def list_resources_paginated(
         self,
         limit: int = 20,

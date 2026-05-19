@@ -7,6 +7,22 @@ This is a pre-release marker (PEP 440 `.dev0`). The codebase contains all of v0.
 ### Security
 - **Complete the secrets policy.** GET `/api/v1/resources/{id}` no longer leaks legacy raw values (`aws_secret_key`, `github_token`, `db_password`, …) from rows created before v0.4.5 — the response filter now uses `secrets_policy.is_secret_key(k)` instead of a hard-coded 3-key set. `webhook_url`, `teams_webhook`, and `pagerduty_integration_key` are now `KNOWN_SECRET_KEYS`, so the write-boundary rejects them at the wizard, edit form, REST API, and CLI alike.
 - **Frontend supply chain.** Dashboard now loads zero third-party JS/CSS by default. `htmx@2.0.4` and `xterm@5.5.0` are vendored to `web/static/vendor/` with provenance (source URL, version, license, SHA-256). Google Fonts is replaced by a system-font stack — no privacy concern, no off-host requests.
+- **First-run lockdown.** Previously, when no users existed, the session middleware logged CRITICAL and served the dashboard with `is_admin=True` — so anyone hitting the port before `supavision create-admin` ran got open-access admin. Now: every dashboard URL redirects to `/landing?setup=1` (a setup-instructions banner) until at least one user exists. `/login` stays reachable but no credentials match an empty users table.
+- **OpenAPI /docs admin-only.** `/docs`, `/redoc`, `/openapi.json` previously rendered the full API surface to any authenticated session user (viewers included). Now mounted behind an explicit admin role check; viewers see 403.
+- **Log redaction for webhook URLs.** New `_log_redact.redact_url()` strips the path/query/fragment from Slack/Teams/PagerDuty/Opsgenie URLs in log lines, so a webhook secret token cannot accidentally exfiltrate through a `logger.warning("Webhook %s failed: ...", url)` style log. Hostname is preserved for debuggability; non-credential hosts (your internal API) are left alone.
+
+### UX
+- **Grouped CLI help.** `supavision --help` now groups its 28 subcommands into eight domain sections (resources, runs, reports & context, monitoring config, notifications, server & api keys, mcp integration, admin & setup) via a custom epilog. The flat alphabetical block argparse used to generate is suppressed.
+- **Smarter empty states.** `/sessions`, `/schedules`, `/alerts`, `/activity` now branch on `resources_count`: a fresh install pushes users to "Add a Resource", while a user with existing resources gets page-specific guidance (trigger a run, configure a webhook, etc.).
+- **Sidebar accessibility.** Active sidebar items carry `aria-current="page"`. Nav sections are wrapped in `role="group"` with `aria-labelledby` pointing at the section heading, so screen readers announce section context before listing items. Collapse-toggle has an explicit `aria-label`.
+
+### Documentation
+- **`docs/QUICKSTART.md`** — full zero-to-Slack-alert walkthrough (install, Claude login, create-admin, add resource, run discovery, run health check, wire alerts, run scheduler). Linked from the top of the README.
+- **Credentials section in README** — table of `KNOWN_SECRET_KEYS`, three ways to attach (CLI / REST / wizard), notification credentials, legacy-row migration path.
+
+### Internal
+- **`SUPAVISION_DB_PATH` honored by `create_app()`** — previously `uvicorn supavision.web.app:create_app --factory` silently ignored the env var and used `.supavision/supavision.db`. Resolution order is now: explicit `db_path=` kwarg → `SUPAVISION_DB_PATH` → fallback default.
+- **`Store.count_resources()`** — used by the global `_render` helper to inject `resources_count` into every template context for empty-state branching.
 
 ### Bug fixes
 - **Engine no longer writes ghost FAILED runs on lock contention.** When the scheduler or dashboard triggers a run, the engine acquires the per-resource lock *before* persisting the Run row. If another run is in flight, the new trigger raises without leaving a noise row. (API triggers still mark the pre-existing PENDING row FAILED so the API caller has a terminal state to poll.)

@@ -22,11 +22,24 @@ router = APIRouter()
 
 
 def _render(request: Request, template: str, context: dict | None = None, **kwargs):
-    """Render a template with CSRF token and current user auto-injected."""
+    """Render a template with CSRF token, current user, and onboarding-state auto-injected.
+
+    `resources_count` is exposed to every template so empty-state UIs can branch
+    between "you have nothing yet → add a resource" and "you have resources →
+    run a discovery / health check". Caller-supplied context still wins via
+    setdefault.
+    """
     ctx = context or {}
     ctx["csrf_token"] = getattr(request.state, "csrf_token", "")
     ctx["current_user"] = getattr(request.state, "current_user", None)
     ctx["is_admin"] = getattr(request.state, "is_admin", False)
+    # Inject a global onboarding state. Callers can override.
+    if "resources_count" not in ctx:
+        store = getattr(request.app.state, "store", None)
+        try:
+            ctx["resources_count"] = store.count_resources() if store else 0
+        except Exception:
+            ctx["resources_count"] = 0
     return templates.TemplateResponse(request, template, ctx, **kwargs)
 
 
@@ -208,9 +221,14 @@ def _md_to_html(text: str) -> str:
 
 # ── Landing page (public, no auth) ──────────────────────────────────
 @router.get("/landing", response_class=HTMLResponse)
-async def landing_page(request: Request):
-    """Public marketing page. Auth middleware allowlists /landing."""
-    return _render(request, "landing.html", {})
+async def landing_page(request: Request, setup: int = 0):
+    """Public marketing page. Auth middleware allowlists /landing.
+
+    When `?setup=1` is present (sent by the first-run lockdown redirect in
+    web/app.py), render a setup banner explaining that no admin exists yet
+    and how to create one.
+    """
+    return _render(request, "landing.html", {"show_setup_banner": bool(setup)})
 
 
 # ── Import sub-routers and include them ────────────────────────────

@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from ._log_redact import redact_url
 from .models import Evaluation, Report, Resource
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,7 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
         logger.warning("Webhook SSRF blocked at send time: %s", e)
         return False
 
+    safe_url = redact_url(url)
     async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT) as client:
         for attempt in range(_MAX_RETRIES + 1):
             try:
@@ -185,14 +187,14 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
                 if 400 <= resp.status_code < 500:
                     logger.warning(
                         "Webhook %s returned %d (permanent), not retrying",
-                        url,
+                        safe_url,
                         resp.status_code,
                     )
                     return False
                 # 5xx — transient, retry
                 logger.warning(
                     "Webhook %s returned %d (attempt %d/%d)",
-                    url,
+                    safe_url,
                     resp.status_code,
                     attempt + 1,
                     _MAX_RETRIES + 1,
@@ -200,13 +202,13 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
             except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
                 logger.warning(
                     "Webhook %s failed (attempt %d/%d): %s",
-                    url,
+                    safe_url,
                     attempt + 1,
                     _MAX_RETRIES + 1,
                     e,
                 )
             except Exception as e:
-                logger.warning("Webhook %s unexpected error: %s", url, e)
+                logger.warning("Webhook %s unexpected error: %s", safe_url, e)
                 return False
 
             if attempt < _MAX_RETRIES:

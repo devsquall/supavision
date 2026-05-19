@@ -38,6 +38,8 @@ supavision serve --port 8080
 
 Open `http://localhost:8080`, sign in, and you'll see a dashboard with sample resources, health history, and live activity.
 
+> **Want the full walkthrough?** See [docs/QUICKSTART.md](docs/QUICKSTART.md) — zero to a monitored server with Slack alerts in about ten minutes.
+
 **Prerequisites:** Python 3.12+ and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code).
 
 **For development:**
@@ -75,7 +77,12 @@ supavision resource-add prod-web --type server \
 supavision run-discovery <resource_id>
 supavision run-health-check <resource_id>
 supavision resource-set-schedule <resource_id> --health-check "0 */6 * * *"
-supavision notify-configure <resource_id> --slack-webhook https://hooks.slack.com/...
+
+# Credentials are env-var references — Supavision never persists raw secrets.
+# First, export the secret:
+export OPS_SLACK_WEBHOOK="https://hooks.slack.com/services/T.../B.../..."
+# Then point the resource at the env var by name:
+supavision notify-configure <resource_id> --slack-webhook-env-var OPS_SLACK_WEBHOOK
 ```
 
 ### Operations
@@ -143,6 +150,73 @@ Dashboard at `http://localhost:8080`. Data persists in the `supavision-data` vol
 | `SUPAVISION_RATE_LIMIT_DEFAULT` | `10` | Default rate limit for mutating routes |
 | `SUPAVISION_SSH_MUX_DIR` | `/tmp/supavision-ssh-mux` | SSH multiplexing socket directory |
 | `WEBHOOK_ALLOWED_DOMAINS` | *(none)* | Comma-separated webhook domain allowlist |
+
+## Credentials
+
+Supavision never stores raw secrets. Every secret-shaped value (AWS keys, GitHub tokens, DB passwords, Slack/Teams/PagerDuty webhooks) is stored as the **name of an environment variable** that the Supavision process can read. The actual secret material lives in your shell, systemd unit, Docker Compose `environment:` block, secrets manager — wherever you already manage secrets.
+
+**Known secret keys** (rejected if passed as raw values in `config`):
+
+| Key | Where it's used | Env var convention |
+|-----|-----------------|---------------------|
+| `aws_secret_key` | AWS resource discovery | `AWS_SECRET_ACCESS_KEY` |
+| `aws_access_key` | AWS resource discovery | `AWS_ACCESS_KEY_ID` |
+| `github_token` | GitHub org discovery | `GITHUB_TOKEN` |
+| `db_password` | Database health checks | `<RESOURCE>_DB_PASSWORD` |
+| `slack_webhook` | Slack alerts | `OPS_SLACK_WEBHOOK_URL` |
+| `webhook_url` | Generic webhook alerts | `OPS_WEBHOOK_URL` |
+| `teams_webhook` | Microsoft Teams alerts | `OPS_TEAMS_WEBHOOK_URL` |
+| `pagerduty_integration_key` | PagerDuty events | `PAGERDUTY_INTEGRATION_KEY` |
+
+Anything ending in `_secret`, `_token`, `_password`, or `_api_key` is also treated as a known secret.
+
+### Three ways to attach credentials
+
+**1. CLI — for one-off setup:**
+
+```bash
+# Export the secret in your environment.
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_ACCESS_KEY_ID="..."
+
+# Wire the resource to those env vars by name.
+supavision add-credential <resource_id> --name aws_secret_key --env-var AWS_SECRET_ACCESS_KEY
+supavision add-credential <resource_id> --name aws_access_key --env-var AWS_ACCESS_KEY_ID
+```
+
+**2. REST API — for automation:**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/resources \
+  -H "x-api-key: $SUPAVISION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "prod-web-01",
+    "resource_type": "ubuntu_server",
+    "config": {
+      "ssh_host": "10.0.0.5",
+      "ssh_user": "ops",
+      "ssh_port": 22,
+      "ssh_key_path": "/home/supavision/.ssh/id_ed25519"
+    },
+    "credentials": {
+      "aws_secret_key": "AWS_SECRET_ACCESS_KEY",
+      "aws_access_key": "AWS_ACCESS_KEY_ID"
+    }
+  }'
+```
+
+The values inside `credentials` are env-var **names**, not the secrets themselves. Pass a raw secret here and the server returns `400 {"error": "raw_secrets_in_config"}`.
+
+**3. Dashboard wizard:** the add-resource flow asks for an env-var name in any credential field and shows a live "✓ env var is set" / "✗ env var is not set" indicator next to the input.
+
+### Notification credentials
+
+`notify-configure` takes `--slack-webhook-env-var <NAME>` / `--webhook-env-var <NAME>`. Raw URL flags (`--slack-webhook`, `--webhook-url`) exit with an error pointing at the env-var form. Teams and PagerDuty are env-var-only today (no CLI surface yet) — set `resource.credentials["teams_webhook"]` / `["pagerduty_integration_key"]` to the env var name via REST API.
+
+### Legacy rows
+
+Resources created before 0.4.5 with raw secrets in `config` continue to load and run. The dashboard shows a deprecation banner on those rows; editing any credential field on the resource migrates it to the env-var-reference shape and removes the raw value.
 
 ## Backup
 

@@ -93,9 +93,19 @@
 {% else %}
 <div class="empty-state">
   <svg class="empty-state-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M24 4l20 36H4L24 4z"/><path d="M24 20v8M24 32v2"/></svg>
+  {% if resources_count == 0 %}
+  <h3>No alerts — add your first resource</h3>
+  <p class="text-muted">Alerts fire when a resource's health changes to <span class="badge badge--warning">warning</span> or <span class="badge badge--critical">critical</span>. Add a resource, configure a Slack or webhook env-var on it, and alerts will appear here.</p>
+  <div class="mt-4"><a href="/resources/new" class="btn">Add a Resource</a></div>
+  {% else %}
   <h3>No alerts sent yet</h3>
-  <p class="text-muted">Alerts are triggered when resource health changes to warning or critical.</p>
+  <p class="text-muted">You have {{ resources_count }} resource{{ 's' if resources_count != 1 else '' }} but no alerts have fired. Two reasons that can happen:</p>
+  <ul class="text-muted text-sm" style="text-align: left; max-width: 480px; margin: 0.5rem auto;">
+    <li>Every health check has come back <span class="badge badge--healthy">healthy</span> (good!).</li>
+    <li>No notification channel is configured — set <code>slack_webhook</code>, <code>webhook_url</code>, <code>teams_webhook</code>, or <code>pagerduty_integration_key</code> as a credential on the resource.</li>
+  </ul>
   <div class="mt-4"><a href="/resources" class="btn">Configure a Resource</a></div>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

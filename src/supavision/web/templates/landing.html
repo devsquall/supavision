@@ -48,6 +48,18 @@
 
   <main id="main">
 
+  {% if show_setup_banner %}
+  <!-- ── First-run setup banner ──────────────────────────────── -->
+  <section class="lp-setup-banner" role="alert">
+    <div class="lp-setup-banner-inner">
+      <strong>Supavision is not yet configured.</strong>
+      <p>No admin user exists. The dashboard is locked until you create one. Run this on the host (or inside the container):</p>
+      <pre class="lp-setup-code">supavision create-admin</pre>
+      <p class="lp-setup-hint">If you're running in Docker: <code>docker exec -it &lt;container&gt; supavision create-admin</code></p>
+    </div>
+  </section>
+  {% endif %}
+
   <!-- ── HERO ────────────────────────────────────────────────── -->
   <section class="lp-hero">
     <div class="lp-hero-inner">

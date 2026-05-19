@@ -514,3 +514,52 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -0.03em; font-weight: 700; }
   .lp-nav-links { gap: var(--lp-sp-3); font-size: 14px; }
   .lp-cards-grid { grid-template-columns: 1fr; }
 }
+
+/* ── First-run setup banner ──────────────────────────────────── */
+.lp-setup-banner {
+  background: rgba(255, 196, 0, 0.12);
+  border-bottom: 1px solid rgba(255, 196, 0, 0.35);
+  padding: 1.5rem 1rem;
+}
+
+.lp-setup-banner-inner {
+  max-width: 920px;
+  margin: 0 auto;
+  color: #ffd86b;
+}
+
+.lp-setup-banner-inner strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+  color: #fff;
+}
+
+.lp-setup-banner-inner p {
+  margin: 0.25rem 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.lp-setup-code {
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffd86b;
+  padding: 0.65rem 0.9rem;
+  margin: 0.6rem 0;
+  border-radius: 6px;
+  font-family: var(--lp-font-mono);
+  font-size: 0.95rem;
+  display: inline-block;
+}
+
+.lp-setup-hint {
+  font-size: 0.85rem !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.lp-setup-hint code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: var(--lp-font-mono);
+}

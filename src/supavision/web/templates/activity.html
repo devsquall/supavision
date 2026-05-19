@@ -34,9 +34,15 @@
 {% else %}
 <div class="empty-state">
   <svg class="empty-state-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="24" cy="24" r="20"/><path d="M24 14v10l7 4"/></svg>
-  <h3>No activity yet</h3>
-  <p class="text-muted">Events appear here as health checks run and reports are generated.</p>
-  <div class="mt-4"><a href="/" class="btn">Go to Control Center</a></div>
+  {% if resources_count == 0 %}
+  <h3>No activity — add your first resource</h3>
+  <p class="text-muted">The activity timeline streams every health check, discovery, and severity change. Add a resource and trigger a run to populate it.</p>
+  <div class="mt-4"><a href="/resources/new" class="btn">Add a Resource</a></div>
+  {% else %}
+  <h3>No activity in the last {{ range }}</h3>
+  <p class="text-muted">You have {{ resources_count }} resource{{ 's' if resources_count != 1 else '' }} but no runs in this window. Try a wider range above, or trigger a run from the <a href="/resources">Resources</a> page.</p>
+  <div class="mt-4"><a href="/resources" class="btn">Go to Resources</a></div>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

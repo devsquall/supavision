@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,10 +31,24 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(
-    db_path: str = ".supavision/supavision.db",
+    db_path: str | None = None,
     template_dir: str = TEMPLATE_DIR_DEFAULT,
 ) -> FastAPI:
-    """Create and configure the FastAPI application."""
+    """Create and configure the FastAPI application.
+
+    `db_path` resolution order:
+    1. Explicit ``db_path=`` kwarg (used by tests).
+    2. ``SUPAVISION_DB_PATH`` environment variable (matches the CLI's fallback
+       and the MCP server's contract — see `cli.py:_get_store` and `mcp.py`).
+    3. ``.supavision/supavision.db`` relative to the working directory.
+
+    Without step (2), ``uvicorn supavision.web.app:create_app --factory`` (the
+    documented dev command) silently used the local default DB regardless of
+    ``$SUPAVISION_DB_PATH``, which surprised anyone running it outside the
+    project root.
+    """
+    if db_path is None:
+        db_path = os.environ.get("SUPAVISION_DB_PATH") or ".supavision/supavision.db"
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -90,8 +105,6 @@ def create_app(
             logger.info("Auto-created admin user from SUPAVISION_PASSWORD (email=%s)", admin_email)
 
         # Warn early if Claude CLI backend is not authenticated
-        import os
-
         if os.environ.get("SUPAVISION_BACKEND", "claude_cli") == "claude_cli" and engine is not None:
             auth_ok, auth_detail = check_claude_auth()
             if not auth_ok:
@@ -116,11 +129,20 @@ def create_app(
         store.close()
         logger.info("API server shut down")
 
+    # Disable FastAPI's built-in /docs, /redoc, /openapi.json — we mount them
+    # ourselves below behind an admin role check. Previously, any authenticated
+    # session user (viewer included) could browse the full API surface at
+    # /docs and learn which admin-only mutating endpoints exist. Restricting
+    # to admin reduces information disclosure without breaking the workflow
+    # for the user who actually needs the docs (an operator with an API key).
     app = FastAPI(
         title="Supavision API",
         description="AI-powered infrastructure monitoring",
         version=__version__,
         lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     # Static files (CSS, JS)
     static_dir = Path(__file__).parent / "static"
@@ -135,16 +157,19 @@ def create_app(
 
         store: Store = request.app.state.store
 
-        # Check if any users exist — if not, allow unauthenticated access
-        # (first-time setup before create-admin has been run)
+        # First-run mode: no admin user exists yet. Refuse to serve the
+        # dashboard until `supavision create-admin` has been run. Previously
+        # the middleware logged CRITICAL and served the dashboard with
+        # is_admin=True, which meant exposing the port before bootstrap
+        # silently granted admin to anyone who hit it. Now: redirect every
+        # browser request to /landing, which renders a "run create-admin"
+        # instructional banner. /login is reachable but no credentials work
+        # because no user exists yet.
         if store.count_users() == 0:
-            logger.critical(
-                "NO USERS CONFIGURED — running in open-access mode. Create an admin now: supavision create-admin"
-            )
-            request.state.csrf_token = ""
-            request.state.current_user = None
-            request.state.is_admin = True
-            return await call_next(request)
+            logger.critical("NO USERS CONFIGURED — dashboard locked until `supavision create-admin` runs.")
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url="/landing?setup=1", status_code=302)
 
         # Check session cookie
         session_id = request.cookies.get("session_id")
@@ -193,6 +218,38 @@ def create_app(
     app.include_router(health_router)  # /api/v1/health (no auth, for healthchecks)
     app.include_router(api_router)  # /api/v1/* (JSON, requires API key)
     app.include_router(dashboard_router)  # /* (HTML, session auth)
+
+    # ── Admin-only OpenAPI docs ────────────────────────────────────────
+    # Re-mount /docs, /redoc, /openapi.json with an admin role check.
+    # The session middleware above already gates these behind login; this
+    # layer adds the role check so viewers can't browse the API surface.
+    from fastapi import HTTPException
+    from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+
+    def _require_admin_state(request: Request) -> None:
+        if not getattr(request.state, "is_admin", False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+    @app.get("/openapi.json", include_in_schema=False)
+    async def custom_openapi(request: Request):
+        _require_admin_state(request)
+        return app.openapi()
+
+    @app.get("/docs", include_in_schema=False)
+    async def custom_swagger_ui(request: Request):
+        _require_admin_state(request)
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title=f"{app.title} — API docs",
+        )
+
+    @app.get("/redoc", include_in_schema=False)
+    async def custom_redoc(request: Request):
+        _require_admin_state(request)
+        return get_redoc_html(
+            openapi_url="/openapi.json",
+            title=f"{app.title} — API docs",
+        )
 
     # Custom error pages (branded, not default FastAPI JSON)
     _templates_dir = Path(__file__).parent / "templates"

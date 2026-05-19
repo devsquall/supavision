@@ -67,9 +67,15 @@
 {% else %}
 <div class="empty-state">
   <svg class="empty-state-icon" aria-hidden="true" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64"><rect x="6" y="10" width="52" height="38" rx="4"/><path d="M14 22h8M14 30h20M14 38h14" opacity="0.5"/></svg>
-  <h3>No infrastructure runs</h3>
-  <p class="text-muted">Runs appear here after you run health checks or discoveries on your resources.</p>
-  <a href="/resources" class="btn mt-3">View Resources</a>
+  {% if resources_count == 0 %}
+  <h3>No runs yet — add your first resource</h3>
+  <p class="text-muted">Sessions show the commands Claude ran during health checks and discoveries. You'll see the first one once a resource is added and a run is triggered.</p>
+  <a href="/resources/new" class="btn mt-3">Add a Resource</a>
+  {% else %}
+  <h3>No runs yet — trigger a discovery or health check</h3>
+  <p class="text-muted">You have {{ resources_count }} resource{{ 's' if resources_count != 1 else '' }} configured. Open one and click <strong>Run discovery</strong> to baseline it, or <strong>Run health check</strong> for an on-demand snapshot.</p>
+  <a href="/resources" class="btn mt-3">Go to Resources</a>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

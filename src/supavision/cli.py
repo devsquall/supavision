@@ -995,7 +995,65 @@ def cmd_create_admin(args: argparse.Namespace) -> None:
 def main() -> None:
     from . import __version__
 
-    parser = argparse.ArgumentParser(prog="supavision", description="AI-powered infrastructure monitoring")
+    # Grouped epilog so 28 commands don't drown the help output.
+    # Groups mirror the canonical pipeline: Resource → Run → Report.
+    epilog = """\
+commands by area:
+
+  resources:
+    resource-add          Register a new resource to monitor
+    resource-list         List all registered resources
+    resource-show         Show details for a specific resource
+    set-schedule          Set discovery and health-check schedules
+    add-credential        Attach a credential (env-var reference) to a resource
+
+  runs:
+    run-discovery         Run a discovery scan on a resource
+    run-health-check      Run a health check on a resource
+    run-status            Show the status of a specific run
+    run-scheduler         Start the cron-based scheduler daemon
+
+  reports & context:
+    report-show           Display a full report
+    report-list           List recent reports for a resource
+    context-show          Show the latest system context for a resource
+    context-diff          Show differences between the two latest contexts
+
+  monitoring config:
+    checklist-show        Show the monitoring checklist for a resource
+    checklist-add         Add a custom monitoring request to a resource
+    template-list         List available prompt templates
+
+  notifications:
+    notify-test           Send a test notification for a resource
+    notify-configure      Configure notification channels for a resource
+
+  server & api keys:
+    serve                 Start the REST API server
+    api-key-create        Generate a new API key
+    api-key-list          List API keys
+    api-key-revoke        Revoke an API key
+
+  mcp integration:
+    mcp-config            Print MCP server config for Claude CLI
+    mcp-serve             Run the MCP server (stdin/stdout JSON-RPC)
+
+  admin & setup:
+    setup                 Guided first-run setup
+    create-admin          Create an admin user (interactive)
+    doctor                Check system dependencies and configuration
+    seed-demo             Populate database with sample data for demo
+    purge                 Delete old reports and runs
+
+run 'supavision <command> --help' for command-specific options.
+"""
+
+    parser = argparse.ArgumentParser(
+        prog="supavision",
+        description="AI-powered infrastructure monitoring",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--version", action="version", version=f"supavision {__version__}")
     parser.add_argument("--db", default=DB_PATH_DEFAULT, help="Database path")
     parser.add_argument("--templates", default=TEMPLATE_DIR_DEFAULT, help="Templates directory")
@@ -1005,7 +1063,9 @@ def main() -> None:
         choices=["auto", "json", "table"],
         help="Output format: auto (table on TTY, JSON when piped), json, or table",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    # metavar="COMMAND" hides the flat 28-item choices list; the grouped epilog
+    # above is the human-facing index.
+    sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     # resource add
     p = sub.add_parser("resource-add", help="Register a new resource to monitor")
@@ -1187,6 +1247,14 @@ def main() -> None:
 
     # create-admin
     sub.add_parser("create-admin", help="Create an admin user (interactive)").set_defaults(func=cmd_create_admin)
+
+    # Hide argparse's auto-generated alphabetised list of subcommands from --help;
+    # the grouped epilog above replaces it. Each `supavision <cmd> --help` still
+    # shows that command's individual help string, since we only blank the
+    # subparser action's *display* entries, not the help= text on each parser.
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            action._choices_actions = []
 
     args = parser.parse_args()
     global _FORMAT  # noqa: PLW0603
