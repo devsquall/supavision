@@ -145,9 +145,6 @@ class TestListRecentRuns:
         assert total == 0
 
 
-
-
-
 class TestListNotificationsExtended:
     def test_returns_all(self, seeded_store):
         store, _, _ = seeded_store
@@ -184,13 +181,9 @@ class TestListNotificationsExtended:
 
     def test_combined_filters(self, seeded_store):
         store, r1, _ = seeded_store
-        notifs, total = store.list_notifications_extended(
-            resource_id=r1.id, channel="slack"
-        )
+        notifs, total = store.list_notifications_extended(resource_id=r1.id, channel="slack")
         assert total == 1
 
     def test_empty(self, store):
         notifs, total = store.list_notifications_extended()
         assert total == 0
-
-

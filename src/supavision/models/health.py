@@ -323,10 +323,7 @@ def compute_issue_diff(
     """
     if previous is None:
         return IssueDiff(
-            new=[
-                IssueDiffEntry(id=i.id, title=i.title, severity=i.severity)
-                for i in current.issues
-            ],
+            new=[IssueDiffEntry(id=i.id, title=i.title, severity=i.severity) for i in current.issues],
             resolved=[],
             persisted=[],
             compared_against_report_id=None,

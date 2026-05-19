@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.5 (2026-05-18)
+
+### Security
+- **No raw secrets stored in resource config.** AWS keys, GitHub tokens, DB passwords, and Slack webhook URLs must now be referenced by environment-variable name (`Resource.credentials`) instead of stored as plaintext values (`Resource.config`). Enforced at every write boundary: dashboard wizard, edit form, slack-webhook update, REST `POST/PUT /api/v1/resources`, `supavision resource-add`, and `supavision notify-configure`. Existing rows with legacy raw values continue to load and run; a deprecation warning is logged on every Slack send until the credential is migrated by re-saving via the notifications form.
+- **Command palette / `/api/v1/search` auth fixed (three layers).** (1) Handler read `request.state.user` where middleware sets `request.state.current_user`; (2) `/api/v1/*` is skipped by session middleware so session users never had `current_user` populated on this endpoint; (3) `x-api-key` was a header-presence check, not a DB validation. Introduces `AuthContext` + `get_auth_context(request)` which validates either cookie or API key against the DB. A bogus API key no longer falls through to session auth.
+
+### Bug fixes
+- **API trigger endpoints return the actual executing run.** `POST /api/v1/runs`, `POST /api/v1/resources/{id}/discover`, and `POST /api/v1/resources/{id}/health-check` previously pre-created a PENDING run and returned its ID, then the engine created a *second* RUNNING run — leaving the returned ID pointing at an orphan. The engine now accepts an optional `run_id` and updates that row in place. The two resource-scoped endpoints additionally now pre-create + return a `run_id` (parity with `/api/v1/runs`).
+- **Atomic in-flight check.** `Store.create_pending_run_if_no_active()` uses `BEGIN IMMEDIATE` within the existing connection lock to close the TOCTOU window between "check no active run" and "insert pending row." All three trigger endpoints return `409 {"error": "run_in_flight", "active_run_id": ...}` on conflict.
+
 ## 0.4.4 (2026-04-23)
 
 ### Features

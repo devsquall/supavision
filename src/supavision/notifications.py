@@ -81,9 +81,7 @@ def validate_webhook_url(url: str) -> str:
 
     for _family, _type, _proto, _canonname, sockaddr in addr_infos:
         if _is_blocked_ip(sockaddr[0]):
-            raise ValueError(
-                f"Webhook URL resolves to blocked IP range: {sockaddr[0]}"
-            )
+            raise ValueError(f"Webhook URL resolves to blocked IP range: {sockaddr[0]}")
 
     return url
 
@@ -94,9 +92,7 @@ def validate_webhook_url(url: str) -> str:
 class _DedupCache:
     """Bounded LRU set for dedup keys with TTL expiry."""
 
-    def __init__(
-        self, maxsize: int = _DEDUP_MAX_SIZE, ttl: float = _DEDUP_TTL_SECONDS
-    ):
+    def __init__(self, maxsize: int = _DEDUP_MAX_SIZE, ttl: float = _DEDUP_TTL_SECONDS):
         self._cache: OrderedDict[str, float] = OrderedDict()  # key → timestamp
         self._maxsize = maxsize
         self._ttl = ttl
@@ -141,9 +137,7 @@ def _dedup_key(
         else:
             marker = "issue:none"
     else:
-        marker = "sum:" + hashlib.sha256(
-            (evaluation.summary or "").encode()
-        ).hexdigest()[:8]
+        marker = "sum:" + hashlib.sha256((evaluation.summary or "").encode()).hexdigest()[:8]
     raw = f"{resource.id}:{evaluation.severity}:{marker}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -182,7 +176,8 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 resp = await client.post(
-                    url, json=json_payload,
+                    url,
+                    json=json_payload,
                     headers={"Content-Type": "application/json"},
                 )
                 if resp.status_code < 400:
@@ -190,18 +185,25 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
                 if 400 <= resp.status_code < 500:
                     logger.warning(
                         "Webhook %s returned %d (permanent), not retrying",
-                        url, resp.status_code,
+                        url,
+                        resp.status_code,
                     )
                     return False
                 # 5xx — transient, retry
                 logger.warning(
                     "Webhook %s returned %d (attempt %d/%d)",
-                    url, resp.status_code, attempt + 1, _MAX_RETRIES + 1,
+                    url,
+                    resp.status_code,
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
                 )
             except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
                 logger.warning(
                     "Webhook %s failed (attempt %d/%d): %s",
-                    url, attempt + 1, _MAX_RETRIES + 1, e,
+                    url,
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
+                    e,
                 )
             except Exception as e:
                 logger.warning("Webhook %s unexpected error: %s", url, e)
@@ -218,9 +220,7 @@ async def _post_with_retry(url: str, json_payload: dict) -> bool:
 
 class NotificationChannel(ABC):
     @abstractmethod
-    async def send(
-        self, resource: Resource, report: Report, evaluation: Evaluation
-    ) -> bool:
+    async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
         """Send notification. Returns True on success. Never raises."""
 
 
@@ -243,9 +243,7 @@ class SlackChannel(NotificationChannel):
     def __init__(self, webhook_url: str):
         self.webhook_url = validate_webhook_url(webhook_url)
 
-    async def send(
-        self, resource: Resource, report: Report, evaluation: Evaluation
-    ) -> bool:
+    async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
         try:
             payload = self._build_payload(resource, report, evaluation)
             return await _post_with_retry(self.webhook_url, payload)
@@ -253,9 +251,7 @@ class SlackChannel(NotificationChannel):
             logger.warning("Slack notification failed: %s", e)
             return False
 
-    def _build_payload(
-        self, resource: Resource, report: Report, evaluation: Evaluation
-    ) -> dict:
+    def _build_payload(self, resource: Resource, report: Report, evaluation: Evaluation) -> dict:
         """Build the Slack Block Kit payload for an alert.
 
         Workstream A7: when the report carries a structured payload, surface
@@ -304,9 +300,7 @@ class SlackChannel(NotificationChannel):
                 )
 
             if report.payload_diff is not None and (
-                report.payload_diff.new
-                or report.payload_diff.resolved
-                or report.payload_diff.persisted
+                report.payload_diff.new or report.payload_diff.resolved or report.payload_diff.persisted
             ):
                 diff = report.payload_diff
                 blocks.append(
@@ -344,14 +338,9 @@ class SlackChannel(NotificationChannel):
         # Context footer with deep link (A7) when a base URL is configured
         base_url = os.environ.get("SUPAVISION_BASE_URL", "").rstrip("/")
         if base_url:
-            footer_text = (
-                f"<{base_url}/reports/{report.id}|View report> | "
-                f"Type: {resource.resource_type} | {now}"
-            )
+            footer_text = f"<{base_url}/reports/{report.id}|View report> | Type: {resource.resource_type} | {now}"
         else:
-            footer_text = (
-                f"Report: `{report.id}` | Type: {resource.resource_type} | {now}"
-            )
+            footer_text = f"Report: `{report.id}` | Type: {resource.resource_type} | {now}"
         blocks.append(
             {
                 "type": "context",
@@ -375,9 +364,7 @@ class WebhookChannel(NotificationChannel):
     def __init__(self, webhook_url: str):
         self.webhook_url = validate_webhook_url(webhook_url)
 
-    async def send(
-        self, resource: Resource, report: Report, evaluation: Evaluation
-    ) -> bool:
+    async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
         try:
             payload = {
                 "resource_name": resource.name,
@@ -396,7 +383,146 @@ class WebhookChannel(NotificationChannel):
             return False
 
 
+class TeamsChannel(NotificationChannel):
+    """Microsoft Teams Incoming Webhook adapter.
+
+    Sends a simple MessageCard payload — Teams' classic format that doesn't
+    require a Workflows-based Adaptive Card. The same `severity → color`
+    mapping used in Slack drives the card's `themeColor`.
+    """
+
+    _SEVERITY_COLOR = {
+        "critical": "D1242F",
+        "warning": "BF8700",
+        "healthy": "1A7F37",
+        "info": "0969DA",
+    }
+
+    def __init__(self, webhook_url: str):
+        self.webhook_url = validate_webhook_url(webhook_url)
+
+    async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
+        try:
+            sev = str(evaluation.severity)
+            color = self._SEVERITY_COLOR.get(sev, "0969DA")
+            payload = {
+                "@type": "MessageCard",
+                "@context": "https://schema.org/extensions",
+                "themeColor": color,
+                "summary": f"{resource.name}: {sev}",
+                "title": f"{resource.name} — {sev.upper()}",
+                "text": evaluation.summary or "(no summary)",
+                "sections": [
+                    {
+                        "facts": [
+                            {"name": "Resource type", "value": resource.resource_type},
+                            {"name": "Resource ID", "value": resource.id},
+                            {"name": "Report", "value": report.id},
+                        ],
+                    }
+                ],
+            }
+            return await _post_with_retry(self.webhook_url, payload)
+        except Exception as e:
+            logger.warning("Teams notification failed: %s", e)
+            return False
+
+
+class PagerDutyChannel(NotificationChannel):
+    """PagerDuty Events API v2 adapter.
+
+    Uses the integration key (a.k.a. routing key) — a 32-char hex string
+    associated with a PagerDuty service. POST to events.pagerduty.com with a
+    "trigger" event for critical, "acknowledge"/"resolve" handled by future
+    incident-state integration. For now this channel only fires `trigger`
+    events on critical severity.
+    """
+
+    EVENTS_URL = "https://events.pagerduty.com/v2/enqueue"
+
+    def __init__(self, integration_key: str):
+        if not integration_key or len(integration_key) < 16:
+            raise ValueError("PagerDuty integration key looks invalid (too short)")
+        self.integration_key = integration_key
+
+    async def send(self, resource: Resource, report: Report, evaluation: Evaluation) -> bool:
+        sev = str(evaluation.severity)
+        if sev not in ("critical", "warning"):
+            return True  # not alertable — treat as success, nothing to do
+        try:
+            payload = {
+                "routing_key": self.integration_key,
+                "event_action": "trigger",
+                "dedup_key": f"supavision:{resource.id}",
+                "payload": {
+                    "summary": f"{resource.name}: {evaluation.summary or sev}"[:1024],
+                    "source": resource.name,
+                    "severity": "critical" if sev == "critical" else "warning",
+                    "component": resource.resource_type,
+                    "custom_details": {
+                        "resource_id": resource.id,
+                        "report_id": report.id,
+                        "report_summary": (
+                            report.payload.summary if report.payload is not None else (report.content or "")[:1024]
+                        ),
+                    },
+                },
+            }
+            return await _post_with_retry(self.EVENTS_URL, payload)
+        except Exception as e:
+            logger.warning("PagerDuty notification failed: %s", e)
+            return False
+
+
 # ── Dispatch Helper ─────────────────────────────────────────────
+
+
+def _resolve_credential_url(
+    resource: Resource,
+    credential_name: str,
+    env_fallback: str | None,
+    *,
+    config_legacy_key: str | None = None,
+) -> str:
+    """Resolve a webhook URL from credentials → env fallback → legacy config.
+
+    Priority:
+    1. `resource.credentials[credential_name].env_var` looked up in `os.environ`.
+    2. The named global env var (`env_fallback`) if any.
+    3. `resource.config[config_legacy_key]` for un-migrated rows — logs a warning
+       so operators see the deprecation.
+    Returns "" if nothing resolves.
+    """
+    cred = resource.credentials.get(credential_name)
+    if cred and cred.env_var:
+        val = os.environ.get(cred.env_var, "")
+        if val:
+            return val
+        # Credential is configured but the env var isn't set — surface that.
+        logger.warning(
+            "resource %s: credential %r references env var %s which is not set",
+            resource.id,
+            credential_name,
+            cred.env_var,
+        )
+
+    if env_fallback:
+        val = os.environ.get(env_fallback, "")
+        if val:
+            return val
+
+    if config_legacy_key:
+        legacy = resource.config.get(config_legacy_key, "")
+        if legacy:
+            logger.warning(
+                "resource %s still stores %s as a raw value in config; "
+                "re-save with an env-var reference to remove this warning",
+                resource.id,
+                config_legacy_key,
+            )
+            return legacy
+
+    return ""
 
 
 async def send_alert(
@@ -409,10 +535,10 @@ async def send_alert(
 ) -> tuple[list[str], str | None]:
     """Dispatch alert to all configured notification channels.
 
-    Resolution order:
-    1. resource.config["slack_webhook"] -> SlackChannel
-    2. os.environ["SLACK_WEBHOOK"] fallback -> SlackChannel
-    3. resource.config["webhook_url"] -> WebhookChannel
+    Webhook URL resolution (per channel):
+    1. resource.credentials[<name>] → os.environ[<env_var>]
+    2. Global env var fallback (SLACK_WEBHOOK)
+    3. resource.config[<legacy_key>] (deprecated, with warning) — for un-migrated rows
 
     Returns (channel_names, dedup_key). Caller is responsible for
     persisting dedup_key to the resource if needed. Never raises.
@@ -433,12 +559,19 @@ async def send_alert(
     succeeded: list[str] = []
     sent_urls: set[str] = set()
 
-    # Slack: per-resource config
-    slack_url = resource.config.get("slack_webhook", "")
-    if not slack_url:
-        # Fallback to env var
-        slack_url = os.environ.get("SLACK_WEBHOOK", "")
-
+    # Slack
+    slack_url = _resolve_credential_url(
+        resource,
+        credential_name="slack_webhook",
+        env_fallback="SLACK_WEBHOOK",
+        config_legacy_key="slack_webhook",
+    )
+    if slack_url:
+        try:
+            validate_webhook_url(slack_url)
+        except ValueError as e:
+            logger.warning("Slack webhook URL rejected (SSRF): %s", e)
+            slack_url = ""
     if slack_url:
         sent_urls.add(slack_url)
         channel = SlackChannel(slack_url)
@@ -448,7 +581,12 @@ async def send_alert(
             logger.warning("Slack notification failed for %s", resource.name)
 
     # Generic webhook
-    webhook_url = resource.config.get("webhook_url", "")
+    webhook_url = _resolve_credential_url(
+        resource,
+        credential_name="webhook_url",
+        env_fallback=None,
+        config_legacy_key="webhook_url",
+    )
     if webhook_url and webhook_url not in sent_urls:
         try:
             channel = WebhookChannel(webhook_url)
@@ -458,6 +596,38 @@ async def send_alert(
                 logger.warning("Webhook notification failed for %s", resource.name)
         except ValueError as e:
             logger.warning("Webhook URL rejected (SSRF): %s", e)
+
+    # Microsoft Teams
+    teams_url = _resolve_credential_url(
+        resource,
+        credential_name="teams_webhook",
+        env_fallback="TEAMS_WEBHOOK",
+        config_legacy_key="teams_webhook",
+    )
+    if teams_url and teams_url not in sent_urls:
+        try:
+            validate_webhook_url(teams_url)
+            sent_urls.add(teams_url)
+            channel = TeamsChannel(teams_url)
+            if await channel.send(resource, report, evaluation):
+                succeeded.append("teams")
+        except ValueError as e:
+            logger.warning("Teams webhook rejected (SSRF): %s", e)
+
+    # PagerDuty (Events API v2 — integration key, not a URL)
+    pd_key = ""
+    pd_cred = resource.credentials.get("pagerduty_integration_key")
+    if pd_cred and pd_cred.env_var:
+        pd_key = os.environ.get(pd_cred.env_var, "")
+    if not pd_key:
+        pd_key = os.environ.get("PAGERDUTY_INTEGRATION_KEY", "")
+    if pd_key:
+        try:
+            channel = PagerDutyChannel(pd_key)
+            if await channel.send(resource, report, evaluation):
+                succeeded.append("pagerduty")
+        except ValueError as e:
+            logger.warning("PagerDuty integration key invalid: %s", e)
 
     # Update in-memory dedup tracking
     if succeeded and not skip_dedup:

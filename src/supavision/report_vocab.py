@@ -43,79 +43,79 @@ class ReportVocabulary:
 REPORT_VOCAB: dict[str, ReportVocabulary] = {
     "server": ReportVocabulary(
         tags=(
-            "disk",           # filesystem capacity, inode pressure, mount issues
-            "memory",         # RAM, swap, OOM events
-            "cpu",            # load, saturation, steal time
-            "service",        # systemd unit state, crash loops, restarts
-            "network",        # listener changes, DNS, connectivity
-            "security",       # firewall, sudo, unknown listeners, auth events
-            "brute-force",    # SSH / auth brute-force attempts
-            "cert-expiry",    # TLS certificate expiration
-            "package",        # available updates, kernel, unattended-upgrades
-            "logs",           # log rotation, error spikes, log shipping
-            "container",      # docker/pm2 health, restart counts
-            "other",          # last-resort bucket; discourage but allow
+            "disk",  # filesystem capacity, inode pressure, mount issues
+            "memory",  # RAM, swap, OOM events
+            "cpu",  # load, saturation, steal time
+            "service",  # systemd unit state, crash loops, restarts
+            "network",  # listener changes, DNS, connectivity
+            "security",  # firewall, sudo, unknown listeners, auth events
+            "brute-force",  # SSH / auth brute-force attempts
+            "cert-expiry",  # TLS certificate expiration
+            "package",  # available updates, kernel, unattended-upgrades
+            "logs",  # log rotation, error spikes, log shipping
+            "container",  # docker/pm2 health, restart counts
+            "other",  # last-resort bucket; discourage but allow
         ),
         template_version="server/v1",
     ),
     "aws_account": ReportVocabulary(
         tags=(
-            "cost",           # spend spikes, idle resources, untagged charges
-            "idle",            # stopped EC2 with attached volumes, unused EIPs
-            "security",        # CloudTrail/GuardDuty gaps, public buckets
-            "iam",             # old keys, missing MFA, overbroad policies
-            "encryption",      # unencrypted EBS/RDS/S3
-            "network",         # security-group 0.0.0.0, VPC flow logs
-            "backup",          # RDS backup retention, snapshots
-            "capacity",        # service quotas, Lambda concurrency limits
-            "ec2",             # instance-level health
-            "rds",             # RDS-specific
-            "s3",              # S3-specific
-            "lambda",          # Lambda-specific
+            "cost",  # spend spikes, idle resources, untagged charges
+            "idle",  # stopped EC2 with attached volumes, unused EIPs
+            "security",  # CloudTrail/GuardDuty gaps, public buckets
+            "iam",  # old keys, missing MFA, overbroad policies
+            "encryption",  # unencrypted EBS/RDS/S3
+            "network",  # security-group 0.0.0.0, VPC flow logs
+            "backup",  # RDS backup retention, snapshots
+            "capacity",  # service quotas, Lambda concurrency limits
+            "ec2",  # instance-level health
+            "rds",  # RDS-specific
+            "s3",  # S3-specific
+            "lambda",  # Lambda-specific
             "other",
         ),
         template_version="aws_account/v1",
     ),
     "github_org": ReportVocabulary(
         tags=(
-            "secret-scan",     # secret-scanning alerts
-            "dependabot",      # open dependency CVEs
+            "secret-scan",  # secret-scanning alerts
+            "dependabot",  # open dependency CVEs
             "branch-protection",  # missing/weak protection rules
-            "codeowners",      # missing or invalid CODEOWNERS
-            "workflow",        # CI failures, deprecated actions
-            "access",          # members without 2FA, stale tokens
-            "stale",           # inactive repos / archived candidates
-            "security",        # general security posture
+            "codeowners",  # missing or invalid CODEOWNERS
+            "workflow",  # CI failures, deprecated actions
+            "access",  # members without 2FA, stale tokens
+            "stale",  # inactive repos / archived candidates
+            "security",  # general security posture
             "other",
         ),
         template_version="github_org/v1",
     ),
     "database_postgresql": ReportVocabulary(
         tags=(
-            "connections",     # saturation, pool exhaustion
-            "query",           # slow queries, pg_stat_statements outliers
-            "index",            # unused/missing indexes, bloat
-            "maintenance",     # vacuum lag, dead tuples, XID wraparound risk
-            "replication",     # replica lag, slot health
-            "capacity",        # disk usage, table bloat
-            "backup",          # wal-e / pgbackrest status
-            "logs",            # error spikes, fatal messages
-            "security",        # auth failures, exposed roles
+            "connections",  # saturation, pool exhaustion
+            "query",  # slow queries, pg_stat_statements outliers
+            "index",  # unused/missing indexes, bloat
+            "maintenance",  # vacuum lag, dead tuples, XID wraparound risk
+            "replication",  # replica lag, slot health
+            "capacity",  # disk usage, table bloat
+            "backup",  # wal-e / pgbackrest status
+            "logs",  # error spikes, fatal messages
+            "security",  # auth failures, exposed roles
             "other",
         ),
         template_version="database_postgresql/v1",
     ),
     "database_mysql": ReportVocabulary(
         tags=(
-            "connections",     # max_connections, wait events
-            "query",           # slow query log, long-running transactions
-            "innodb",          # buffer pool, row locks, deadlocks
-            "replication",     # replica lag, binlog health
-            "binlog",          # binlog disk usage, purge lag
-            "capacity",        # disk, table growth
-            "backup",          # mysqldump/xtrabackup status
-            "logs",            # error log spikes
-            "security",        # auth, privileges
+            "connections",  # max_connections, wait events
+            "query",  # slow query log, long-running transactions
+            "innodb",  # buffer pool, row locks, deadlocks
+            "replication",  # replica lag, binlog health
+            "binlog",  # binlog disk usage, purge lag
+            "capacity",  # disk, table growth
+            "backup",  # mysqldump/xtrabackup status
+            "logs",  # error log spikes
+            "security",  # auth, privileges
             "other",
         ),
         template_version="database_mysql/v1",

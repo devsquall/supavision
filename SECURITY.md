@@ -31,6 +31,12 @@ This means:
 - SQLite files can be copied without exposing credentials
 - Credential rotation only requires changing environment variables
 
+**Enforcement (since 0.4.5).** A central policy module (`src/supavision/secrets_policy.py`) defines the secret-shaped key set (`aws_secret_key`, `aws_access_key`, `github_token`, `db_password`, `slack_webhook`, plus `*_secret`/`*_token`/`*_password`/`*_api_key` suffixes). Every write boundary — dashboard wizard, edit form, slack-webhook update, REST `POST/PUT /api/v1/resources`, `supavision resource-add`, and `supavision notify-configure` — runs `validate_no_raw_secrets()` on submitted config and rejects raw values with HTTP 400 (or CLI exit 2). Credential references are additionally checked against `^[A-Z_][A-Z0-9_]*$` so a raw secret can't slip in via the `credentials` slot under a different name.
+
+**Legacy rows.** The Pydantic model intentionally does **not** validate `Resource.config` on load — rows created before 0.4.5 with raw secrets continue to work. The Slack send path falls back to legacy raw values with a deprecation warning logged per send. Editing the credential/notification field on a legacy row migrates the value (raw → env-var reference) and removes the legacy key from `config`. There is currently no bulk migration command; the migration is user-driven on next edit.
+
+`ssh_key_path` is **not** treated as a secret — it is a filesystem path consumed by the SSH executor, not key material.
+
 ### Agent Tool Scoping
 
 Supavision supports two LLM backends. Tool scoping differs between them — read this carefully.

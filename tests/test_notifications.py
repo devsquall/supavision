@@ -63,16 +63,22 @@ class TestSSRF:
         assert _is_blocked_ip("not-an-ip") is True
 
     def test_validate_rejects_private_ip(self):
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("10.0.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("10.0.0.1", 443)),
+            ],
+        ):
             with pytest.raises(ValueError, match="blocked IP range"):
                 validate_webhook_url("https://internal.example.com/hook")
 
     def test_validate_allows_public_ip(self):
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("104.18.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("104.18.0.1", 443)),
+            ],
+        ):
             result = validate_webhook_url("https://hooks.slack.com/services/xxx")
             assert result == "https://hooks.slack.com/services/xxx"
 
@@ -91,33 +97,45 @@ class TestSSRF:
 
     def test_validate_domain_allowlist_allows(self):
         with patch.dict(os.environ, {"WEBHOOK_ALLOWED_DOMAINS": "hooks.slack.com"}):
-            with patch("socket.getaddrinfo", return_value=[
-                (2, 1, 6, "", ("104.18.0.1", 443)),
-            ]):
+            with patch(
+                "socket.getaddrinfo",
+                return_value=[
+                    (2, 1, 6, "", ("104.18.0.1", 443)),
+                ],
+            ):
                 result = validate_webhook_url("https://hooks.slack.com/services/xxx")
                 assert "hooks.slack.com" in result
 
     def test_dns_rebinding_attack_scenario(self):
         """Test that DNS rebinding is prevented by re-validation at send time."""
         # First validation: domain resolves to public IP (passes)
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("104.18.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("104.18.0.1", 443)),
+            ],
+        ):
             result = validate_webhook_url("https://attacker.example.com/hook")
             assert result == "https://attacker.example.com/hook"
 
         # Second validation: domain now resolves to AWS metadata (blocked)
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("169.254.169.254", 80)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("169.254.169.254", 80)),
+            ],
+        ):
             with pytest.raises(ValueError, match="blocked IP range.*169.254.169.254"):
                 validate_webhook_url("https://attacker.example.com/hook")
 
     def test_slack_channel_validates_on_init(self):
         """Test that SlackChannel validates webhook URL on initialization."""
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("10.0.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("10.0.0.1", 443)),
+            ],
+        ):
             with pytest.raises(ValueError, match="blocked IP"):
                 SlackChannel("https://internal.attacker.com/hook")
 
@@ -132,9 +150,12 @@ class TestSSRF:
             ("169.254.169.254", "AWS metadata"),
         ]
         for ip, desc in test_cases:
-            with patch("socket.getaddrinfo", return_value=[
-                (2, 1, 6, "", (ip, 443)),
-            ]):
+            with patch(
+                "socket.getaddrinfo",
+                return_value=[
+                    (2, 1, 6, "", (ip, 443)),
+                ],
+            ):
                 with pytest.raises(ValueError, match="blocked IP"):
                     SlackChannel("https://internal.example.com/hook")
 
@@ -240,17 +261,23 @@ class TestSlackChannel:
 
 class TestWebhookChannel:
     def test_ssrf_validated_on_construction(self):
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("10.0.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("10.0.0.1", 443)),
+            ],
+        ):
             with pytest.raises(ValueError, match="blocked IP"):
                 WebhookChannel("https://internal.example.com/hook")
 
     @pytest.mark.asyncio
     async def test_send_payload_structure(self):
-        with patch("socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("104.18.0.1", 443)),
-        ]):
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("104.18.0.1", 443)),
+            ],
+        ):
             channel = WebhookChannel("https://example.com/hook")
 
         with patch("supavision.notifications._post_with_retry", new_callable=AsyncMock, return_value=True) as mock_post:

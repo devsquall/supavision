@@ -19,6 +19,7 @@ from pathlib import Path
 from .models import (
     Checklist,
     Evaluation,
+    Incident,
     Report,
     Resource,
     Run,
@@ -222,7 +223,29 @@ CREATE TABLE IF NOT EXISTS auth_audit_log (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auth_audit_event ON auth_audit_log(event, created_at DESC);
+
+-- ── Incidents (P2 #12: lightweight incident state) ──────────────────
+-- One row per acknowledged/owned issue. Created manually from the UI or
+-- API; auto-creation on critical-severity transition is a separate phase.
+CREATE TABLE IF NOT EXISTS incidents (
+    id TEXT PRIMARY KEY,
+    resource_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'open',          -- open | acknowledged | snoozed | resolved
+    severity TEXT NOT NULL DEFAULT 'warning',    -- critical | warning | info
+    owner_user_id TEXT DEFAULT NULL,
+    snoozed_until TEXT DEFAULT NULL,
+    evaluation_id TEXT DEFAULT NULL,             -- evaluation that opened this incident
+    data TEXT NOT NULL,                          -- full Incident JSON (notes, history)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_resource_state ON incidents(resource_id, state);
+CREATE INDEX IF NOT EXISTS idx_incidents_state_updated ON incidents(state, updated_at DESC);
 """
+
+
 class Store:
     """SQLite storage layer for all Supavision models."""
 
@@ -278,16 +301,13 @@ class Store:
     def save_resource(self, resource: Resource) -> None:
         data = json.dumps(resource.model_dump(mode="json"), default=str, ensure_ascii=False)
         self._execute(
-            "INSERT OR REPLACE INTO resources (id, parent_id, resource_type, data, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO resources (id, parent_id, resource_type, data, created_at) VALUES (?, ?, ?, ?, ?)",
             (resource.id, resource.parent_id, resource.resource_type, data, str(resource.created_at)),
         )
         self._commit()
 
     def get_resource(self, resource_id: str) -> Resource | None:
-        row = self._execute(
-            "SELECT data FROM resources WHERE id = ?", (resource_id,)
-        ).fetchone()
+        row = self._execute("SELECT data FROM resources WHERE id = ?", (resource_id,)).fetchone()
         if row is None:
             return None
         return Resource.model_validate(json.loads(row[0]))
@@ -299,9 +319,7 @@ class Store:
                 (parent_id,),
             ).fetchall()
         else:
-            rows = self._execute(
-                "SELECT data FROM resources ORDER BY created_at"
-            ).fetchall()
+            rows = self._execute("SELECT data FROM resources ORDER BY created_at").fetchall()
         return [Resource.model_validate(json.loads(r[0])) for r in rows]
 
     def list_resources_paginated(
@@ -425,8 +443,7 @@ class Store:
     def save_checklist(self, checklist: Checklist) -> None:
         data = json.dumps(checklist.model_dump(mode="json"), default=str, ensure_ascii=False)
         self._execute(
-            "INSERT OR REPLACE INTO checklists (id, resource_id, version, data, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO checklists (id, resource_id, version, data, created_at) VALUES (?, ?, ?, ?, ?)",
             (checklist.id, checklist.resource_id, checklist.version, data, str(checklist.created_at)),
         )
         self._commit()
@@ -445,26 +462,20 @@ class Store:
     def save_report(self, report: Report) -> None:
         data = json.dumps(report.model_dump(mode="json"), default=str, ensure_ascii=False)
         self._execute(
-            "INSERT OR REPLACE INTO reports (id, resource_id, run_type, data, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO reports (id, resource_id, run_type, data, created_at) VALUES (?, ?, ?, ?, ?)",
             (report.id, report.resource_id, str(report.run_type), data, str(report.created_at)),
         )
         self._commit()
 
     def get_report(self, report_id: str) -> Report | None:
-        row = self._execute(
-            "SELECT data FROM reports WHERE id = ?", (report_id,)
-        ).fetchone()
+        row = self._execute("SELECT data FROM reports WHERE id = ?", (report_id,)).fetchone()
         if row is None:
             return None
         return Report.model_validate(json.loads(row[0]))
 
-    def get_recent_reports(
-        self, resource_id: str, run_type: RunType, limit: int = 3
-    ) -> list[Report]:
+    def get_recent_reports(self, resource_id: str, run_type: RunType, limit: int = 3) -> list[Report]:
         rows = self._execute(
-            "SELECT data FROM reports WHERE resource_id = ? AND run_type = ? "
-            "ORDER BY created_at DESC LIMIT ?",
+            "SELECT data FROM reports WHERE resource_id = ? AND run_type = ? ORDER BY created_at DESC LIMIT ?",
             (resource_id, str(run_type), limit),
         ).fetchall()
         return [Report.model_validate(json.loads(r[0])) for r in rows]
@@ -474,16 +485,13 @@ class Store:
     def save_evaluation(self, evaluation: Evaluation) -> None:
         data = json.dumps(evaluation.model_dump(mode="json"), default=str, ensure_ascii=False)
         self._execute(
-            "INSERT OR REPLACE INTO evaluations (id, report_id, resource_id, data, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO evaluations (id, report_id, resource_id, data, created_at) VALUES (?, ?, ?, ?, ?)",
             (evaluation.id, evaluation.report_id, evaluation.resource_id, data, str(evaluation.created_at)),
         )
         self._commit()
 
     def get_evaluation(self, evaluation_id: str) -> Evaluation | None:
-        row = self._execute(
-            "SELECT data FROM evaluations WHERE id = ?", (evaluation_id,)
-        ).fetchone()
+        row = self._execute("SELECT data FROM evaluations WHERE id = ?", (evaluation_id,)).fetchone()
         if row is None:
             return None
         return Evaluation.model_validate(json.loads(row[0]))
@@ -577,9 +585,7 @@ class Store:
             result.setdefault(row[0], {})[row[1]] = row[2]
         return result
 
-    def get_metrics_history(
-        self, resource_id: str, metric_name: str, days: int = 30
-    ) -> list[dict]:
+    def get_metrics_history(self, resource_id: str, metric_name: str, days: int = 30) -> list[dict]:
         """Get time-series for a specific metric. Returns [{value, created_at}]."""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         rows = self._execute(
@@ -600,10 +606,63 @@ class Store:
         )
         self._commit()
 
-    def get_run(self, run_id: str) -> Run | None:
+    def get_active_run_id_for_resource(self, resource_id: str) -> str | None:
+        """Return the ID of any PENDING/RUNNING run for this resource, or None."""
         row = self._execute(
-            "SELECT data FROM runs WHERE id = ?", (run_id,)
+            "SELECT id FROM runs WHERE resource_id = ? AND status IN (?, ?) LIMIT 1",
+            (resource_id, str(RunStatus.PENDING), str(RunStatus.RUNNING)),
         ).fetchone()
+        return row[0] if row else None
+
+    def create_pending_run_if_no_active(self, resource_id: str, run_type: RunType) -> Run | None:
+        """Atomically create a PENDING Run for `resource_id` unless one is already in flight.
+
+        Returns the new Run, or None if a PENDING/RUNNING run already exists for the
+        resource (caller should respond with HTTP 409 and surface the existing run's ID).
+
+        Uses BEGIN IMMEDIATE inside the existing RLock so the check + insert is one
+        write transaction — closes the TOCTOU window where two concurrent triggers
+        could both pass a naive check and create duplicates.
+        """
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                active = self._conn.execute(
+                    "SELECT id FROM runs WHERE resource_id = ? AND status IN (?, ?) LIMIT 1",
+                    (resource_id, str(RunStatus.PENDING), str(RunStatus.RUNNING)),
+                ).fetchone()
+                if active:
+                    self._conn.execute("ROLLBACK")
+                    return None
+                run = Run(
+                    resource_id=resource_id,
+                    run_type=run_type,
+                    status=RunStatus.PENDING,
+                )
+                data = json.dumps(run.model_dump(mode="json"), default=str, ensure_ascii=False)
+                self._conn.execute(
+                    "INSERT INTO runs (id, resource_id, run_type, status, data, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        run.id,
+                        run.resource_id,
+                        str(run.run_type),
+                        str(run.status),
+                        data,
+                        str(run.created_at),
+                    ),
+                )
+                self._conn.execute("COMMIT")
+                return run
+            except Exception:
+                # Ensure we don't leave the connection in an aborted transaction.
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+
+    def get_run(self, run_id: str) -> Run | None:
+        row = self._execute("SELECT data FROM runs WHERE id = ?", (run_id,)).fetchone()
         if row is None:
             return None
         return Run.model_validate(json.loads(row[0]))
@@ -668,8 +727,7 @@ class Store:
 
     def get_latest_run(self, resource_id: str, run_type: RunType) -> Run | None:
         row = self._execute(
-            "SELECT data FROM runs WHERE resource_id = ? AND run_type = ? "
-            "ORDER BY created_at DESC LIMIT 1",
+            "SELECT data FROM runs WHERE resource_id = ? AND run_type = ? ORDER BY created_at DESC LIMIT 1",
             (resource_id, str(run_type)),
         ).fetchone()
         if row is None:
@@ -686,9 +744,7 @@ class Store:
         for row in rows:
             run = Run.model_validate(json.loads(row[0]))
             if run.started_at:
-                age_hours = (
-                    datetime.now(timezone.utc) - run.started_at
-                ).total_seconds() / 3600
+                age_hours = (datetime.now(timezone.utc) - run.started_at).total_seconds() / 3600
                 if age_hours > hours:
                     stale.append(run)
         return stale
@@ -698,13 +754,10 @@ class Store:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         with self._lock:
             self._conn.execute(
-                "DELETE FROM evaluations WHERE report_id IN "
-                "(SELECT id FROM reports WHERE created_at < ?)",
+                "DELETE FROM evaluations WHERE report_id IN (SELECT id FROM reports WHERE created_at < ?)",
                 (cutoff,),
             )
-            cursor = self._conn.execute(
-                "DELETE FROM reports WHERE created_at < ?", (cutoff,)
-            )
+            cursor = self._conn.execute("DELETE FROM reports WHERE created_at < ?", (cutoff,))
             count = cursor.rowcount
             self._conn.commit()
         return count
@@ -748,6 +801,7 @@ class Store:
         # Workstream I: track last usage
         try:
             from datetime import datetime, timezone
+
             self._execute(
                 "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
                 (datetime.now(timezone.utc).isoformat(), row[0]),
@@ -791,15 +845,72 @@ class Store:
     def delete_work_items_for_resource(self, resource_id: str) -> None:
         """Cascade-delete legacy work items when a resource is removed."""
         with self._lock:
-            item_ids = [r[0] for r in self._conn.execute(
-                "SELECT id FROM work_items WHERE resource_id = ?", (resource_id,)
-            ).fetchall()]
+            item_ids = [
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT id FROM work_items WHERE resource_id = ?", (resource_id,)
+                ).fetchall()
+            ]
             for item_id in item_ids:
                 self._conn.execute("DELETE FROM work_feedback WHERE work_item_id = ?", (item_id,))
                 self._conn.execute("DELETE FROM transitions WHERE work_item_id = ?", (item_id,))
             self._conn.execute("DELETE FROM agent_jobs WHERE resource_id = ?", (resource_id,))
             self._conn.execute("DELETE FROM work_items WHERE resource_id = ?", (resource_id,))
             self._conn.commit()
+
+    # ── Incidents (P2 #12) ──────────────────────────────────
+
+    def save_incident(self, incident: Incident) -> None:
+        data = json.dumps(incident.model_dump(mode="json"), default=str, ensure_ascii=False)
+        self._execute(
+            "INSERT OR REPLACE INTO incidents "
+            "(id, resource_id, title, state, severity, owner_user_id, snoozed_until, "
+            "evaluation_id, data, created_at, updated_at, resolved_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                incident.id,
+                incident.resource_id,
+                incident.title,
+                str(incident.state),
+                incident.severity,
+                incident.owner_user_id,
+                incident.snoozed_until.isoformat() if incident.snoozed_until else None,
+                incident.evaluation_id,
+                data,
+                incident.created_at.isoformat(),
+                incident.updated_at.isoformat(),
+                incident.resolved_at.isoformat() if incident.resolved_at else None,
+            ),
+        )
+        self._commit()
+
+    def get_incident(self, incident_id: str) -> Incident | None:
+        row = self._execute("SELECT data FROM incidents WHERE id = ?", (incident_id,)).fetchone()
+        if row is None:
+            return None
+        return Incident.model_validate(json.loads(row[0]))
+
+    def list_incidents(
+        self,
+        resource_id: str | None = None,
+        state: str | None = None,
+        limit: int = 50,
+    ) -> list[Incident]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if resource_id:
+            clauses.append("resource_id = ?")
+            params.append(resource_id)
+        if state:
+            clauses.append("state = ?")
+            params.append(state)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(limit)
+        rows = self._execute(
+            f"SELECT data FROM incidents{where} ORDER BY updated_at DESC LIMIT ?",
+            tuple(params),
+        ).fetchall()
+        return [Incident.model_validate(json.loads(r[0])) for r in rows]
 
     # ── Notification Log ────────────────────────────────────
 
@@ -813,6 +924,7 @@ class Store:
         error: str = "",
     ) -> None:
         from uuid import uuid4
+
         notif_id = uuid4().hex[:12]
         now = datetime.now(timezone.utc).isoformat()
         self._execute(
@@ -838,9 +950,14 @@ class Store:
             ).fetchall()
         return [
             {
-                "id": r[0], "resource_id": r[1], "channel": r[2],
-                "severity": r[3], "summary": r[4], "status": r[5],
-                "error": r[6], "created_at": r[7],
+                "id": r[0],
+                "resource_id": r[1],
+                "channel": r[2],
+                "severity": r[3],
+                "summary": r[4],
+                "status": r[5],
+                "error": r[6],
+                "created_at": r[7],
             }
             for r in rows
         ]
@@ -852,8 +969,13 @@ class Store:
             "INSERT INTO users (id, email, password_hash, name, role, is_active, data, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                user.id, user.email, user.password_hash, user.name, user.role,
-                int(user.is_active), json.dumps(user.model_dump(mode="json")),
+                user.id,
+                user.email,
+                user.password_hash,
+                user.name,
+                user.role,
+                int(user.is_active),
+                json.dumps(user.model_dump(mode="json")),
                 user.created_at.isoformat(),
             ),
         )
@@ -876,7 +998,11 @@ class Store:
             "UPDATE users SET email=?, password_hash=?, name=?, role=?, is_active=?, data=?, "
             "last_login_at=? WHERE id=?",
             (
-                user.email, user.password_hash, user.name, user.role, int(user.is_active),
+                user.email,
+                user.password_hash,
+                user.name,
+                user.role,
+                int(user.is_active),
                 json.dumps(user.model_dump(mode="json")),
                 user.last_login_at.isoformat() if user.last_login_at else None,
                 user.id,
@@ -902,9 +1028,14 @@ class Store:
             "INSERT INTO sessions (id, user_id, csrf_token, ip_address, user_agent, data, "
             "created_at, expires_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                session.id, session.user_id, session.csrf_token, session.ip_address,
-                session.user_agent, json.dumps(session.model_dump(mode="json")),
-                session.created_at.isoformat(), session.expires_at.isoformat(),
+                session.id,
+                session.user_id,
+                session.csrf_token,
+                session.ip_address,
+                session.user_agent,
+                json.dumps(session.model_dump(mode="json")),
+                session.created_at.isoformat(),
+                session.expires_at.isoformat(),
                 session.last_activity_at.isoformat(),
             ),
         )
@@ -925,6 +1056,7 @@ class Store:
             return None
         # Check idle timeout (default 2 hours)
         from .config import SESSION_IDLE_MINUTES
+
         idle_limit = timedelta(minutes=SESSION_IDLE_MINUTES)
         if now - session.last_activity_at > idle_limit:
             return None
@@ -994,10 +1126,15 @@ class Store:
     # ── Audit Log ──────────────────────────────────────────────────
 
     def log_auth_event(
-        self, event: str, user_id: str | None = None, email: str | None = None,
-        ip_address: str | None = None, detail: str = "",
+        self,
+        event: str,
+        user_id: str | None = None,
+        email: str | None = None,
+        ip_address: str | None = None,
+        detail: str = "",
     ) -> None:
         from uuid import uuid4
+
         self._execute(
             "INSERT INTO auth_audit_log (id, event, user_id, email, ip_address, detail, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1036,9 +1173,7 @@ class Store:
             params.append(run_type)
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        count_row = self._execute(
-            f"SELECT COUNT(*) FROM reports r {where}", params
-        ).fetchone()
+        count_row = self._execute(f"SELECT COUNT(*) FROM reports r {where}", params).fetchone()
         total = count_row[0] if count_row else 0
 
         rows = self._execute(
@@ -1063,14 +1198,16 @@ class Store:
             content_preview = (report.content or "")[:150]
             if len(report.content or "") > 150:
                 content_preview += "..."
-            reports.append({
-                "id": row[0],
-                "resource_id": row[1],
-                "resource_name": resource_name,
-                "run_type": row[2],
-                "created_at": row[3],
-                "preview": content_preview,
-            })
+            reports.append(
+                {
+                    "id": row[0],
+                    "resource_id": row[1],
+                    "resource_name": resource_name,
+                    "run_type": row[2],
+                    "created_at": row[3],
+                    "preview": content_preview,
+                }
+            )
         return reports, total
 
     def list_recent_runs(
@@ -1091,9 +1228,7 @@ class Store:
             params.append(run_type)
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        count_row = self._execute(
-            f"SELECT COUNT(*) FROM runs {where}", params
-        ).fetchone()
+        count_row = self._execute(f"SELECT COUNT(*) FROM runs {where}", params).fetchone()
         total = count_row[0] if count_row else 0
 
         rows = self._execute(
@@ -1110,8 +1245,7 @@ class Store:
             (limit, offset),
         ).fetchall()
         return [
-            {"event": r[0], "user_id": r[1], "email": r[2], "ip": r[3],
-             "detail": r[4], "created_at": r[5]}
+            {"event": r[0], "user_id": r[1], "email": r[2], "ip": r[3], "detail": r[4], "created_at": r[5]}
             for r in rows
         ]
 
@@ -1141,9 +1275,7 @@ class Store:
             params.append(status)
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        count_row = self._execute(
-            f"SELECT COUNT(*) FROM notification_log n {where}", params
-        ).fetchone()
+        count_row = self._execute(f"SELECT COUNT(*) FROM notification_log n {where}", params).fetchone()
         total = count_row[0] if count_row else 0
 
         rows = self._execute(
@@ -1156,11 +1288,15 @@ class Store:
         ).fetchall()
         notifications = [
             {
-                "id": r[0], "resource_id": r[1], "channel": r[2],
-                "severity": r[3], "summary": r[4], "status": r[5],
-                "error": r[6], "created_at": r[7],
+                "id": r[0],
+                "resource_id": r[1],
+                "channel": r[2],
+                "severity": r[3],
+                "summary": r[4],
+                "status": r[5],
+                "error": r[6],
+                "created_at": r[7],
             }
             for r in rows
         ]
         return notifications, total
-

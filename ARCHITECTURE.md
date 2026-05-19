@@ -102,3 +102,37 @@ See [SECURITY.md](SECURITY.md). Key points:
 - Agent tool allowlist in `tools.py` — no arbitrary shell execution
 - Credentials stored as env-var references, not raw secrets
 - SSRF protection on webhook dispatch, CSRF on mutations, scrypt password hashing
+
+## Scale planning (P2 #18 — deferred, scope-only)
+
+Supavision's SQLite store comfortably handles low-thousand-resource deployments. When a deployment outgrows it, here is the path we'll take — none of this is implemented today, and the specific thresholds will be set by real-world benchmarks rather than speculation.
+
+### Indexed projections
+
+The current `evaluations` and `reports` tables store the structured payload as a JSON blob inside `data`. Queries that filter or aggregate on payload fields (`payload.issues[*].severity`, `payload.metrics[<name>]`) currently load every row and filter in Python. Two projection tables would cover this:
+
+- `issues_projection (issue_id, resource_id, run_id, report_id, severity, tag1, scope, status, opened_at, resolved_at)` — populated on `save_report`; indexed by `(resource_id, status)` and `(severity, opened_at DESC)`. Supports "show open critical issues across the fleet" without a table scan.
+- `metrics_projection (resource_id, run_id, metric_name, metric_value, observed_at)` — populated on `save_report`; indexed by `(resource_id, metric_name, observed_at)`. Supports metric trend charts without payload deserialization.
+
+The `Report.payload` JSON blob remains the source of truth; projections are derived and recomputable.
+
+### Durable job state
+
+Today, `POST /api/v1/runs` schedules a background task in the process. If the process crashes mid-run, the PENDING/RUNNING row is orphaned. A small `job_queue` table (status, attempt_count, payload, claimed_by, claimed_at) plus a worker loop would let the scheduler recover after crashes and would unlock horizontal scaling. The existing `create_pending_run_if_no_active` atomic helper is the model — extend it with a leasing primitive.
+
+### Configurable concurrency
+
+`scheduler.py` currently uses `asyncio.Semaphore(3)`. Expose this via config (env var + dashboard) and emit metrics for queue depth and per-resource queueing.
+
+### Persistent rate limiting
+
+`notifications.py` `_DedupCache` is in-memory and resets on restart. The persisted dedup-key shortcut on `resource.config["_last_alert_key"]` covers the single-resource case but not global per-channel rate limits. A small `rate_limits (key, window_start, count)` table would persist Slack/Teams/PagerDuty per-channel throttling across restarts.
+
+### Postgres migration shape
+
+When SQLite write contention becomes the bottleneck, move to Postgres. The two invariants that need attention:
+
+- `create_pending_run_if_no_active`: replace `BEGIN IMMEDIATE` with either `SELECT ... FOR UPDATE` on a sentinel row or a unique partial index `(resource_id) WHERE status IN ('pending', 'running')`. Either preserves the "one in-flight run per resource" guarantee under multi-writer.
+- Everything serialized as JSON blobs in `data` columns: keep as `JSONB`. The lookups by indexed scalar columns (`resource_id`, `status`, etc.) are already shape-compatible with Postgres.
+
+No engine code should need to change — Store is a thin abstraction and most callers read whole models, not specific columns.

@@ -91,7 +91,8 @@ def _extract_status_line(content: str) -> str | None:
     """Extract explicit status line from structured report (e.g., '## Status: **CRITICAL**')."""
     match = re.search(
         r"(?:^|\n)\s*(?:##?\s*)?(?:\*\*)?status(?:\*\*)?:\s*(?:\*\*)?(\w+)(?:\*\*)?",
-        content, re.I,
+        content,
+        re.I,
     )
     return match.group(1).lower() if match else None
 
@@ -113,8 +114,9 @@ def _count_matches(content: str, patterns: list[re.Pattern]) -> list[str]:
     return matches
 
 
-def _build_summary(severity: Severity, critical_matches: list[str],
-                   warning_matches: list[str], explicit_status: str | None) -> str:
+def _build_summary(
+    severity: Severity, critical_matches: list[str], warning_matches: list[str], explicit_status: str | None
+) -> str:
     """Build a concise, specific summary from matched patterns."""
     if explicit_status:
         prefix = f"Report status: {explicit_status}."
@@ -176,9 +178,7 @@ class Evaluator:
             strategy_used=strategy_used,
         )
 
-    def _eval_structured(
-        self, payload: ReportPayload
-    ) -> tuple[Severity, str, bool] | None:
+    def _eval_structured(self, payload: ReportPayload) -> tuple[Severity, str, bool] | None:
         """Derive (severity, summary, should_alert) from a structured payload.
 
         Returns None if the payload is UNKNOWN — caller should fall back to
@@ -197,10 +197,7 @@ class Evaluator:
             # Alert on any warning payload that reports at least one issue.
             # A warning status with zero issues is unusual and we decline to
             # page a human on it.
-            should_alert = any(
-                i.severity in (IssueSeverity.WARNING, IssueSeverity.CRITICAL)
-                for i in payload.issues
-            )
+            should_alert = any(i.severity in (IssueSeverity.WARNING, IssueSeverity.CRITICAL) for i in payload.issues)
         else:
             should_alert = False
 
@@ -228,7 +225,9 @@ class Evaluator:
 
         logger.warning(
             "Evaluator disagreement for report=%s: structured=%s regex=%s — taking more severe",
-            report_id, s_sev, r_sev,
+            report_id,
+            s_sev,
+            r_sev,
         )
         if _SEVERITY_RANK[s_sev] >= _SEVERITY_RANK[r_sev]:
             return s_sev, s_summary, s_alert or r_alert, "structured+keyword_disagreement"

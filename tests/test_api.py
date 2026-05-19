@@ -399,6 +399,7 @@ class TestNotifyTest:
 
         with patch.dict("os.environ", {}, clear=False):
             import os
+
             os.environ.pop("SLACK_WEBHOOK", None)
             resp = client.post(f"/api/v1/resources/{resource.id}/notify-test")
 
@@ -481,10 +482,14 @@ class TestMetrics:
         resource = Resource(name="server", resource_type="server")
         store.save_resource(resource)
 
-        store.save_metrics(resource.id, "report-1", [
-            {"name": "cpu", "value": 45.0, "unit": "%"},
-            {"name": "memory", "value": 72.5, "unit": "%"},
-        ])
+        store.save_metrics(
+            resource.id,
+            "report-1",
+            [
+                {"name": "cpu", "value": 45.0, "unit": "%"},
+                {"name": "memory", "value": 72.5, "unit": "%"},
+            ],
+        )
 
         resp = client.get(f"/api/v1/resources/{resource.id}/metrics")
         assert resp.status_code == 200
@@ -501,12 +506,20 @@ class TestMetrics:
         resource = Resource(name="server", resource_type="server")
         store.save_resource(resource)
 
-        store.save_metrics(resource.id, "report-1", [
-            {"name": "cpu", "value": 45.0, "unit": "%"},
-        ])
-        store.save_metrics(resource.id, "report-2", [
-            {"name": "cpu", "value": 50.0, "unit": "%"},
-        ])
+        store.save_metrics(
+            resource.id,
+            "report-1",
+            [
+                {"name": "cpu", "value": 45.0, "unit": "%"},
+            ],
+        )
+        store.save_metrics(
+            resource.id,
+            "report-2",
+            [
+                {"name": "cpu", "value": 50.0, "unit": "%"},
+            ],
+        )
 
         resp = client.get(f"/api/v1/resources/{resource.id}/metrics/cpu")
         assert resp.status_code == 200
@@ -569,6 +582,8 @@ class TestIncidents:
     def test_get_incidents_not_found(self, client):
         resp = client.get("/api/v1/resources/nonexistent/incidents")
         assert resp.status_code == 404
+
+
 class TestSystemStatus:
     def test_system_status(self, client):
         with patch("supavision.scheduler.get_scheduler_status") as mock_sched:
@@ -580,6 +595,19 @@ class TestSystemStatus:
         assert data["ok"] is True
         assert "version" in data
         assert data["scheduler"] == {"running": True, "jobs": 3}
+
+    def test_system_metrics(self, client):
+        with patch("supavision.scheduler.get_scheduler_status") as mock_sched:
+            mock_sched.return_value = {"running": True, "jobs": 3}
+            resp = client.get("/api/v1/system/metrics")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "version" in data
+        assert "runs" in data and "by_status" in data["runs"]
+        assert "notifications" in data
+        assert "db" in data and "size_bytes" in data["db"]
 
 
 # ── RBAC — Viewer role tests ─────────────────────────────────────

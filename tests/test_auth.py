@@ -1,4 +1,5 @@
 """Tests for authentication system: password hashing, sessions, roles."""
+
 import pytest
 
 from supavision.db import Store
@@ -24,6 +25,7 @@ class TestPasswordHashing:
         assert not verify_password("test", "not-a-valid-hash")
         assert not verify_password("test", "")
 
+
 class TestPasswordPolicy:
     def test_too_short(self):
         assert validate_password_strength("short") is not None
@@ -34,6 +36,7 @@ class TestPasswordPolicy:
 
     def test_valid_password(self):
         assert validate_password_strength("myS3cureP@ss") is None
+
 
 class TestUserStore:
     @pytest.fixture
@@ -65,6 +68,7 @@ class TestUserStore:
         assert store.count_users() == 0
         store.create_user(User(email="a@b.com", password_hash=hash_password("test123456")))
         assert store.count_users() == 1
+
 
 class TestSessionStore:
     @pytest.fixture
@@ -98,6 +102,7 @@ class TestSessionStore:
         store.touch_session(session.id)
         found = store.get_session(session.id)
         assert found is not None  # Still valid after touch
+
 
 class TestAuditLog:
     @pytest.fixture

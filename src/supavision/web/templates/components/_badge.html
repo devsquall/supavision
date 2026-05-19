@@ -1,0 +1,21 @@
+{#
+  Severity-aware badge component.
+  Usage: {% from 'components/_badge.html' import severity_badge, type_badge %}
+         {{ severity_badge(severity) }}
+         {{ type_badge(resource.resource_type) }}
+  Renders the existing badge--<severity> styles defined in style.css.
+#}
+{% macro severity_badge(severity, label=None, size=None) %}
+  {% set _label = label or (severity or 'unknown') %}
+  {% set _size_cls = ' text-xs' if size == 'xs' else '' %}
+  <span class="badge badge--{{ severity or 'unknown' }}{{ _size_cls }}">{{ _label }}</span>
+{% endmacro %}
+
+{% macro type_badge(resource_type, size=None) %}
+  {% set _size_cls = ' text-xs' if size == 'xs' else '' %}
+  <span class="badge badge--type{{ _size_cls }}">{{ resource_type }}</span>
+{% endmacro %}
+
+{% macro count_badge(count, severity='muted') %}
+  <span class="badge badge--{{ severity }}">{{ count }}</span>
+{% endmacro %}

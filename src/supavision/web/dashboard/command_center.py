@@ -34,10 +34,14 @@ async def command_center_page(request: Request):
     store = request.app.state.store
     resources = store.list_resources()
     severities = ["critical", "high", "medium", "low", "info"]
-    return _render(request, "command_center.html", {
-        "resources": resources,
-        "severities": severities,
-    })
+    return _render(
+        request,
+        "command_center.html",
+        {
+            "resources": resources,
+            "severities": severities,
+        },
+    )
 
 
 @router.post("/command-center/query", response_class=HTMLResponse)
@@ -113,7 +117,7 @@ def _cmd_system_overview(store, now: str) -> dict:
         f'<div class="stat-grid">'
         f'<div class="stat-card"><span class="stat-value">{total}</span>'
         f'<span class="stat-label">Total Resources</span></div>'
-        f'{rows}</div>'
+        f"{rows}</div>"
     )
     return {"title": "System Overview", "html": html, "timestamp": now}
 
@@ -144,7 +148,7 @@ def _cmd_resource_health(store, resource_id: str, now: str) -> dict:
     # Metrics
     metrics = store.get_latest_metrics(resource_id)
 
-    parts = [f'<h4>{html_mod.escape(resource.name)}</h4>']
+    parts = [f"<h4>{html_mod.escape(resource.name)}</h4>"]
 
     # Evaluation summary
     if evaluations:
@@ -153,7 +157,7 @@ def _cmd_resource_health(store, resource_id: str, now: str) -> dict:
         parts.append(
             f'<div class="mb-3">'
             f'<span class="badge badge--{_severity_class(sev)}">{html_mod.escape(sev)}</span> '
-            f'{html_mod.escape(ev.summary or "No summary")}</div>'
+            f"{html_mod.escape(ev.summary or 'No summary')}</div>"
         )
     else:
         parts.append('<p class="text-muted">No evaluations yet.</p>')
@@ -171,15 +175,11 @@ def _cmd_resource_health(store, resource_id: str, now: str) -> dict:
     if health_reports:
         rpt = health_reports[0]
         parts.append(
-            f'<p class="text-sm text-muted mt-3">'
-            f'Last health check: {html_mod.escape(str(rpt.created_at))}</p>'
+            f'<p class="text-sm text-muted mt-3">Last health check: {html_mod.escape(str(rpt.created_at))}</p>'
         )
     if discovery_reports:
         rpt = discovery_reports[0]
-        parts.append(
-            f'<p class="text-sm text-muted">'
-            f'Last discovery: {html_mod.escape(str(rpt.created_at))}</p>'
-        )
+        parts.append(f'<p class="text-sm text-muted">Last discovery: {html_mod.escape(str(rpt.created_at))}</p>')
 
     return {"title": "Resource Health", "html": "\n".join(parts), "timestamp": now}
 
@@ -210,29 +210,27 @@ def _cmd_baseline_diff(store, resource_id: str, now: str) -> dict:
             "timestamp": now,
         }
 
-    parts = [f'<h4>{html_mod.escape(resource.name)} — Baseline</h4>']
+    parts = [f"<h4>{html_mod.escape(resource.name)} — Baseline</h4>"]
     parts.append(
         f'<div class="stat-grid">'
         f'<div class="stat-card"><span class="stat-value">v{context.version}</span>'
         f'<span class="stat-label">Version</span></div>'
         f'<div class="stat-card"><span class="stat-value">{html_mod.escape(str(context.created_at)[:10])}</span>'
         f'<span class="stat-label">Created</span></div>'
-        f'</div>'
+        f"</div>"
     )
 
     # Show first 200 chars of content as preview
     preview = (context.content or "")[:200]
     if preview:
         ellipsis = "..." if len(context.content or "") > 200 else ""
-        parts.append(
-            f'<p class="text-sm mt-3">{html_mod.escape(preview)}{ellipsis}</p>'
-        )
+        parts.append(f'<p class="text-sm mt-3">{html_mod.escape(preview)}{ellipsis}</p>')
 
     if len(history) > 1:
         prev = history[1]
         parts.append(
             f'<p class="text-sm text-muted mt-2">'
-            f'Previous version: v{prev.version} ({html_mod.escape(str(prev.created_at)[:10])})</p>'
+            f"Previous version: v{prev.version} ({html_mod.escape(str(prev.created_at)[:10])})</p>"
         )
 
     return {"title": "Baseline Comparison", "html": "\n".join(parts), "timestamp": now}
@@ -246,7 +244,7 @@ def _cmd_project_stats(store, now: str) -> dict:
         f'<div class="stat-grid">'
         f'<div class="stat-card"><span class="stat-value">{total_resources}</span>'
         f'<span class="stat-label">Resources</span></div>'
-        f'</div>'
+        f"</div>"
     )
 
     return {"title": "Project Stats", "html": html, "timestamp": now}

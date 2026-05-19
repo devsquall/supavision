@@ -31,15 +31,19 @@ async def reports_page(
         run_type=run_type or None,
     )
 
-    return _render(request, "reports.html", {
-        "items": items,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "resources": resources,
-        "run_types": ["discovery", "health_check"],
-        "filters": {
-            "resource_id": resource_id,
-            "run_type": run_type,
+    return _render(
+        request,
+        "reports.html",
+        {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "resources": resources,
+            "run_types": ["discovery", "health_check"],
+            "filters": {
+                "resource_id": resource_id,
+                "run_type": run_type,
+            },
         },
-    })
+    )

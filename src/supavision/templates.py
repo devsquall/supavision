@@ -58,16 +58,10 @@ def load_template(
 
     # Prevent path traversal — ensure resolved path stays within template_dir
     if not path.resolve().is_relative_to(Path(template_dir).resolve()):
-        raise ValueError(
-            f"Path traversal detected: resource_type {resource_type!r} "
-            f"would escape template directory"
-        )
+        raise ValueError(f"Path traversal detected: resource_type {resource_type!r} would escape template directory")
 
     if not path.exists():
-        raise FileNotFoundError(
-            f"Template not found: {path}. "
-            f"Expected at: {path.resolve()}"
-        )
+        raise FileNotFoundError(f"Template not found: {path}. Expected at: {path.resolve()}")
 
     return path.read_text(encoding="utf-8")
 
@@ -156,10 +150,12 @@ def list_templates(template_dir: str | Path = TEMPLATE_DIR_DEFAULT) -> list[dict
         has_discovery = (subdir / "discovery.md").exists()
         has_health = (subdir / "health_check.md").exists()
         if has_discovery or has_health:
-            results.append({
-                "resource_type": subdir.name,
-                "discovery": "yes" if has_discovery else "no",
-                "health_check": "yes" if has_health else "no",
-            })
+            results.append(
+                {
+                    "resource_type": subdir.name,
+                    "discovery": "yes" if has_discovery else "no",
+                    "health_check": "yes" if has_health else "no",
+                }
+            )
 
     return results

@@ -1,0 +1,38 @@
+{#
+  Button component. Wraps the existing .btn / .btn-outline / .btn-sm classes
+  so callers don't have to remember class combinations.
+
+  Usage:
+    {% from 'components/_button.html' import button, link_button, post_button %}
+    {{ button('Save', size='sm') }}
+    {{ link_button('Edit', '/resources/123/edit', variant='outline') }}
+    {{ post_button('Run Health Check', '/resources/123/health-check',
+                   success_msg='Started') }}
+#}
+{% macro _classes(variant='primary', size=None) %}
+  btn{% if variant == 'outline' %} btn-outline{% elif variant == 'danger' %} btn-danger{% endif %}{% if size == 'sm' %} btn-sm{% endif %}
+{% endmacro %}
+
+{% macro button(label, type='submit', variant='primary', size=None, disabled=False, title=None) %}
+  <button type="{{ type }}" class="{{ _classes(variant, size) | trim }}"
+          {% if disabled %}disabled{% endif %}
+          {% if title %}title="{{ title }}"{% endif %}>{{ label }}</button>
+{% endmacro %}
+
+{% macro link_button(label, href, variant='primary', size=None, title=None) %}
+  <a href="{{ href }}" class="{{ _classes(variant, size) | trim }}"
+     {% if title %}title="{{ title }}"{% endif %}>{{ label }}</a>
+{% endmacro %}
+
+{% macro post_button(label, href, variant='primary', size=None,
+                     success_msg='Done', error_msg=None, action=None,
+                     disabled=False, title=None) %}
+  <button type="button" class="{{ _classes(variant, size) | trim }}"
+          hx-post="{{ href }}"
+          hx-swap="none"
+          {% if action %}data-action="{{ action }}"{% endif %}
+          data-success-msg="{{ success_msg }}"
+          {% if error_msg %}data-error-msg="{{ error_msg }}"{% endif %}
+          {% if disabled %}disabled{% endif %}
+          {% if title %}title="{{ title }}"{% endif %}>{{ label }}</button>
+{% endmacro %}

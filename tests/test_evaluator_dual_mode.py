@@ -99,8 +99,11 @@ class TestStructuredPath:
 
 class TestDisagreementResolution:
     def test_agreement_uses_structured_summary(self) -> None:
-        payload = ReportPayload(status=PayloadStatus.WARNING, summary="Warning summary.",
-                                issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)])
+        payload = ReportPayload(
+            status=PayloadStatus.WARNING,
+            summary="Warning summary.",
+            issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)],
+        )
         r = _report("warning: high cpu, elevated load", payload)
         e = Evaluator().evaluate(r)
         assert e.severity == Severity.WARNING

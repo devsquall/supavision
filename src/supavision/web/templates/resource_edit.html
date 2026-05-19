@@ -11,6 +11,19 @@
   <h2>Edit Resource</h2>
 </div>
 
+{% if legacy_secret_keys %}
+<div class="alert alert--warn mb-4">
+  <strong>Legacy credentials stored on this resource.</strong>
+  <p class="text-sm mt-1">
+    The following fields still hold raw values in this resource's config and should be migrated to
+    environment-variable references:
+    {% for k in legacy_secret_keys %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    Editing the corresponding section below (e.g. <em>Notifications</em>) will move the value to a
+    credential reference and remove the raw value.
+  </p>
+</div>
+{% endif %}
+
 {# ── General Settings ── #}
 <div class="settings-section">
   <h4>General</h4>
@@ -96,10 +109,13 @@
         data-action="notify" data-success-msg="Notifications updated" data-error-msg="Failed to update">
     <div class="settings-row">
       <div class="form-group">
-        <label class="form-label" for="slack_webhook">Slack Webhook URL</label>
-        <input class="form-input" type="url" id="slack_webhook" name="slack_webhook"
-               value="{{ slack_webhook }}" placeholder="https://hooks.slack.com/services/...">
-        <span class="form-hint">Optional. Overrides the global webhook for this resource.</span>
+        <label class="form-label" for="slack_webhook_env_var">Slack Webhook — env var name</label>
+        <input class="form-input" type="text" id="slack_webhook_env_var" name="slack_webhook_env_var"
+               value="{{ slack_webhook_env_var }}" placeholder="SLACK_WEBHOOK_URL">
+        <span class="form-hint">
+          Name of the environment variable holding your Slack webhook URL.
+          Supavision never stores webhook URLs.
+        </span>
       </div>
       <button type="submit" class="btn btn-outline">Save</button>
       <button type="button" class="btn btn-outline"

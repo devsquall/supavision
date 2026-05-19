@@ -8,19 +8,6 @@ Routes:
   health_check_schedule → Engine.run_health_check()
 """
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 from __future__ import annotations
 
 import asyncio
@@ -130,6 +117,7 @@ class Scheduler:
             try:
                 due_jobs = self._get_due_jobs()
                 if due_jobs:
+
                     async def _run_with_sem(resource, run_type):
                         async with _sem:
                             await self._execute_run_async(resource, run_type)
@@ -175,7 +163,6 @@ class Scheduler:
             if not resource.enabled:
                 continue
 
-
             schedule_pairs = [
                 (RunType.DISCOVERY, resource.discovery_schedule),
                 (RunType.HEALTH_CHECK, resource.health_check_schedule),
@@ -220,7 +207,9 @@ class Scheduler:
                 self.store.save_run(run)
                 logger.warning(
                     "Recovered stale run: id=%s resource=%s started=%s",
-                    run.id, run.resource_id, run.started_at,
+                    run.id,
+                    run.resource_id,
+                    run.started_at,
                 )
             if stale_runs:
                 logger.info("Recovered %d stale run(s)", len(stale_runs))
@@ -234,7 +223,8 @@ class Scheduler:
             if self.engine is None:
                 logger.warning(
                     "Skipping %s for %s: infrastructure engine not available (install Claude CLI)",
-                    run_type, resource.name,
+                    run_type,
+                    resource.name,
                 )
                 return
             if run_type == RunType.DISCOVERY:
@@ -251,7 +241,8 @@ class Scheduler:
             if self.engine is None:
                 logger.warning(
                     "Skipping %s for %s: infrastructure engine not available (install Claude CLI)",
-                    run_type, resource.name,
+                    run_type,
+                    resource.name,
                 )
                 return
             if run_type == RunType.DISCOVERY:

@@ -78,12 +78,8 @@ class Executor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-            return self._build_result(
-                stdout_bytes, stderr_bytes, proc.returncode or 0
-            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return self._build_result(stdout_bytes, stderr_bytes, proc.returncode or 0)
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
@@ -94,17 +90,13 @@ class Executor:
                 timed_out=True,
             )
         except Exception as e:
-            return CommandResult(
-                stdout="", stderr=f"[EXECUTION ERROR: {e}]", exit_code=-1
-            )
+            return CommandResult(stdout="", stderr=f"[EXECUTION ERROR: {e}]", exit_code=-1)
 
     async def _run_remote(self, command: str, timeout: int) -> CommandResult:
         """Execute a command on a remote host via system ssh."""
         conn = self.connection
         if not conn:
-            return CommandResult(
-                stdout="", stderr="[ERROR: No connection configured]", exit_code=-1
-            )
+            return CommandResult(stdout="", stderr="[ERROR: No connection configured]", exit_code=-1)
 
         # Validate key exists
         if not os.path.isfile(conn.key_path):
@@ -122,12 +114,8 @@ class Executor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-            return self._build_result(
-                stdout_bytes, stderr_bytes, proc.returncode or 0
-            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return self._build_result(stdout_bytes, stderr_bytes, proc.returncode or 0)
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
@@ -138,21 +126,25 @@ class Executor:
                 timed_out=True,
             )
         except Exception as e:
-            return CommandResult(
-                stdout="", stderr=f"[SSH ERROR: {e}]", exit_code=-1
-            )
+            return CommandResult(stdout="", stderr=f"[SSH ERROR: {e}]", exit_code=-1)
 
     def _build_ssh_args(self, conn: ConnectionConfig, command: str) -> list[str]:
         """Build ssh command arguments with multiplexing support."""
         ssh_bin = shutil.which("ssh") or "ssh"
         args = [
             ssh_bin,
-            "-o", "StrictHostKeyChecking=yes",
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            "-o", f"ControlPath={conn.control_path}",
-            "-i", conn.key_path,
-            "-p", str(conn.port),
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            f"ControlPath={conn.control_path}",
+            "-i",
+            conn.key_path,
+            "-p",
+            str(conn.port),
         ]
 
         # Enable multiplexing on first connection
@@ -173,13 +165,16 @@ class Executor:
             self._mux_established = True
             logger.info(
                 "SSH multiplexing established: %s@%s",
-                self.connection.user, self.connection.host,
+                self.connection.user,
+                self.connection.host,
             )
             return True
 
         logger.error(
             "SSH multiplexing failed: %s@%s — %s",
-            self.connection.user, self.connection.host, result.stderr,
+            self.connection.user,
+            self.connection.host,
+            result.stderr,
         )
         return False
 
@@ -193,8 +188,10 @@ class Executor:
         try:
             proc = await asyncio.create_subprocess_exec(
                 ssh_bin,
-                "-O", "exit",
-                "-o", f"ControlPath={conn.control_path}",
+                "-O",
+                "exit",
+                "-o",
+                f"ControlPath={conn.control_path}",
                 f"{conn.user}@{conn.host}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -217,9 +214,7 @@ class Executor:
             return True, f"Connected to {self.connection.user}@{self.connection.host}"
         return False, result.stderr.strip() or "Connection failed"
 
-    def _build_result(
-        self, stdout_bytes: bytes, stderr_bytes: bytes, exit_code: int
-    ) -> CommandResult:
+    def _build_result(self, stdout_bytes: bytes, stderr_bytes: bytes, exit_code: int) -> CommandResult:
         """Build CommandResult with truncation handling."""
         truncated = False
         total_stdout = len(stdout_bytes)

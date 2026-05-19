@@ -25,19 +25,19 @@
     {% if data.db_name %}
     <tr><td>DB Name</td><td>{{ data.db_name }}</td></tr>
     {% endif %}
-    {# Masked secrets #}
-    {% if data.aws_access_key %}
-    <tr><td>AWS Access Key</td><td><code>{{ data.aws_access_key[:4] }}...{{ data.aws_access_key[-4:] }}</code></td></tr>
-    <tr><td>AWS Secret Key</td><td><code>••••••••</code></td></tr>
+    {# Credential references — env var names, never raw secrets #}
+    {% if data.aws_access_key_env_var %}
+    <tr><td>AWS Access Key</td><td>env <code>{{ data.aws_access_key_env_var }}</code></td></tr>
+    <tr><td>AWS Secret Key</td><td>env <code>{{ data.aws_secret_key_env_var }}</code></td></tr>
     {% endif %}
-    {% if data.github_token %}
-    <tr><td>GitHub Token</td><td><code>{{ data.github_token[:8] }}...••••</code></td></tr>
+    {% if data.github_token_env_var %}
+    <tr><td>GitHub Token</td><td>env <code>{{ data.github_token_env_var }}</code></td></tr>
     {% endif %}
     {# Schedule #}
     <tr><td>Health Check</td><td>{{ cron_labels.get(data.health_cron, 'Disabled') }}</td></tr>
     <tr><td>Discovery</td><td>{{ cron_labels.get(data.discovery_cron, 'Disabled') }}</td></tr>
-    {% if data.slack_webhook %}
-    <tr><td>Notifications</td><td><span class="badge badge--healthy">Slack configured</span></td></tr>
+    {% if data.slack_webhook_env_var %}
+    <tr><td>Notifications</td><td>Slack via env <code>{{ data.slack_webhook_env_var }}</code></td></tr>
     {% else %}
     <tr><td>Notifications</td><td class="text-muted">None</td></tr>
     {% endif %}
@@ -47,7 +47,13 @@
   </table>
 
   <div class="alert alert--info mb-4">
-    After creation, Supavision will run an initial discovery to map your {{ type_label | lower }} and establish a monitoring baseline.
+    <strong>What happens next:</strong>
+    <ol class="text-sm ml-3 mt-2">
+      <li>Supavision saves the resource.</li>
+      <li>An initial <strong>Discovery</strong> run maps your {{ type_label | lower }} and stores a baseline.</li>
+      <li>Your first <strong>Health Check</strong> runs against the baseline — issues, metrics, and evidence land in a structured report.</li>
+      <li>Subsequent runs follow the schedule above and alert when issues change.</li>
+    </ol>
   </div>
 
   <form method="post" action="/resources/new">

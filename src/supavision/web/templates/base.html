@@ -44,13 +44,15 @@
     </div>
 
     <nav class="sidebar-nav">
+      {# ── Overview ───────────────────────────────────── #}
       <div class="sidebar-section-label">Overview</div>
-      <a href="/" class="sidebar-item {{ 'sidebar-item--active' if path == '/' and not path.startswith('/resources') }}" title="System overview and quick actions">
+      <a href="/" class="sidebar-item {{ 'sidebar-item--active' if path == '/' and not path.startswith('/resources') }}" title="What needs attention now">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
         <span class="sidebar-item-text">Dashboard</span>
       </a>
 
-      <div class="sidebar-section-label">Monitor</div>
+      {# ── Resources (the things you monitor) ─────────── #}
+      <div class="sidebar-section-label">Resources</div>
       <a href="/resources" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/resources') }}" title="Servers, databases, and cloud accounts">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm0 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1V8zm0 5a1 1 0 011-1h10a1 1 0 011 1v.5a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5V13z"/></svg>
         <span class="sidebar-item-text">Resources</span>
@@ -59,15 +61,16 @@
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 2v2h6V3H5zm0 4v1h6V7H5zm0 3v1h4v-1H5z"/></svg>
         <span class="sidebar-item-text">Reports</span>
       </a>
+      <a href="/metrics" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/metrics') }}" title="Health metrics across resources">
+        <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M1 14V1h1v12h13v1H1zm3-7.5l3 3 2-2 4.5 4.5-.7.7L9 8.8 7 10.8l-3-3-.7.7z"/></svg>
+        <span class="sidebar-item-text">Metrics</span>
+      </a>
+
+      {# ── Incidents & Runs (what's happened / happening) ── #}
+      <div class="sidebar-section-label">Incidents &amp; Runs</div>
       <a href="/alerts" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/alerts') }}" title="Notification delivery history">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 01.993.883L9 2v.5A4.5 4.5 0 0112.5 7v3l1.354 1.354A.5.5 0 0113.5 12H2.5a.5.5 0 01-.354-.854L3.5 10V7A4.5 4.5 0 017 2.5V2a1 1 0 011-1zM6.5 13a1.5 1.5 0 003 0h-3z"/></svg>
         <span class="sidebar-item-text">Alerts</span>
-      </a>
-
-      <div class="sidebar-section-label">Observe</div>
-      <a href="/sessions" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/sessions') }}" title="AI run transcripts and job logs">
-        <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v9a1 1 0 01-1 1H2a1 1 0 01-1-1V3zm1.5 1v7h11V4h-11zM5 14h6v1H5v-1z"/><path d="M4 6h1v1H4V6zm2 0h1v1H6V6zm2 0h4v1H8V6zM4 8h4v1H4V8z" opacity=".5"/></svg>
-        <span class="sidebar-item-text">Sessions</span>
       </a>
       <a href="/activity" class="sidebar-item {{ 'sidebar-item--active' if path == '/activity' }}" title="Event timeline across all resources">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4v4l3 1.5"/></svg>
@@ -77,16 +80,17 @@
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M4.5 3.5a6.5 6.5 0 010 9M11.5 3.5a6.5 6.5 0 000 9"/></svg>
         <span class="sidebar-item-text">Live</span>
       </a>
-      <a href="/metrics" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/metrics') }}" title="Health metrics">
-        <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M1 14V1h1v12h13v1H1zm3-7.5l3 3 2-2 4.5 4.5-.7.7L9 8.8 7 10.8l-3-3-.7.7z"/></svg>
-        <span class="sidebar-item-text">Metrics</span>
+      <a href="/sessions" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/sessions') }}" title="AI run transcripts and job logs">
+        <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v9a1 1 0 01-1 1H2a1 1 0 01-1-1V3zm1.5 1v7h11V4h-11zM5 14h6v1H5v-1z"/><path d="M4 6h1v1H4V6zm2 0h1v1H6V6zm2 0h4v1H8V6zM4 8h4v1H4V8z" opacity=".5"/></svg>
+        <span class="sidebar-item-text">Sessions</span>
       </a>
       <a href="/schedules" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/schedules') }}" title="Automated monitoring frequency">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M4 0a.5.5 0 01.5.5V1h7V.5a.5.5 0 011 0V1H14a1 1 0 011 1v12a1 1 0 01-1 1H2a1 1 0 01-1-1V2a1 1 0 011-1h1.5V.5A.5.5 0 014 0zM2.5 5v9h11V5h-11zm2 1h2v2h-2V6zm4 0h2v2h-2V6zm-4 4h2v2h-2v-2z"/></svg>
         <span class="sidebar-item-text">Schedules</span>
       </a>
 
-      <div class="sidebar-section-label">System</div>
+      {# ── Settings (configuration, queries, admin) ───── #}
+      <div class="sidebar-section-label">Settings</div>
       <a href="/command-center" class="sidebar-item {{ 'sidebar-item--active' if path.startswith('/command-center') }}" title="Structured queries about system state">
         <svg class="sidebar-icon" aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v10a1 1 0 01-1 1H2a1 1 0 01-1-1V3zm2 1v2h4V4H3zm6 0v2h4V4H9zM3 8v2h4V8H3zm6 0v2h4V8H9z"/></svg>
         <span class="sidebar-item-text">Command Center</span>

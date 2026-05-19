@@ -36,10 +36,46 @@
 </div>
 {% endif %}
 
+{# ── Setup Checklist ── #}
+{% if setup_checklist %}
+<div class="settings-section">
+  <h4>Setup checklist</h4>
+  <p class="text-sm text-muted mb-2">Confirm the basics are in place. Items light up as you complete them.</p>
+  <ul class="setup-checklist">
+    {% for item in setup_checklist %}
+    <li class="setup-checklist-item {{ 'setup-checklist-item--done' if item.done else 'setup-checklist-item--todo' }}">
+      <span class="setup-checklist-marker" aria-hidden="true">{{ '✓' if item.done else '○' }}</span>
+      {{ item.label }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 {# ── System Info ── #}
 <div class="settings-section">
   <h4>System Info</h4>
   <div class="info-grid">
+    <div class="info-item">
+      <span class="text-muted text-sm">Claude auth</span>
+      <span>
+        {% if system_info.claude_auth_ok %}
+        <span class="badge badge--healthy">authenticated</span>
+        {% else %}
+        <span class="badge badge--warning">{{ system_info.claude_auth_detail or 'not authenticated' }}</span>
+        {% endif %}
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Scheduler</span>
+      <span>
+        {% if system_info.scheduler_running %}
+        <span class="badge badge--healthy">running</span>
+        {% else %}
+        <span class="badge badge--warning">{{ system_info.scheduler_detail or 'stopped' }}</span>
+        {% endif %}
+      </span>
+    </div>
     <div class="info-item">
       <span class="text-muted text-sm">Database</span>
       <span>{{ system_info.db_size }}</span>

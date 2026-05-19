@@ -57,9 +57,9 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="slack_webhook">Slack Webhook URL</label>
-      <input type="text" class="form-input" id="slack_webhook" name="slack_webhook" value="{{ data.get('slack_webhook', '') }}">
-      <span class="form-hint">Optional. Receive alerts when issues are detected.</span>
+      <label class="form-label" for="slack_webhook_env_var">Slack Webhook — env var name</label>
+      <input type="text" class="form-input" id="slack_webhook_env_var" name="slack_webhook_env_var" value="{{ data.get('slack_webhook_env_var', '') }}" placeholder="SLACK_WEBHOOK_URL">
+      <span class="form-hint">Optional. Name of the environment variable that holds your Slack webhook URL. Supavision never stores webhook URLs.</span>
     </div>
 
     <div class="form-group">

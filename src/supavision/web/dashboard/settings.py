@@ -9,6 +9,7 @@ from . import _render, _require_admin
 
 router = APIRouter()
 
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, new_key: str = ""):
     import os
@@ -23,9 +24,12 @@ async def settings_page(request: Request, new_key: str = ""):
     if claude_path:
         try:
             import subprocess
+
             r = subprocess.run(
                 [claude_path, "--version"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             claude_version = r.stdout.strip() if r.returncode == 0 else None
         except Exception:
@@ -50,16 +54,63 @@ async def settings_page(request: Request, new_key: str = ""):
     for n in notifications:
         n["resource_name"] = resource_map.get(n["resource_id"], "")
 
-    return _render(request, "settings.html", {
-        "api_keys": api_keys,
-        "new_key": new_key,
-        "notifications": notifications,
-        "system_info": {
-            "claude_version": claude_version,
-            "db_size": db_size,
-            "resource_count": len(resources),
+    # Scheduler status (P2 #14)
+    scheduler_status: dict[str, object] = {"running": False, "details": "not started"}
+    try:
+        from ...scheduler import get_scheduler_status
+
+        scheduler_status = get_scheduler_status()
+    except Exception as e:
+        scheduler_status = {"running": False, "details": f"error: {e}"}
+
+    # Claude auth status (file-based check — never invokes the CLI)
+    try:
+        from ..._auth_check import check_claude_auth
+
+        claude_auth_ok, claude_auth_detail = check_claude_auth()
+    except Exception:
+        claude_auth_ok, claude_auth_detail = False, "auth check failed"
+
+    # Setup checklist (P2 #14) — derived from current system state.
+    has_admin_user = store.count_users() > 0
+    has_api_key = len(api_keys) > 0
+    has_any_resource = len(resources) > 0
+    has_successful_run = False
+    for r in resources:
+        runs = store.get_runs(r.id, limit=1)
+        if runs and str(runs[0].status) == "completed":
+            has_successful_run = True
+            break
+
+    setup_checklist = [
+        {"label": "Claude CLI installed", "done": claude_path is not None},
+        {"label": "Claude CLI authenticated", "done": claude_auth_ok},
+        {"label": "Admin user created", "done": has_admin_user},
+        {"label": "API key created (for CLI / external clients)", "done": has_api_key},
+        {"label": "At least one resource added", "done": has_any_resource},
+        {"label": "At least one successful run", "done": has_successful_run},
+        {"label": "Scheduler running", "done": bool(scheduler_status.get("running"))},
+    ]
+
+    return _render(
+        request,
+        "settings.html",
+        {
+            "api_keys": api_keys,
+            "new_key": new_key,
+            "notifications": notifications,
+            "system_info": {
+                "claude_version": claude_version,
+                "claude_auth_ok": claude_auth_ok,
+                "claude_auth_detail": claude_auth_detail,
+                "scheduler_running": bool(scheduler_status.get("running")),
+                "scheduler_detail": scheduler_status.get("details", ""),
+                "db_size": db_size,
+                "resource_count": len(resources),
+            },
+            "setup_checklist": setup_checklist,
         },
-    })
+    )
 
 
 @router.post("/settings/api-keys")
@@ -83,9 +134,7 @@ async def settings_create_api_key(request: Request):
     store.save_api_key(key_id, key_hash, label=label, role=role)
 
     # Redirect back to settings with the raw key displayed once
-    return RedirectResponse(
-        url=f"/settings?new_key={raw_key}", status_code=303
-    )
+    return RedirectResponse(url=f"/settings?new_key={raw_key}", status_code=303)
 
 
 @router.post("/settings/api-keys/{key_id}/revoke")
@@ -99,6 +148,7 @@ async def settings_revoke_api_key(key_id: str, request: Request):
         if request.headers.get("HX-Request"):
             return HTMLResponse(content="", status_code=200)
         from fastapi.responses import RedirectResponse
+
         return RedirectResponse(url="/settings", status_code=303)
     raise HTTPException(status_code=404, detail="Key not found")
 
@@ -126,4 +176,3 @@ async def settings_check_claude(request: Request):
         return {"ok": True, "message": "Claude CLI detected. Infrastructure monitoring enabled."}
     except RuntimeError as e:
         return {"ok": False, "message": str(e)}
-

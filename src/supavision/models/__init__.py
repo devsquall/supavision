@@ -11,8 +11,13 @@ See ARCHITECTURE.md for the full design rationale.
 from .core import (
     Credential,
     EvalStrategy,
+    Incident,
+    IncidentNote,
+    IncidentState,
     Resource,
     Run,
+    RunMismatchError,
+    RunNotFoundError,
     RunStatus,
     RunType,
     Schedule,
@@ -33,7 +38,26 @@ from .health import (
 
 __all__ = [
     # Core
-    "Credential", "EvalStrategy", "Resource", "Run", "RunStatus", "RunType", "Schedule", "Session", "User",
+    "Credential",
+    "EvalStrategy",
+    "Incident",
+    "IncidentNote",
+    "IncidentState",
+    "Resource",
+    "Run",
+    "RunMismatchError",
+    "RunNotFoundError",
+    "RunStatus",
+    "RunType",
+    "Schedule",
+    "Session",
+    "User",
     # Health
-    "Checklist", "ChecklistItem", "Evaluation", "Metric", "Report", "Severity", "SystemContext",
+    "Checklist",
+    "ChecklistItem",
+    "Evaluation",
+    "Metric",
+    "Report",
+    "Severity",
+    "SystemContext",
 ]

@@ -3001,3 +3001,184 @@ a.empty-card:hover * { text-decoration: none; }
   .table--stack td:has(.btn) { justify-content: flex-end; }
   .table--stack td:has(.btn)::before { display: none; }
 }
+
+/* ── Workflow tracker (resource detail page) ──────────────────────── */
+
+.workflow-tracker {
+  background: var(--color-surface-2);
+  padding: 0.75rem 1rem;
+}
+
+.workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 0.5rem;
+  counter-reset: workflow;
+}
+
+.workflow-step {
+  position: relative;
+  padding: 0.25rem 0.75rem 0.25rem 1.75rem;
+  border-radius: 999px;
+  background: var(--color-surface-3);
+  color: var(--color-text-2);
+  font-size: 0.85rem;
+  counter-increment: workflow;
+}
+
+.workflow-step::before {
+  content: counter(workflow);
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  background: var(--color-surface);
+  color: var(--color-text-2);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.workflow-step--done {
+  background: var(--color-healthy-dim);
+  color: var(--color-healthy);
+}
+.workflow-step--done::before {
+  background: var(--color-healthy);
+  color: var(--color-surface);
+}
+
+.workflow-step--current {
+  background: var(--color-info-dim);
+  color: var(--color-info);
+  font-weight: 600;
+}
+.workflow-step--current::before {
+  background: var(--color-info);
+  color: var(--color-surface);
+}
+
+/* ── Active issues list (resource detail page) ────────────────────── */
+
+.active-issues-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.active-issues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.issue-card {
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: var(--color-surface-2);
+  border-left: 3px solid var(--color-border);
+}
+.issue-card--critical { border-left-color: var(--color-critical); }
+.issue-card--warning  { border-left-color: var(--color-warning); }
+.issue-card--info     { border-left-color: var(--color-info); }
+
+.issue-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.issue-card-body {
+  margin: 0.25rem 0;
+}
+
+.issue-card-body pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--color-surface-3);
+  padding: 0.5rem;
+  border-radius: 4px;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.issue-card-rec {
+  margin-top: 0.25rem;
+  color: var(--color-text);
+}
+
+.recommended-action {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Wizard form indicators (env var status) ──────────────────────── */
+
+.text-success { color: var(--color-healthy); }
+.text-warn    { color: var(--color-warning); }
+
+/* ── Empty state (component) ──────────────────────────────────────── */
+
+.empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-2);
+}
+.empty-state h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--color-text);
+}
+
+/* ── Setup checklist (settings page) ─────────────────────────────── */
+
+.setup-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.setup-checklist-item {
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.setup-checklist-item--done {
+  background: var(--color-healthy-dim);
+  color: var(--color-text);
+}
+
+.setup-checklist-item--todo {
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+}
+
+.setup-checklist-marker {
+  font-weight: 700;
+  width: 1rem;
+  text-align: center;
+}
+
+.setup-checklist-item--done .setup-checklist-marker {
+  color: var(--color-healthy);
+}

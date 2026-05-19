@@ -40,19 +40,23 @@ async def alerts_page(
     for item in items:
         item["resource_name"] = resource_map.get(item.get("resource_id"), "Unknown")
 
-    return _render(request, "alerts.html", {
-        "items": items,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "resources": resources,
-        "severities": ["critical", "warning", "healthy"],
-        "channels": ["slack", "webhook"],
-        "statuses": ["sent", "failed"],
-        "filters": {
-            "resource_id": resource_id,
-            "severity": severity,
-            "channel": channel,
-            "status": status,
+    return _render(
+        request,
+        "alerts.html",
+        {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "resources": resources,
+            "severities": ["critical", "warning", "healthy"],
+            "channels": ["slack", "webhook"],
+            "statuses": ["sent", "failed"],
+            "filters": {
+                "resource_id": resource_id,
+                "severity": severity,
+                "channel": channel,
+                "status": status,
+            },
         },
-    })
+    )

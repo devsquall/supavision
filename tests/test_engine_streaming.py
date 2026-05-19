@@ -132,10 +132,17 @@ class TestOutputValidation:
         engine = _make_engine()
 
         large_output = "x" * 6_000_000  # 6MB
-        mock_once = AsyncMock(return_value=(large_output, {
-            "turns": 0, "tool_calls": 0,
-            "input_tokens": 0, "output_tokens": 0,
-        }))
+        mock_once = AsyncMock(
+            return_value=(
+                large_output,
+                {
+                    "turns": 0,
+                    "tool_calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            )
+        )
 
         with patch.object(engine, "_run_claude_cli_once", mock_once):
             output, stats = await engine._run_claude_cli("test prompt", run_id=None)
@@ -154,8 +161,10 @@ class TestRetryLogic:
 
         good_output = "A" * 100  # Over 50 char minimum
         good_stats = {
-            "turns": 0, "tool_calls": 0,
-            "input_tokens": 0, "output_tokens": 0,
+            "turns": 0,
+            "tool_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
         call_count = 0
@@ -181,8 +190,10 @@ class TestRetryLogic:
 
         good_output = "B" * 100
         good_stats = {
-            "turns": 0, "tool_calls": 0,
-            "input_tokens": 0, "output_tokens": 0,
+            "turns": 0,
+            "tool_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
         call_count = 0
@@ -222,6 +233,7 @@ class TestFormatStreamEvent:
 
     def test_system_init(self):
         from supavision.engine import _format_stream_event
+
         event = {"type": "system", "subtype": "init", "model": "claude-sonnet-4", "tools": ["Bash", "Read"]}
         lines = _format_stream_event(event, 0.5)
         assert len(lines) == 2
@@ -230,6 +242,7 @@ class TestFormatStreamEvent:
 
     def test_assistant_text(self):
         from supavision.engine import _format_stream_event
+
         event = {"type": "assistant", "message": {"content": [{"type": "text", "text": "Checking services..."}]}}
         lines = _format_stream_event(event, 5.0)
         assert len(lines) == 1
@@ -237,9 +250,15 @@ class TestFormatStreamEvent:
 
     def test_assistant_tool_use_bash(self):
         from supavision.engine import _format_stream_event
-        event = {"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "name": "Bash", "input": {"command": "docker ps"}},
-        ]}}
+
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "docker ps"}},
+                ]
+            },
+        }
         lines = _format_stream_event(event, 10.0)
         assert len(lines) == 1
         assert "Bash" in lines[0]
@@ -247,10 +266,16 @@ class TestFormatStreamEvent:
 
     def test_assistant_mixed_content(self):
         from supavision.engine import _format_stream_event
-        event = {"type": "assistant", "message": {"content": [
-            {"type": "text", "text": "Let me check..."},
-            {"type": "tool_use", "name": "Read", "input": {"file_path": "/etc/nginx/nginx.conf"}},
-        ]}}
+
+        event = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Let me check..."},
+                    {"type": "tool_use", "name": "Read", "input": {"file_path": "/etc/nginx/nginx.conf"}},
+                ]
+            },
+        }
         lines = _format_stream_event(event, 7.0)
         assert len(lines) == 2
         assert "Let me check" in lines[0]
@@ -258,36 +283,54 @@ class TestFormatStreamEvent:
 
     def test_user_tool_result(self):
         from supavision.engine import _format_stream_event
-        event = {"type": "user", "message": {"content": [
-            {"type": "tool_result", "tool_use_id": "x", "content": "CONTAINER ID  IMAGE\nabc  nginx"},
-        ]}}
+
+        event = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "x", "content": "CONTAINER ID  IMAGE\nabc  nginx"},
+                ]
+            },
+        }
         lines = _format_stream_event(event, 11.0)
         assert len(lines) >= 1
         assert "CONTAINER" in lines[0]
 
     def test_user_tool_result_error(self):
         from supavision.engine import _format_stream_event
-        event = {"type": "user", "message": {"content": [
-            {"type": "tool_result", "tool_use_id": "x", "content": "Permission denied", "is_error": True},
-        ]}}
+
+        event = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "x", "content": "Permission denied", "is_error": True},
+                ]
+            },
+        }
         lines = _format_stream_event(event, 12.0)
         assert len(lines) == 1
         assert "Permission denied" in lines[0]
 
     def test_user_tool_result_truncation(self):
         from supavision.engine import _format_stream_event
+
         long_output = "x" * 2000
-        event = {"type": "user", "message": {"content": [
-            {"type": "tool_result", "tool_use_id": "x", "content": long_output},
-        ]}}
+        event = {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "x", "content": long_output},
+                ]
+            },
+        }
         lines = _format_stream_event(event, 13.0)
         total_text = "".join(lines)
         assert len(total_text) < 2000
 
     def test_result_success(self):
         from supavision.engine import _format_stream_event
-        event = {"type": "result", "subtype": "success", "num_turns": 5,
-                 "duration_ms": 45000, "total_cost_usd": 0.042}
+
+        event = {"type": "result", "subtype": "success", "num_turns": 5, "duration_ms": 45000, "total_cost_usd": 0.042}
         lines = _format_stream_event(event, 45.0)
         assert len(lines) == 1
         assert "Done" in lines[0]
@@ -295,6 +338,7 @@ class TestFormatStreamEvent:
 
     def test_result_error(self):
         from supavision.engine import _format_stream_event
+
         event = {"type": "result", "subtype": "error", "is_error": True, "error": "timeout"}
         lines = _format_stream_event(event, 60.0)
         assert len(lines) == 1
@@ -302,18 +346,22 @@ class TestFormatStreamEvent:
 
     def test_skips_hook_events(self):
         from supavision.engine import _format_stream_event
+
         assert _format_stream_event({"type": "system", "subtype": "hook_started"}, 0.0) == []
 
     def test_skips_rate_limit(self):
         from supavision.engine import _format_stream_event
+
         assert _format_stream_event({"type": "rate_limit_event"}, 0.0) == []
 
     def test_handles_empty_content(self):
         from supavision.engine import _format_stream_event
+
         assert _format_stream_event({"type": "assistant", "message": {"content": []}}, 1.0) == []
 
     def test_handles_unknown_event(self):
         from supavision.engine import _format_stream_event
+
         assert _format_stream_event({"type": "unknown_future_type"}, 1.0) == []
 
 
@@ -322,9 +370,15 @@ class TestExtractResult:
 
     def test_success_event(self):
         from supavision.engine import _extract_result
-        event = {"type": "result", "result": "## Report\nAll healthy",
-                 "num_turns": 3, "duration_ms": 12000, "total_cost_usd": 0.05,
-                 "usage": {"input_tokens": 5000, "output_tokens": 1200}}
+
+        event = {
+            "type": "result",
+            "result": "## Report\nAll healthy",
+            "num_turns": 3,
+            "duration_ms": 12000,
+            "total_cost_usd": 0.05,
+            "usage": {"input_tokens": 5000, "output_tokens": 1200},
+        }
         text, stats = _extract_result(event)
         assert text == "## Report\nAll healthy"
         assert stats["num_turns"] == 3
@@ -333,12 +387,14 @@ class TestExtractResult:
 
     def test_non_result_returns_none(self):
         from supavision.engine import _extract_result
+
         text, stats = _extract_result({"type": "assistant", "message": {}})
         assert text is None
         assert stats == {}
 
     def test_missing_usage_defaults_zero(self):
         from supavision.engine import _extract_result
+
         text, stats = _extract_result({"type": "result", "result": "report"})
         assert text == "report"
         assert stats["input_tokens"] == 0
@@ -349,18 +405,22 @@ class TestFormatToolInput:
 
     def test_bash(self):
         from supavision.engine import _format_tool_input
+
         assert "docker ps" in _format_tool_input("Bash", {"command": "docker ps"})
 
     def test_read(self):
         from supavision.engine import _format_tool_input
+
         assert "nginx.conf" in _format_tool_input("Read", {"file_path": "/etc/nginx/nginx.conf"})
 
     def test_grep(self):
         from supavision.engine import _format_tool_input
+
         result = _format_tool_input("Grep", {"pattern": "error", "path": "/var/log"})
         assert "error" in result
 
     def test_unknown_tool_fallback(self):
         from supavision.engine import _format_tool_input
+
         result = _format_tool_input("FutureTool", {"key": "value"})
         assert "key" in result

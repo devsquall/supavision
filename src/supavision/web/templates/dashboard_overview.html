@@ -108,6 +108,68 @@
       {% endif %}
     </div>
 
+    {# Never Baselined #}
+    {% if never_baselined_items %}
+    <div class="cc-panel">
+      <div class="cc-panel-header">
+        <h3 class="cc-panel-title">Never baselined</h3>
+        <span class="text-muted text-sm">Resources that haven't been discovered — run discovery to set a baseline</span>
+        <span class="badge badge--unknown">{{ never_baselined_items | length }}</span>
+      </div>
+      {% for item in never_baselined_items %}
+      <div class="cc-action-item">
+        <div class="cc-action-body">
+          <div class="inline-actions">
+            <a href="{{ item.link }}" class="cc-action-name">{{ item.name }}</a>
+            <span class="badge badge--type">{{ item.resource_type }}</span>
+          </div>
+          <div class="cc-action-explanation">No discovery has completed for this resource yet.</div>
+        </div>
+        <div class="cc-action-buttons">
+          <button class="btn btn-sm"
+                  hx-post="{{ item.discover_url }}"
+                  hx-swap="none"
+                  data-action="discover"
+                  data-success-msg="Discovery started">
+            Run Discovery
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Stale #}
+    {% if stale_items %}
+    <div class="cc-panel">
+      <div class="cc-panel-header">
+        <h3 class="cc-panel-title">Stale</h3>
+        <span class="text-muted text-sm">Health check older than 24h — data may not reflect current state</span>
+        <span class="badge badge--unknown">{{ stale_items | length }}</span>
+      </div>
+      {% for item in stale_items %}
+      <div class="cc-action-item">
+        <div class="cc-action-body">
+          <div class="inline-actions">
+            <a href="{{ item.link }}" class="cc-action-name">{{ item.name }}</a>
+            <span class="badge badge--type">{{ item.resource_type }}</span>
+            <span class="text-xs text-muted">last check: {{ item.age_label }}</span>
+          </div>
+        </div>
+        <div class="cc-action-buttons">
+          <button class="btn btn-sm btn-outline"
+                  hx-post="{{ item.recheck_url }}"
+                  hx-swap="none"
+                  data-action="check"
+                  data-success-msg="Health check started">
+            Run check
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {# Quick Actions #}
     <div class="cc-panel">
       <h3 class="cc-panel-title mb-3">Quick Actions</h3>

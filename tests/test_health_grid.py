@@ -140,16 +140,12 @@ class TestHealthGrid:
 
         report_recent = _make_report(resource.id)
         store.save_report(report_recent)
-        ev_recent = _make_evaluation(
-            report_recent.id, resource.id, Severity.HEALTHY, created_at=recent
-        )
+        ev_recent = _make_evaluation(report_recent.id, resource.id, Severity.HEALTHY, created_at=recent)
         store.save_evaluation(ev_recent)
 
         report_old = _make_report(resource.id)
         store.save_report(report_old)
-        ev_old = _make_evaluation(
-            report_old.id, resource.id, Severity.CRITICAL, created_at=old
-        )
+        ev_old = _make_evaluation(report_old.id, resource.id, Severity.CRITICAL, created_at=old)
         store.save_evaluation(ev_old)
 
         grid = store.get_health_grid(resource.id, days=7)
@@ -208,9 +204,7 @@ class TestHealthGrid:
 #       status_text, status_type = "Awaiting Data", "unknown"
 
 
-def _compute_status_banner(
-    critical: int, warning: int, healthy: int, total: int
-) -> tuple[str, str]:
+def _compute_status_banner(critical: int, warning: int, healthy: int, total: int) -> tuple[str, str]:
     """Extracted status banner logic from dashboard_overview route."""
     if critical > 0 and critical == total:
         return "Major Outage", "critical"

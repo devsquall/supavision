@@ -29,13 +29,19 @@ def _sparkline_points(values: list[int], width: int = 64, height: int = 18) -> s
         points.append(f"{x},{y}")
     return " ".join(points)
 
+
 router = APIRouter()
 
 
 def _compute_sort_score(severity: str, last_check_iso: str | None, stage: str | None) -> float:
     """Prioritize action items by severity, staleness, and pipeline stage."""
     severity_weights = {
-        "critical": 0, "high": 10, "warning": 20, "medium": 30, "low": 40, "info": 50,
+        "critical": 0,
+        "high": 10,
+        "warning": 20,
+        "medium": 30,
+        "low": 40,
+        "info": 50,
     }
     score = severity_weights.get(severity, 50)
 
@@ -94,14 +100,16 @@ def _get_recent_events(store, limit: int = 10) -> list[dict]:
         ev = store.get_evaluation(run.evaluation_id) if run.evaluation_id else None
         severity = str(ev.severity) if ev else None
         summary = ev.summary[:80] if ev and ev.summary else str(run.status)
-        events.append({
-            "type": str(run.run_type),
-            "resource_name": resources.get(run.resource_id, "Unknown"),
-            "severity": severity,
-            "summary": summary,
-            "created_at": (run.started_at or run.created_at).isoformat(),
-            "link": f"/resources/{run.resource_id}",
-        })
+        events.append(
+            {
+                "type": str(run.run_type),
+                "resource_name": resources.get(run.resource_id, "Unknown"),
+                "severity": severity,
+                "summary": summary,
+                "created_at": (run.started_at or run.created_at).isoformat(),
+                "link": f"/resources/{run.resource_id}",
+            }
+        )
 
     events.sort(key=lambda e: e["created_at"], reverse=True)
     return events[:limit]
@@ -113,13 +121,15 @@ def _get_live_activities(store) -> list[dict]:
     activities = []
 
     for run in store.get_pending_runs() + store.get_running_runs():
-        activities.append({
-            "type": str(run.run_type),
-            "label": resources.get(run.resource_id, "Unknown"),
-            "status": str(run.status),
-            "started_at": (run.started_at or run.created_at).isoformat(),
-            "link": f"/resources/{run.resource_id}",
-        })
+        activities.append(
+            {
+                "type": str(run.run_type),
+                "label": resources.get(run.resource_id, "Unknown"),
+                "status": str(run.status),
+                "started_at": (run.started_at or run.created_at).isoformat(),
+                "link": f"/resources/{run.resource_id}",
+            }
+        )
 
     return activities
 
@@ -167,27 +177,89 @@ async def dashboard_overview(request: Request):
             last_check = run.completed_at.isoformat() if run and run.completed_at else None
             explanation = ev.summary[:150] if ev and ev.summary else f"Resource has {sev} status"
             impact = (
-                "Investigate and resolve, then re-check." if sev == "critical"
+                "Investigate and resolve, then re-check."
+                if sev == "critical"
                 else "Monitor \u2014 may escalate or self-resolve."
             )
             # Workstream B: severity streak — how many consecutive runs had this severity
             streak = _severity_streak(store, r.id, sev)
-            action_items.append({
-                "severity": sev,
-                "name": r.name,
-                "explanation": explanation,
-                "impact": impact,
-                "link": f"/resources/{r.id}",
-                "action_label": "Investigate",
-                "recheck_url": f"/resources/{r.id}/health-check",
-                "sort_score": _compute_sort_score(sev, last_check, None),
-                "last_check": last_check,
-                "streak": streak,
-            })
+            action_items.append(
+                {
+                    "severity": sev,
+                    "name": r.name,
+                    "explanation": explanation,
+                    "impact": impact,
+                    "link": f"/resources/{r.id}",
+                    "action_label": "Investigate",
+                    "recheck_url": f"/resources/{r.id}/health-check",
+                    "sort_score": _compute_sort_score(sev, last_check, None),
+                    "last_check": last_check,
+                    "streak": streak,
+                }
+            )
 
         action_items.sort(key=lambda x: (x["sort_score"], x.get("last_check") or ""))
         total_action_items = len(action_items)
         action_items = action_items[:8]
+
+        # Stale: resources whose last successful health check is older than 24h
+        # (or never ran). The exact freshness window matches the per-resource-card
+        # "stale" bucket used on /resources.
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        stale_items: list[dict] = []
+        never_baselined_items: list[dict] = []
+        for r in resources:
+            hc_run = latest_runs.get((r.id, str(RunType.HEALTH_CHECK)))
+            disc_run = latest_runs.get((r.id, str(RunType.DISCOVERY)))
+
+            if not disc_run or str(disc_run.status) != "completed":
+                never_baselined_items.append(
+                    {
+                        "name": r.name,
+                        "resource_type": r.resource_type,
+                        "link": f"/resources/{r.id}",
+                        "discover_url": f"/resources/{r.id}/discover",
+                    }
+                )
+                continue  # Don't double-report as stale if never baselined
+
+            if not hc_run or not hc_run.completed_at:
+                stale_items.append(
+                    {
+                        "name": r.name,
+                        "resource_type": r.resource_type,
+                        "last_check": None,
+                        "age_label": "never",
+                        "link": f"/resources/{r.id}",
+                        "recheck_url": f"/resources/{r.id}/health-check",
+                    }
+                )
+                continue
+
+            age = now - hc_run.completed_at
+            if age > timedelta(hours=24):
+                if age > timedelta(days=7):
+                    age_label = f"{age.days}d ago"
+                elif age > timedelta(days=1):
+                    age_label = f"{age.days}d ago"
+                else:
+                    age_label = f"{int(age.total_seconds() // 3600)}h ago"
+                stale_items.append(
+                    {
+                        "name": r.name,
+                        "resource_type": r.resource_type,
+                        "last_check": hc_run.completed_at.isoformat(),
+                        "age_label": age_label,
+                        "link": f"/resources/{r.id}",
+                        "recheck_url": f"/resources/{r.id}/health-check",
+                    }
+                )
+
+        stale_items.sort(key=lambda x: x["last_check"] or "")
+        stale_items = stale_items[:8]
+        never_baselined_items = never_baselined_items[:8]
 
         # Sparkline trend data (last 7 days, current count as final point)
         severity_trends = {
@@ -196,25 +268,31 @@ async def dashboard_overview(request: Request):
             "healthy": [0, 0, 0, 0, 0, 0, healthy],
         }
 
-        return _render(request, "dashboard_overview.html", {
-            "total_resources": total,
-            "critical_count": critical,
-            "warning_count": warning,
-            "healthy_count": healthy,
-            "system_status_text": status_text,
-            "system_status_type": status_type,
-            "action_items": action_items,
-            "total_action_items": total_action_items,
-            "recent_events": _get_recent_events(store, limit=10),
-            "activities": _get_live_activities(store),
-            "has_resources": total > 0,
-            "sparkline_critical": _sparkline_points(severity_trends["critical"]),
-            "sparkline_warning": _sparkline_points(severity_trends["warning"]),
-            "sparkline_healthy": _sparkline_points(severity_trends["healthy"]),
-            "critical_delta": 0,
-            "warning_delta": 0,
-            "healthy_delta": 0,
-        })
+        return _render(
+            request,
+            "dashboard_overview.html",
+            {
+                "total_resources": total,
+                "critical_count": critical,
+                "warning_count": warning,
+                "healthy_count": healthy,
+                "system_status_text": status_text,
+                "system_status_type": status_type,
+                "action_items": action_items,
+                "total_action_items": total_action_items,
+                "stale_items": stale_items,
+                "never_baselined_items": never_baselined_items,
+                "recent_events": _get_recent_events(store, limit=10),
+                "activities": _get_live_activities(store),
+                "has_resources": total > 0,
+                "sparkline_critical": _sparkline_points(severity_trends["critical"]),
+                "sparkline_warning": _sparkline_points(severity_trends["warning"]),
+                "sparkline_healthy": _sparkline_points(severity_trends["healthy"]),
+                "critical_delta": 0,
+                "warning_delta": 0,
+                "healthy_delta": 0,
+            },
+        )
     except Exception:
         logger.exception("dashboard_overview handler failed")
         raise
@@ -224,6 +302,10 @@ async def dashboard_overview(request: Request):
 async def dashboard_live_activity(request: Request):
     """Live activity fragment — running/pending runs + agent jobs (polled every 5s)."""
     store = request.app.state.store
-    return _render(request, "dashboard_live_activity.html", {
-        "activities": _get_live_activities(store),
-    })
+    return _render(
+        request,
+        "dashboard_live_activity.html",
+        {
+            "activities": _get_live_activities(store),
+        },
+    )

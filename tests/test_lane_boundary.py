@@ -36,15 +36,30 @@ _REMOVED_LANE2_FILES = [
 
 # Lane 2 symbols that infra files must not import
 LANE2_SYMBOLS = {
-    "FindingStage", "FindingSeverity", "Finding", "ManualTask", "WorkItem",
-    "AgentJob", "Feedback", "Transition", "BlocklistEntry",
-    "FeedbackType", "TaskSource", "JobStatus", "TaskCategory", "Priority",
+    "FindingStage",
+    "FindingSeverity",
+    "Finding",
+    "ManualTask",
+    "WorkItem",
+    "AgentJob",
+    "Feedback",
+    "Transition",
+    "BlocklistEntry",
+    "FeedbackType",
+    "TaskSource",
+    "JobStatus",
+    "TaskCategory",
+    "Priority",
     "VALID_TRANSITIONS",
 }
 
 # Lane 1 symbols that codebase files must not import
 LANE1_SYMBOLS = {
-    "Evaluation", "SystemContext", "Checklist", "ChecklistItem", "Severity",
+    "Evaluation",
+    "SystemContext",
+    "Checklist",
+    "ChecklistItem",
+    "Severity",
 }
 
 

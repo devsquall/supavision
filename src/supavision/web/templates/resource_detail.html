@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_glossary.html' import cron_friendly %}
+{% from 'components/_issue_panel.html' import issue_list %}
 {% block title %}{{ resource.name }} - Supavision{% endblock %}
 {% block content %}
 
@@ -40,6 +41,55 @@
     </div>
     <a href="/resources/{{ resource.id }}/edit" class="btn btn-outline">Edit</a>
   </div>
+</div>
+
+{# ── Workflow tracker ── #}
+{% if workflow_step %}
+<div class="settings-section workflow-tracker" data-workflow-step="{{ workflow_step }}">
+  <ol class="workflow-steps">
+    <li class="workflow-step workflow-step--done">Add Resource</li>
+    <li class="workflow-step {{ 'workflow-step--done' if workflow_step != 'needs_discovery' else 'workflow-step--current' }}">Discovery Baseline</li>
+    <li class="workflow-step {{ 'workflow-step--done' if workflow_step in ('verify_fix', 'healthy') else 'workflow-step--current' if workflow_step == 'needs_health_check' else '' }}">Health Check</li>
+    <li class="workflow-step {{ 'workflow-step--current' if workflow_step == 'verify_fix' else 'workflow-step--done' if workflow_step == 'healthy' else '' }}">Verify Fix</li>
+  </ol>
+</div>
+{% endif %}
+
+{# ── Active issues + recommended action ── #}
+<div class="settings-section">
+  <div class="active-issues-header">
+    <h4 style="display:inline-block; margin-right: 0.75rem;">Active issues</h4>
+    {% if severity %}<span class="badge badge--{{ severity }}">{{ severity }}</span>{% endif %}
+  </div>
+  {% if active_issues %}
+  {{ issue_list(active_issues) }}
+  {% elif legacy_issue_summary %}
+  <p class="text-sm text-muted">
+    <em>Legacy report — no structured issue list available.</em>
+  </p>
+  <blockquote class="text-sm">{{ legacy_issue_summary }}</blockquote>
+  {% else %}
+  <p class="text-muted text-sm">No active issues detected on the latest health check.</p>
+  {% endif %}
+
+  {% if recommended_action %}
+  <div class="recommended-action mt-3">
+    <strong>Next:</strong>
+    {% if recommended_action.method == 'post' %}
+    <button class="btn btn-sm"
+            hx-post="{{ recommended_action.href }}"
+            hx-swap="none"
+            data-action="recommended"
+            data-success-msg="Run started"
+            {% if active_run %}disabled title="A run is already in progress"{% endif %}>
+      {{ recommended_action.label }}
+    </button>
+    {% else %}
+    <a href="{{ recommended_action.href }}" class="btn btn-sm">{{ recommended_action.label }}</a>
+    {% endif %}
+    <span class="text-sm text-muted ml-2">{{ recommended_action.hint }}</span>
+  </div>
+  {% endif %}
 </div>
 
 {# ── Live Output Terminal ── #}

@@ -45,10 +45,32 @@
       </div>
     </div>
 
+    {% if health_schedule_preview or discovery_schedule_preview %}
+    <div class="alert alert--info mt-4">
+      <strong>Schedule preview — next runs</strong>
+      {% if health_schedule_preview %}
+      <p class="text-sm mt-2"><strong>Health check:</strong></p>
+      <ul class="text-sm ml-2">
+        {% for ts in health_schedule_preview %}
+        <li><code>{{ ts }}</code></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if discovery_schedule_preview %}
+      <p class="text-sm mt-2"><strong>Discovery:</strong></p>
+      <ul class="text-sm ml-2">
+        {% for ts in discovery_schedule_preview %}
+        <li><code>{{ ts }}</code></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div class="form-group mt-4">
-      <label class="form-label">Slack Webhook URL</label>
-      <input class="form-input" type="url" name="slack_webhook" value="{{ data.get('slack_webhook', '') }}" placeholder="https://hooks.slack.com/services/...">
-      <span class="form-hint">Optional. Receive alerts when health issues are detected.</span>
+      <label class="form-label" for="slack_webhook_env_var">Slack Webhook — env var name</label>
+      <input class="form-input" type="text" id="slack_webhook_env_var" name="slack_webhook_env_var" value="{{ data.get('slack_webhook_env_var', '') }}" placeholder="SLACK_WEBHOOK_URL">
+      <span class="form-hint">Optional. Name of the environment variable holding your Slack webhook URL. The URL itself is never stored.</span>
     </div>
 
     <div class="wizard-footer">

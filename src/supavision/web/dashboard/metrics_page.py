@@ -56,21 +56,29 @@ async def metrics_page(request: Request):
             elif "count" in name_lower or "total" in name_lower:
                 unit = ""
 
-            metrics.append({
-                "name": name,
-                "value": value,
-                "display_value": f"{value:,.1f}" if isinstance(value, float) else str(value),
-                "unit": unit,
-                "sparkline_points": sparkline_points,
-                "sparkline_width": 120,
-                "sparkline_height": 32,
-            })
-        infra_cards.append({
-            "resource_name": resource.name,
-            "resource_id": resource.id,
-            "metrics": metrics,
-        })
+            metrics.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "display_value": f"{value:,.1f}" if isinstance(value, float) else str(value),
+                    "unit": unit,
+                    "sparkline_points": sparkline_points,
+                    "sparkline_width": 120,
+                    "sparkline_height": 32,
+                }
+            )
+        infra_cards.append(
+            {
+                "resource_name": resource.name,
+                "resource_id": resource.id,
+                "metrics": metrics,
+            }
+        )
 
-    return _render(request, "metrics.html", {
-        "infra_cards": infra_cards,
-    })
+    return _render(
+        request,
+        "metrics.html",
+        {
+            "infra_cards": infra_cards,
+        },
+    )

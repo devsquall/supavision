@@ -53,6 +53,7 @@ class TestVersion:
         assert "supavision" in result.stdout.lower()
         # Version string should contain a semver-like pattern
         import re
+
         assert re.search(r"\d+\.\d+\.\d+", result.stdout)  # Match any semver
 
 
@@ -194,7 +195,6 @@ class TestPurgeDryRun:
         assert "dry run" in result.stderr.lower() or "would delete" in result.stderr.lower()
 
 
-
 # ── api-key ────────────────────────────────────────────────────
 class TestApiKeyCLI:
     def test_create_and_list(self, db_path):
@@ -221,6 +221,7 @@ class TestApiKeyCLI:
         result = _run_cli("--db", db_path, "api-key-revoke", key_id)
         assert result.returncode == 0
         json.loads(result.stdout)
+
 
 # ── seed-demo ──────────────────────────────────────────────────
 

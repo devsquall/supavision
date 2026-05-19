@@ -61,19 +61,25 @@ async def schedules_page(request: Request):
                 except (ValueError, KeyError):
                     pass
 
-        schedule_rows.append({
-            "resource_id": resource.id,
-            "resource_name": resource.name,
-            "discovery_cron": discovery_cron,
-            "health_cron": health_cron,
-            "next_run": next_run.isoformat() if next_run else "",
-            "enabled": resource.enabled,
-        })
+        schedule_rows.append(
+            {
+                "resource_id": resource.id,
+                "resource_name": resource.name,
+                "discovery_cron": discovery_cron,
+                "health_cron": health_cron,
+                "next_run": next_run.isoformat() if next_run else "",
+                "enabled": resource.enabled,
+            }
+        )
 
-    return _render(request, "schedules.html", {
-        "schedule_rows": schedule_rows,
-        "scheduler_status": scheduler_status,
-    })
+    return _render(
+        request,
+        "schedules.html",
+        {
+            "schedule_rows": schedule_rows,
+            "scheduler_status": scheduler_status,
+        },
+    )
 
 
 @router.post("/schedules/{resource_id}/toggle")

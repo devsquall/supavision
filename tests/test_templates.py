@@ -32,17 +32,13 @@ def _make_resource(**kwargs) -> Resource:
 class TestLoadTemplate:
     def test_load_existing_discovery_template(self):
         """Load the real server/discovery.md template."""
-        content = load_template(
-            "server", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT
-        )
+        content = load_template("server", RunType.DISCOVERY, template_dir=TEMPLATE_DIR_DEFAULT)
         assert "discovery" in content.lower() or "Discovery" in content
         assert len(content) > 100
 
     def test_load_existing_health_check_template(self):
         """Load the real server/health_check.md template."""
-        content = load_template(
-            "server", RunType.HEALTH_CHECK, template_dir=TEMPLATE_DIR_DEFAULT
-        )
+        content = load_template("server", RunType.HEALTH_CHECK, template_dir=TEMPLATE_DIR_DEFAULT)
         assert len(content) > 100
 
     def test_missing_template_raises_file_not_found(self):
@@ -114,18 +110,14 @@ class TestResourceTypeValidation:
 
 class TestResolveCredentials:
     def test_resolves_from_env_var(self):
-        resource = _make_resource(
-            credentials={"aws_key": Credential(env_var="TEST_AWS_KEY")}
-        )
+        resource = _make_resource(credentials={"aws_key": Credential(env_var="TEST_AWS_KEY")})
         with patch.dict(os.environ, {"TEST_AWS_KEY": "AKIAEXAMPLE"}):
             resolved = resolve_credentials(resource)
 
         assert resolved["aws_key"] == "AKIAEXAMPLE"
 
     def test_missing_env_var_returns_placeholder(self):
-        resource = _make_resource(
-            credentials={"aws_key": Credential(env_var="NONEXISTENT_VAR_12345")}
-        )
+        resource = _make_resource(credentials={"aws_key": Credential(env_var="NONEXISTENT_VAR_12345")})
         # Ensure env var doesn't exist
         os.environ.pop("NONEXISTENT_VAR_12345", None)
         resolved = resolve_credentials(resource)
@@ -133,9 +125,7 @@ class TestResolveCredentials:
         assert "NONEXISTENT_VAR_12345" in resolved["aws_key"]
 
     def test_child_overrides_parent_credentials(self):
-        child_resource = _make_resource(
-            credentials={"api_key": Credential(env_var="CHILD_KEY")}
-        )
+        child_resource = _make_resource(credentials={"api_key": Credential(env_var="CHILD_KEY")})
         parent_creds = {"api_key": Credential(env_var="PARENT_KEY")}
 
         with patch.dict(os.environ, {"CHILD_KEY": "child_value", "PARENT_KEY": "parent_value"}):
@@ -197,9 +187,7 @@ class TestResolveTemplate:
 
     def test_config_overrides_resource_metadata(self):
         """Config can override default resource metadata keys."""
-        resource = _make_resource(
-            name="prod", config={"resource_name": "custom-name"}
-        )
+        resource = _make_resource(name="prod", config={"resource_name": "custom-name"})
         template = "Name: {{resource_name}}"
         result = resolve_template(template, resource, credentials={})
         assert result == "Name: custom-name"
@@ -208,9 +196,7 @@ class TestResolveTemplate:
         """Credential values layer over config values."""
         resource = _make_resource(config={"api_key": "config-value"})
         template = "Key: {{api_key}}"
-        result = resolve_template(
-            template, resource, credentials={"api_key": "cred-value"}
-        )
+        result = resolve_template(template, resource, credentials={"api_key": "cred-value"})
         assert result == "Key: cred-value"
 
     def test_runtime_overrides_everything(self):

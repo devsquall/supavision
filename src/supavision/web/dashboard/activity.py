@@ -13,6 +13,7 @@ from . import _render
 
 router = APIRouter()
 
+
 @router.get("/activity", response_class=HTMLResponse)
 async def activity_page(request: Request, range: str = "24h"):
     """Global timeline of all events across all resources."""
@@ -31,14 +32,16 @@ async def activity_page(request: Request, range: str = "24h"):
             ev = store.get_evaluation(run.evaluation_id) if run.evaluation_id else None
             severity = str(ev.severity) if ev else "unknown"
             summary = ev.summary[:80] if ev else str(run.status)
-            events.append({
-                "type": str(run.run_type),
-                "resource_name": resource.name,
-                "severity": severity if severity != "unknown" else None,
-                "summary": summary,
-                "created_at": (run.started_at or run.created_at).isoformat(),
-                "link": f"/resources/{resource.id}",
-            })
+            events.append(
+                {
+                    "type": str(run.run_type),
+                    "resource_name": resource.name,
+                    "severity": severity if severity != "unknown" else None,
+                    "summary": summary,
+                    "created_at": (run.started_at or run.created_at).isoformat(),
+                    "link": f"/resources/{resource.id}",
+                }
+            )
 
     events.sort(key=lambda e: e["created_at"], reverse=True)
     events = events[:50]
@@ -57,14 +60,18 @@ def _get_active_items(store) -> list[dict]:
         if run.started_at:
             delta = datetime.now(timezone.utc) - run.started_at
             elapsed = f"{int(delta.total_seconds())}s"
-        items.append({
-            "id": run.id, "kind": "run",
-            "type": str(run.run_type), "status": str(run.status),
-            "resource": resources.get(run.resource_id, run.resource_id[:8]),
-            "resource_id": run.resource_id,
-            "elapsed": elapsed,
-            "started_at": run.started_at.isoformat() if run.started_at else None,
-        })
+        items.append(
+            {
+                "id": run.id,
+                "kind": "run",
+                "type": str(run.run_type),
+                "status": str(run.status),
+                "resource": resources.get(run.resource_id, run.resource_id[:8]),
+                "resource_id": run.resource_id,
+                "elapsed": elapsed,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+            }
+        )
     return items
 
 
@@ -104,9 +111,16 @@ async def activity_stream(request: Request):
                         run_cursors[rid] = 0
                         if rid not in seen_ids:
                             seen_ids.add(rid)
-                            msg = json.dumps({"type": "job_start", "id": rid, "kind": "run",
-                                              "job_type": item["type"], "resource": item["resource"],
-                                              "status": item["status"]})
+                            msg = json.dumps(
+                                {
+                                    "type": "job_start",
+                                    "id": rid,
+                                    "kind": "run",
+                                    "job_type": item["type"],
+                                    "resource": item["resource"],
+                                    "status": item["status"],
+                                }
+                            )
                             yield f"data: {msg}\n\n"
                             emitted = True
 
@@ -141,7 +155,8 @@ async def activity_stream(request: Request):
             await asyncio.sleep(0.5)
 
     return StreamingResponse(
-        event_stream(), media_type="text/event-stream",
+        event_stream(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 

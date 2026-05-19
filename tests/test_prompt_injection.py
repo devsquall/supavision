@@ -13,6 +13,7 @@ Adversarial payload corpus lives in ADVERSARIAL_PAYLOADS. Adding a new
 payload here means any future change to validation or tool-allowlist logic
 must continue to defeat it. Don't remove payloads — add.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -112,8 +113,7 @@ class TestBashAllowlistRegression:
     def test_engine_declares_an_allowed_tools_string(self):
         engine_src = (Path(__file__).parent.parent / "src/supavision/engine.py").read_text()
         assert "--allowedTools" in engine_src, (
-            "engine.py no longer passes --allowedTools to the Claude CLI — "
-            "this removes tool scoping entirely. Revert."
+            "engine.py no longer passes --allowedTools to the Claude CLI — this removes tool scoping entirely. Revert."
         )
 
     def test_dangerous_commands_not_in_allowlist(self):
@@ -129,9 +129,7 @@ class TestBashAllowlistRegression:
         # `Bash(*)` allows them transitively, but a future narrowing must
         # not explicitly list them.
         for risky in ("bash(curl", "bash(wget", "bash(nc:", "bash(ssh:", "bash(scp"):
-            assert risky not in allowlist_content, (
-                f"allowlist explicitly includes a network/pivot command: {risky}"
-            )
+            assert risky not in allowlist_content, f"allowlist explicitly includes a network/pivot command: {risky}"
 
 
 class TestAdminGateOnMonitoringRequests:
@@ -179,17 +177,13 @@ class TestFreeTextLengthLimits:
     def test_monitoring_request_char_limit_enforced_in_model(self):
         """Resource creation silently truncates monitoring_requests items to
         500 chars. Verify the slice logic in resources.py is still present."""
-        src = (
-            Path(__file__).parent.parent
-            / "src/supavision/web/dashboard/resources.py"
-        ).read_text()
+        src = (Path(__file__).parent.parent / "src/supavision/web/dashboard/resources.py").read_text()
         assert ":500]" in src, (
             "The monitoring_requests truncation (`line.strip()[:500]`) is gone. "
             "Attackers can now submit multi-KB payloads."
         )
         assert "[:50]" in src, (
-            "The monitoring_requests count cap (`[:50]`) is gone. Attackers "
-            "can now register unlimited items."
+            "The monitoring_requests count cap (`[:50]`) is gone. Attackers can now register unlimited items."
         )
 
 

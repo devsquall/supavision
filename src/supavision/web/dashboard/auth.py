@@ -19,11 +19,13 @@ router = APIRouter()
 async def login_page(request: Request, next: str = "/"):
     """Show login form."""
     from urllib.parse import urlparse
+
     parsed = urlparse(next)
     if parsed.scheme or parsed.netloc or not next.startswith("/"):
         next = "/"
     if hasattr(request.state, "current_user") and request.state.current_user:
         from fastapi.responses import RedirectResponse
+
         return RedirectResponse(url=next)
     return templates.TemplateResponse(request, "login.html", {"next_url": next})
 
@@ -45,29 +47,42 @@ async def login_submit(request: Request):
 
     # Validate redirect URL
     from urllib.parse import urlparse
+
     parsed = urlparse(next_url)
     if parsed.scheme or parsed.netloc or not next_url.startswith("/"):
         next_url = "/"
 
     # Rate limit (configurable via SUPAVISION_RATE_LIMIT_LOGIN, default 5/min per IP)
     from ...config import RATE_LIMIT_LOGIN
+
     if not _check_rate_limit(request.client.host, max_per_minute=RATE_LIMIT_LOGIN):
-        return templates.TemplateResponse(request, "login.html", {
-            "error": "Too many login attempts. Try again in a minute.",
-            "next_url": next_url,
-        }, status_code=429)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "error": "Too many login attempts. Try again in a minute.",
+                "next_url": next_url,
+            },
+            status_code=429,
+        )
 
     # Validate credentials — generic error prevents user enumeration
     user = store.get_user_by_email(email)
     if not user or not user.is_active or not verify_password(password, user.password_hash):
         store.log_auth_event("login_failure", email=email, ip_address=request.client.host)
-        return templates.TemplateResponse(request, "login.html", {
-            "error": "Invalid email or password.",
-            "next_url": next_url,
-        }, status_code=401)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "error": "Invalid email or password.",
+                "next_url": next_url,
+            },
+            status_code=401,
+        )
 
     # Create session
     from datetime import timedelta
+
     session = Session(
         user_id=user.id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS),
@@ -84,8 +99,10 @@ async def login_submit(request: Request):
 
     response = RedirectResponse(url=next_url, status_code=302)
     response.set_cookie(
-        "session_id", session.id,
-        httponly=True, samesite="lax",
+        "session_id",
+        session.id,
+        httponly=True,
+        samesite="lax",
         secure=SESSION_COOKIE_SECURE,
         max_age=SESSION_HOURS * 3600,
     )
@@ -122,6 +139,7 @@ async def settings_users(request: Request):
     audit_log = store.get_auth_audit_log(limit=20)
     return _render(request, "settings_users.html", {"users": users, "audit_log": audit_log})
 
+
 @router.post("/settings/users/create")
 async def create_user(request: Request):
     """Create a new user — admin only."""
@@ -150,12 +168,17 @@ async def create_user(request: Request):
     user = User(email=email, password_hash=hash_password(password), name=name or email.split("@")[0], role=role)
     store.create_user(user)
     store.log_auth_event(
-        "user_created", user_id=user.id, email=email,
-        detail=f"role={role}", ip_address=request.client.host,
+        "user_created",
+        user_id=user.id,
+        email=email,
+        detail=f"role={role}",
+        ip_address=request.client.host,
     )
 
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url="/settings/users", status_code=302)
+
 
 @router.post("/settings/users/{user_id}/toggle")
 async def toggle_user(user_id: str, request: Request):
@@ -173,6 +196,7 @@ async def toggle_user(user_id: str, request: Request):
     event = "user_activated" if user.is_active else "user_deactivated"
     store.log_auth_event(event, user_id=user_id, email=user.email, ip_address=request.client.host)
     return Response(status_code=204)
+
 
 @router.post("/settings/users/{user_id}/role")
 async def change_role(user_id: str, request: Request):
@@ -192,8 +216,11 @@ async def change_role(user_id: str, request: Request):
     store.update_user(user)
     store.revoke_user_sessions(user_id)  # Force re-login to pick up new role
     store.log_auth_event(
-        "role_changed", user_id=user_id, email=user.email,
-        detail=f"{old_role} → {new_role}", ip_address=request.client.host,
+        "role_changed",
+        user_id=user_id,
+        email=user.email,
+        detail=f"{old_role} → {new_role}",
+        ip_address=request.client.host,
     )
     return Response(status_code=204)
 
@@ -207,15 +234,20 @@ async def profile_page(request: Request):
     user = getattr(request.state, "current_user", None)
     if not user:
         from fastapi.responses import RedirectResponse
+
         return RedirectResponse(url="/login")
     store = request.app.state.store
     sessions = store.get_user_sessions(user.id)
     session_id = request.cookies.get("session_id", "")
-    return _render(request, "profile.html", {
-        "profile_user": user,
-        "sessions": sessions,
-        "current_session_id": session_id,
-    })
+    return _render(
+        request,
+        "profile.html",
+        {
+            "profile_user": user,
+            "sessions": sessions,
+            "current_session_id": session_id,
+        },
+    )
 
 
 @router.post("/profile/password")
@@ -236,29 +268,44 @@ async def change_password(request: Request):
     # Validate current password
     if not verify_password(current, user.password_hash):
         sessions = store.get_user_sessions(user.id)
-        return _render(request, "profile.html", {
-            "profile_user": user, "sessions": sessions,
-            "current_session_id": request.cookies.get("session_id", ""),
-            "password_error": "Current password is incorrect.",
-        })
+        return _render(
+            request,
+            "profile.html",
+            {
+                "profile_user": user,
+                "sessions": sessions,
+                "current_session_id": request.cookies.get("session_id", ""),
+                "password_error": "Current password is incorrect.",
+            },
+        )
 
     # Validate new password
     if new_pw != confirm:
         sessions = store.get_user_sessions(user.id)
-        return _render(request, "profile.html", {
-            "profile_user": user, "sessions": sessions,
-            "current_session_id": request.cookies.get("session_id", ""),
-            "password_error": "New passwords do not match.",
-        })
+        return _render(
+            request,
+            "profile.html",
+            {
+                "profile_user": user,
+                "sessions": sessions,
+                "current_session_id": request.cookies.get("session_id", ""),
+                "password_error": "New passwords do not match.",
+            },
+        )
 
     error = validate_password_strength(new_pw)
     if error:
         sessions = store.get_user_sessions(user.id)
-        return _render(request, "profile.html", {
-            "profile_user": user, "sessions": sessions,
-            "current_session_id": request.cookies.get("session_id", ""),
-            "password_error": error,
-        })
+        return _render(
+            request,
+            "profile.html",
+            {
+                "profile_user": user,
+                "sessions": sessions,
+                "current_session_id": request.cookies.get("session_id", ""),
+                "password_error": error,
+            },
+        )
 
     # Update password + revoke all sessions (forces re-login everywhere)
     user.password_hash = hash_password(new_pw)
@@ -268,6 +315,7 @@ async def change_password(request: Request):
 
     # Redirect to login (all sessions revoked, including current)
     from fastapi.responses import RedirectResponse
+
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("session_id")
     return response
@@ -292,7 +340,8 @@ async def update_profile_name(request: Request):
     store.update_user(user)
     store.log_auth_event(
         "profile_name_changed",
-        user_id=user.id, email=user.email,
+        user_id=user.id,
+        email=user.email,
         ip_address=request.client.host if request.client else None,
     )
     resp = Response(status_code=204)

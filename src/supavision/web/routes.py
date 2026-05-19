@@ -6,17 +6,25 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from ..models import (
+    Credential,
+    Incident,
+    IncidentNote,
+    IncidentState,
     Resource,
     RunType,
     Severity,
 )
-from .auth import require_api_key, require_api_key_admin
+from ..secrets_policy import (
+    validate_credentials_env_vars,
+    validate_no_raw_secrets,
+)
+from .auth import get_auth_context, require_api_key, require_api_key_admin
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,7 @@ async def _api_rate_limit(request: Request):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     _api_rate_limits[ip].append(now)
 
+
 # Health endpoint — no auth required (for Docker healthcheck, load balancers, uptime monitors)
 health_router = APIRouter(prefix="/api/v1")
 
@@ -48,11 +57,14 @@ async def health():
 
 @health_router.get("/search")
 async def global_search(request: Request, q: str = ""):
-    """Global search across resources. Requires session or API key auth."""
-    # Reject unauthenticated requests (no session and no API key)
-    has_session = getattr(request.state, "user", None) is not None
-    has_api_key = request.headers.get("x-api-key")
-    if not has_session and not has_api_key:
+    """Global search across resources. Accepts either session cookie or x-api-key.
+
+    Lives under /api/v1/* which the dashboard session middleware skips for
+    performance, so this handler validates both auth modes itself via
+    ``get_auth_context``.
+    """
+    ctx = get_auth_context(request)
+    if ctx is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     if not q or len(q) < 2:
         return {"ok": True, "results": []}
@@ -60,12 +72,14 @@ async def global_search(request: Request, q: str = ""):
     results = []
     for r in store.list_resources():
         if q.lower() in r.name.lower() or q.lower() in r.resource_type.lower():
-            results.append({
-                "type": "resource",
-                "name": r.name,
-                "badge": r.resource_type,
-                "link": f"/resources/{r.id}",
-            })
+            results.append(
+                {
+                    "type": "resource",
+                    "name": r.name,
+                    "badge": r.resource_type,
+                    "link": f"/resources/{r.id}",
+                }
+            )
     return {"ok": True, "results": results[:20]}
 
 
@@ -85,6 +99,80 @@ async def system_status(request: Request):
     }
 
 
+@router.get("/system/metrics")
+async def system_metrics(request: Request):
+    """Self-observability snapshot (P2 #16).
+
+    Returns a small dict of operational metrics intended for ops dashboards
+    and uptime monitors. Cheap reads only — no engine calls, no LLM round trips.
+    """
+    import os
+
+    from .. import __version__
+    from ..scheduler import get_scheduler_status
+
+    store = _get_store(request)
+
+    # Counts by run status (over the recent window)
+    recent_runs = store.get_recent_runs_global(limit=200)
+    counts: dict[str, int] = {"pending": 0, "running": 0, "completed": 0, "failed": 0}
+    durations: list[float] = []
+    failures_24h = 0
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    for r in recent_runs:
+        status = str(r.status)
+        counts[status] = counts.get(status, 0) + 1
+        if r.started_at and r.completed_at:
+            durations.append((r.completed_at - r.started_at).total_seconds())
+        if status == "failed" and r.completed_at and r.completed_at > cutoff:
+            failures_24h += 1
+
+    durations.sort()
+    n = len(durations)
+
+    def _pct(p: float) -> float | None:
+        if not durations:
+            return None
+        idx = min(n - 1, int(p * n))
+        return round(durations[idx], 2)
+
+    db_size_bytes: int | None = None
+    try:
+        db_size_bytes = os.path.getsize(str(store.db_path))
+    except OSError:
+        pass
+
+    # Notification delivery stats from the last 200 attempts
+    notif_log = store.list_notifications(limit=200)
+    notif_total = len(notif_log)
+    notif_sent = sum(1 for n in notif_log if n.get("status") == "sent")
+    notif_failed = notif_total - notif_sent
+
+    return {
+        "ok": True,
+        "version": __version__,
+        "scheduler": get_scheduler_status(),
+        "runs": {
+            "by_status": counts,
+            "failures_24h": failures_24h,
+            "duration_seconds": {
+                "count": n,
+                "p50": _pct(0.5),
+                "p95": _pct(0.95),
+            },
+        },
+        "notifications": {
+            "total_recent": notif_total,
+            "sent": notif_sent,
+            "failed": notif_failed,
+        },
+        "db": {
+            "size_bytes": db_size_bytes,
+            "resources": len(store.list_resources()),
+        },
+    }
+
+
 # ── Request/Response models ─────────────────────────────────────
 
 
@@ -93,6 +181,14 @@ class CreateResourceRequest(BaseModel):
     resource_type: str
     parent_id: str = ""
     config: dict[str, str] = {}
+    credentials: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Credential references. Map of credential name (e.g. 'aws_secret_key') "
+            "to the NAME of an environment variable holding the actual secret "
+            "(e.g. 'AWS_SECRET_ACCESS_KEY'). Never pass the secret value itself."
+        ),
+    )
 
     @field_validator("config")
     @classmethod
@@ -108,7 +204,44 @@ class CreateResourceRequest(BaseModel):
 class UpdateResourceRequest(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     config: dict | None = None
+    credentials: dict[str, str] | None = Field(
+        default=None,
+        description=("Credential references to merge in. Each value must be an env var name."),
+    )
     parent_id: str | None = None
+
+
+def _reject_raw_secrets_or_400(config: dict | None, credentials: dict[str, str] | None) -> None:
+    """Raise 400 with a structured error if the request carries raw secrets.
+
+    Splits the two failure modes (raw secret in config / non-env-var-shaped
+    credential reference) into distinct error codes so API clients can act on
+    them programmatically.
+    """
+    raw_offenders = validate_no_raw_secrets(config)
+    if raw_offenders:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "raw_secrets_in_config",
+                "fields": raw_offenders,
+                "hint": (
+                    "Pass these in the top-level `credentials` object as env-var names, not as raw values in `config`."
+                ),
+            },
+        )
+    bad_env = validate_credentials_env_vars(credentials)
+    if bad_env:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_env_var_name_in_credentials",
+                "fields": bad_env,
+                "hint": (
+                    "Credential references must be env var names (matching ^[A-Z_][A-Z0-9_]*$), not raw secret values."
+                ),
+            },
+        )
 
 
 class TriggerResponse(BaseModel):
@@ -176,15 +309,17 @@ async def list_resources(
     for r in resources:
         latest = latest_runs.get((r.id, str(RunType.HEALTH_CHECK)))
         ev = latest_evals.get(r.id)
-        result.append({
-            "id": r.id,
-            "name": r.name,
-            "resource_type": r.resource_type,
-            "parent_id": r.parent_id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "latest_severity": str(ev.severity) if ev else None,
-            "latest_run_status": str(latest.status) if latest else None,
-        })
+        result.append(
+            {
+                "id": r.id,
+                "name": r.name,
+                "resource_type": r.resource_type,
+                "parent_id": r.parent_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "latest_severity": str(ev.severity) if ev else None,
+                "latest_run_status": str(latest.status) if latest else None,
+            }
+        )
 
     from starlette.responses import JSONResponse
 
@@ -196,12 +331,18 @@ async def list_resources(
 
 @router.post("/resources")
 async def create_resource(body: CreateResourceRequest, request: Request, _admin=Depends(require_api_key_admin)):
+    _reject_raw_secrets_or_400(body.config, body.credentials)
     store = _get_store(request)
     resource = Resource(
         name=body.name,
         resource_type=body.resource_type,
         parent_id=body.parent_id or "",
         config=body.config,
+        credentials={
+            name: Credential(env_var=env_var.strip())
+            for name, env_var in (body.credentials or {}).items()
+            if env_var and env_var.strip()
+        },
     )
     store.save_resource(resource)
     return {"ok": True, "resource_id": resource.id, "name": resource.name}
@@ -221,10 +362,7 @@ async def get_resource(resource_id: str, request: Request):
     # Filter sensitive fields from config before returning
     resource_data = resource.model_dump(mode="json")
     sensitive_keys = {"ssh_key_path", "slack_webhook", "_last_alert_key"}
-    resource_data["config"] = {
-        k: v for k, v in resource_data.get("config", {}).items()
-        if k not in sensitive_keys
-    }
+    resource_data["config"] = {k: v for k, v in resource_data.get("config", {}).items() if k not in sensitive_keys}
 
     return {
         "ok": True,
@@ -249,6 +387,7 @@ async def delete_resource(resource_id: str, request: Request, _admin=Depends(req
 async def update_resource(
     resource_id: str, body: UpdateResourceRequest, request: Request, _admin=Depends(require_api_key_admin)
 ):
+    _reject_raw_secrets_or_400(body.config, body.credentials)
     store = _get_store(request)
     resource = store.get_resource(resource_id)
     if not resource:
@@ -257,6 +396,13 @@ async def update_resource(
         resource.name = body.name
     if body.config is not None:
         resource.config.update(body.config)
+    if body.credentials is not None:
+        for cred_name, env_var in body.credentials.items():
+            ev = (env_var or "").strip()
+            if ev:
+                resource.credentials[cred_name] = Credential(env_var=ev)
+            else:
+                resource.credentials.pop(cred_name, None)
     if body.parent_id is not None:
         resource.parent_id = body.parent_id
     resource.updated_at = datetime.now(timezone.utc)
@@ -267,97 +413,85 @@ async def update_resource(
 # ── Trigger Runs ────────────────────────────────────────────────
 
 
+def _trigger_run_or_409(store, engine, resource_id: str, run_type: RunType) -> TriggerResponse:
+    """Shared logic for all three API trigger endpoints.
+
+    Atomically creates a PENDING Run for this resource, schedules the engine
+    background task with that run_id (so the engine updates the same row instead
+    of creating a duplicate), and returns the run_id.
+
+    Returns 409 with `{"error": "run_in_flight", "active_run_id": ...}` if a
+    PENDING/RUNNING run already exists for the resource.
+    """
+    run = store.create_pending_run_if_no_active(resource_id, run_type)
+    if run is None:
+        active_id = store.get_active_run_id_for_resource(resource_id) or ""
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "run_in_flight",
+                "active_run_id": active_id,
+                "hint": "Poll GET /runs/<active_run_id> to track the existing run.",
+            },
+        )
+
+    async def _bg():
+        try:
+            if run_type == RunType.DISCOVERY:
+                await engine.run_discovery_async(resource_id, run_id=run.id)
+            else:
+                await engine.run_health_check_async(resource_id, run_id=run.id)
+        except Exception as e:
+            logger.error(
+                "Background run failed: resource=%s type=%s run_id=%s error=%s",
+                resource_id,
+                run_type,
+                run.id,
+                e,
+            )
+
+    asyncio.create_task(_bg())
+    return TriggerResponse(run_id=run.id)
+
+
 @router.post("/resources/{resource_id}/discover")
 async def trigger_discovery(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     engine = _get_engine(request)
-
-    resource = store.get_resource(resource_id)
-    if not resource:
+    if not store.get_resource(resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
-
-    # Create a pending run and return immediately
-    from ..models import Run, RunStatus
-
-    run = Run(resource_id=resource_id, run_type=RunType.DISCOVERY, status=RunStatus.PENDING)
-    store.save_run(run)
-
-    # Execute in background
-    async def _run():
-        try:
-            await engine.run_discovery_async(resource_id)
-        except Exception as e:
-            logger.error("Background discovery failed: %s", e)
-
-    asyncio.create_task(_run())
-    return TriggerResponse(run_id=run.id)
+    return _trigger_run_or_409(store, engine, resource_id, RunType.DISCOVERY)
 
 
 @router.post("/resources/{resource_id}/health-check")
 async def trigger_health_check(resource_id: str, request: Request, _admin=Depends(require_api_key_admin)):
     store = _get_store(request)
     engine = _get_engine(request)
-
-    resource = store.get_resource(resource_id)
-    if not resource:
+    if not store.get_resource(resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
-
-    from ..models import Run, RunStatus
-
-    run = Run(resource_id=resource_id, run_type=RunType.HEALTH_CHECK, status=RunStatus.PENDING)
-    store.save_run(run)
-
-    async def _run():
-        try:
-            await engine.run_health_check_async(resource_id)
-        except Exception as e:
-            logger.error("Background health check failed: %s", e)
-
-    asyncio.create_task(_run())
-    return TriggerResponse(run_id=run.id)
+    return _trigger_run_or_409(store, engine, resource_id, RunType.HEALTH_CHECK)
 
 
 # Workstream E3: unified run trigger
 @router.post("/runs")
 async def trigger_run(body: TriggerRunRequest, request: Request, _admin=Depends(require_api_key_admin)):
-    """Trigger a discovery or health-check run via API (E3).
+    """Trigger a discovery or health-check run via API.
 
-    Returns immediately with the run_id. The run executes in the background.
-    Returns 409 Conflict if a run is already in progress for the resource
-    (engine's per-resource lock).
+    Returns immediately with the run_id of the executing run. The run executes
+    in the background. Returns 409 Conflict (with active_run_id) if a run is
+    already in progress for the resource.
     """
     store = _get_store(request)
     engine = _get_engine(request)
 
-    resource = store.get_resource(body.resource_id)
-    if not resource:
+    if not store.get_resource(body.resource_id):
         raise HTTPException(status_code=404, detail="Resource not found")
 
     if body.run_type not in ("discovery", "health_check"):
         raise HTTPException(status_code=400, detail="run_type must be 'discovery' or 'health_check'")
 
-    # Check for existing running run
-    runs = store.get_runs(body.resource_id, limit=1)
-    if runs and str(runs[0].status) in ("running", "pending"):
-        raise HTTPException(status_code=409, detail="A run is already in progress for this resource")
-
-    from ..models import Run, RunStatus
-
     rt = RunType.DISCOVERY if body.run_type == "discovery" else RunType.HEALTH_CHECK
-    run = Run(resource_id=body.resource_id, run_type=rt, status=RunStatus.PENDING)
-    store.save_run(run)
-
-    async def _run():
-        try:
-            if rt == RunType.DISCOVERY:
-                await engine.run_discovery_async(body.resource_id)
-            else:
-                await engine.run_health_check_async(body.resource_id)
-        except Exception as e:
-            logger.error("Background run failed: resource=%s type=%s error=%s", body.resource_id, body.run_type, e)
-
-    asyncio.create_task(_run())
-    return TriggerResponse(run_id=run.id)
+    return _trigger_run_or_409(store, engine, body.resource_id, rt)
 
 
 # ── Runs & Reports ──────────────────────────────────────────────
@@ -480,13 +614,15 @@ async def get_incidents(resource_id: str, request: Request, limit: int = 10):
     prev_severity = None
     for ev in reversed(evaluations):  # oldest first
         if prev_severity and str(ev.severity) != prev_severity:
-            incidents.append({
-                "timestamp": str(ev.created_at),
-                "from_severity": prev_severity,
-                "to_severity": str(ev.severity),
-                "summary": ev.summary,
-                "correlation": ev.correlation,
-            })
+            incidents.append(
+                {
+                    "timestamp": str(ev.created_at),
+                    "from_severity": prev_severity,
+                    "to_severity": str(ev.severity),
+                    "summary": ev.summary,
+                    "correlation": ev.correlation,
+                }
+            )
         prev_severity = str(ev.severity)
 
     # Most recent first
@@ -494,3 +630,161 @@ async def get_incidents(resource_id: str, request: Request, limit: int = 10):
     return {"ok": True, "resource_id": resource_id, "incidents": incidents[:limit]}
 
 
+# ── Incidents (P2 #12) ────────────────────────────────────────────
+
+
+class CreateIncidentRequest(BaseModel):
+    resource_id: str
+    title: str = Field(..., min_length=1, max_length=200)
+    severity: str = "warning"
+    evaluation_id: str | None = None
+
+
+class IncidentTransitionRequest(BaseModel):
+    """Body for ack/snooze/resolve/assign endpoints (only the relevant fields are read)."""
+
+    owner_user_id: str | None = None
+    snoozed_until: datetime | None = None
+    note: str | None = None
+
+
+def _serialize_incident(inc: Incident) -> dict:
+    return {
+        "id": inc.id,
+        "resource_id": inc.resource_id,
+        "title": inc.title,
+        "state": str(inc.state),
+        "severity": inc.severity,
+        "owner_user_id": inc.owner_user_id,
+        "snoozed_until": inc.snoozed_until.isoformat() if inc.snoozed_until else None,
+        "evaluation_id": inc.evaluation_id,
+        "notes": [{"author": n.author, "text": n.text, "created_at": n.created_at.isoformat()} for n in inc.notes],
+        "created_at": inc.created_at.isoformat(),
+        "updated_at": inc.updated_at.isoformat(),
+        "resolved_at": inc.resolved_at.isoformat() if inc.resolved_at else None,
+    }
+
+
+@router.get("/incidents")
+async def list_incidents(request: Request, resource_id: str = "", state: str = "", limit: int = 50):
+    """List incidents, optionally filtered by resource_id and/or state."""
+    store = _get_store(request)
+    limit = max(1, min(limit, 200))
+    incidents = store.list_incidents(
+        resource_id=resource_id or None,
+        state=state or None,
+        limit=limit,
+    )
+    return {"ok": True, "incidents": [_serialize_incident(i) for i in incidents]}
+
+
+@router.post("/incidents")
+async def create_incident(body: CreateIncidentRequest, request: Request, _admin=Depends(require_api_key_admin)):
+    store = _get_store(request)
+    if not store.get_resource(body.resource_id):
+        raise HTTPException(status_code=404, detail="Resource not found")
+    inc = Incident(
+        resource_id=body.resource_id,
+        title=body.title,
+        severity=body.severity,
+        evaluation_id=body.evaluation_id,
+    )
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+def _get_incident_or_404(store, incident_id: str) -> Incident:
+    inc = store.get_incident(incident_id)
+    if inc is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return inc
+
+
+def _touch(inc: Incident, *, note: str | None = None, author: str = "api") -> None:
+    inc.updated_at = datetime.now(timezone.utc)
+    if note:
+        inc.notes.append(IncidentNote(author=author, text=note))
+
+
+@router.post("/incidents/{incident_id}/acknowledge")
+async def incident_acknowledge(
+    incident_id: str,
+    body: IncidentTransitionRequest,
+    request: Request,
+    _admin=Depends(require_api_key_admin),
+):
+    store = _get_store(request)
+    inc = _get_incident_or_404(store, incident_id)
+    inc.state = IncidentState.ACKNOWLEDGED
+    if body.owner_user_id:
+        inc.owner_user_id = body.owner_user_id
+    _touch(inc, note=body.note)
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+@router.post("/incidents/{incident_id}/assign")
+async def incident_assign(
+    incident_id: str,
+    body: IncidentTransitionRequest,
+    request: Request,
+    _admin=Depends(require_api_key_admin),
+):
+    if not body.owner_user_id:
+        raise HTTPException(status_code=400, detail="owner_user_id is required")
+    store = _get_store(request)
+    inc = _get_incident_or_404(store, incident_id)
+    inc.owner_user_id = body.owner_user_id
+    _touch(inc, note=body.note)
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+@router.post("/incidents/{incident_id}/snooze")
+async def incident_snooze(
+    incident_id: str,
+    body: IncidentTransitionRequest,
+    request: Request,
+    _admin=Depends(require_api_key_admin),
+):
+    if not body.snoozed_until:
+        raise HTTPException(status_code=400, detail="snoozed_until is required")
+    store = _get_store(request)
+    inc = _get_incident_or_404(store, incident_id)
+    inc.state = IncidentState.SNOOZED
+    inc.snoozed_until = body.snoozed_until
+    _touch(inc, note=body.note)
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+@router.post("/incidents/{incident_id}/note")
+async def incident_add_note(
+    incident_id: str,
+    body: IncidentTransitionRequest,
+    request: Request,
+    _admin=Depends(require_api_key_admin),
+):
+    if not body.note:
+        raise HTTPException(status_code=400, detail="note is required")
+    store = _get_store(request)
+    inc = _get_incident_or_404(store, incident_id)
+    _touch(inc, note=body.note)
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}
+
+
+@router.post("/incidents/{incident_id}/resolve")
+async def incident_resolve(
+    incident_id: str,
+    body: IncidentTransitionRequest,
+    request: Request,
+    _admin=Depends(require_api_key_admin),
+):
+    store = _get_store(request)
+    inc = _get_incident_or_404(store, incident_id)
+    inc.state = IncidentState.RESOLVED
+    inc.resolved_at = datetime.now(timezone.utc)
+    _touch(inc, note=body.note)
+    store.save_incident(inc)
+    return {"ok": True, "incident": _serialize_incident(inc)}

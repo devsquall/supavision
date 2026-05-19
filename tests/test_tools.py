@@ -427,9 +427,7 @@ class TestToolDispatcher:
 
     @pytest.mark.asyncio
     async def test_check_service_injection_blocked(self, dispatcher):
-        result = await dispatcher.dispatch(
-            "check_service_status", {"service_name": "nginx; rm -rf /"}
-        )
+        result = await dispatcher.dispatch("check_service_status", {"service_name": "nginx; rm -rf /"})
         assert "VALIDATION ERROR" in result
 
     @pytest.mark.asyncio
@@ -450,9 +448,7 @@ class TestToolDispatcher:
 
     @pytest.mark.asyncio
     async def test_read_file_max_lines_clamped(self, dispatcher, mock_executor):
-        result = await dispatcher.dispatch(
-            "read_file", {"path": "/var/log/syslog", "max_lines": 5000}
-        )
+        result = await dispatcher.dispatch("read_file", {"path": "/var/log/syslog", "max_lines": 5000})
         assert "ok" in result
         # The command should clamp to 1000
         assert "head -n 1000" in mock_executor.last_command
@@ -570,22 +566,16 @@ class TestToolDispatcher:
 
     @pytest.mark.asyncio
     async def test_format_result_timed_out(self, dispatcher):
-        result = dispatcher._format_result(
-            CommandResult(stdout="partial", stderr="", exit_code=-1, timed_out=True)
-        )
+        result = dispatcher._format_result(CommandResult(stdout="partial", stderr="", exit_code=-1, timed_out=True))
         assert "timed out" in result.lower()
 
     @pytest.mark.asyncio
     async def test_format_result_exit_code(self, dispatcher):
-        result = dispatcher._format_result(
-            CommandResult(stdout="", stderr="error occurred", exit_code=1)
-        )
+        result = dispatcher._format_result(CommandResult(stdout="", stderr="error occurred", exit_code=1))
         assert "Exit code: 1" in result
         assert "error occurred" in result
 
     @pytest.mark.asyncio
     async def test_format_result_empty(self, dispatcher):
-        result = dispatcher._format_result(
-            CommandResult(stdout="", stderr="", exit_code=0)
-        )
+        result = dispatcher._format_result(CommandResult(stdout="", stderr="", exit_code=0))
         assert result == "[No output]"

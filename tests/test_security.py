@@ -27,6 +27,7 @@ class TestRateLimiter:
 
     def test_allows_under_limit(self):
         from supavision.web.dashboard import _check_rate_limit, _rate_limits
+
         _rate_limits.clear()
 
         for _ in range(10):
@@ -34,6 +35,7 @@ class TestRateLimiter:
 
     def test_blocks_over_limit(self):
         from supavision.web.dashboard import _check_rate_limit, _rate_limits
+
         _rate_limits.clear()
 
         for _ in range(10):
@@ -43,6 +45,7 @@ class TestRateLimiter:
 
     def test_different_ips_independent(self):
         from supavision.web.dashboard import _check_rate_limit, _rate_limits
+
         _rate_limits.clear()
 
         for _ in range(10):
@@ -79,22 +82,24 @@ class TestCSRFTokenGeneration:
         assert token1 != token2
 
 
-
 class TestPasswordPolicy:
     """Password strength validation boundary tests."""
 
     def test_exactly_8_chars_passes(self):
         from supavision.web.auth import validate_password_strength
+
         assert validate_password_strength("abcd1234") is None
 
     def test_7_chars_fails(self):
         from supavision.web.auth import validate_password_strength
+
         result = validate_password_strength("abc1234")
         assert result is not None
         assert "8 characters" in result
 
     def test_common_password_rejected(self):
         from supavision.web.auth import validate_password_strength
+
         for pwd in ("password", "admin123", "changeme"):
             result = validate_password_strength(pwd)
             assert result is not None, f"'{pwd}' should be rejected"
@@ -102,12 +107,14 @@ class TestPasswordPolicy:
 
     def test_common_password_case_insensitive(self):
         from supavision.web.auth import validate_password_strength
+
         result = validate_password_strength("PASSWORD")
         assert result is not None
         assert "common" in result.lower()
 
     def test_strong_password_passes(self):
         from supavision.web.auth import validate_password_strength
+
         assert validate_password_strength("xK9#mNp2qR") is None
 
 
@@ -116,26 +123,31 @@ class TestSSRFProtection:
 
     def test_blocks_private_10(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="blocked"):
             validate_webhook_url("http://10.0.0.1/hook")
 
     def test_blocks_private_172(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="blocked"):
             validate_webhook_url("http://172.16.0.1/hook")
 
     def test_blocks_private_192(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="blocked"):
             validate_webhook_url("http://192.168.1.1/hook")
 
     def test_blocks_loopback(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="blocked"):
             validate_webhook_url("http://127.0.0.1/hook")
 
     def test_blocks_link_local_aws_metadata(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="blocked"):
             validate_webhook_url("http://169.254.169.254/hook")
 
@@ -152,6 +164,7 @@ class TestSSRFProtection:
 
     def test_rejects_non_http_scheme(self):
         from supavision.notifications import validate_webhook_url
+
         with pytest.raises(ValueError, match="http"):
             validate_webhook_url("ftp://example.com/hook")
 

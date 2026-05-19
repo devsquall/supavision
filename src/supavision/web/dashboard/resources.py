@@ -11,8 +11,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from ...models import RunStatus
+from ...models import Credential, RunStatus
 from ...resource_types import RESOURCE_TYPES, WIZARD_FLOWS
+from ...secrets_policy import (
+    is_valid_env_var_name,
+    secret_keys_present,
+    validate_credentials_env_vars,
+    validate_no_raw_secrets,
+)
 from . import _check_rate_limit, _md_to_html, _render, _require_admin
 
 logger = logging.getLogger(__name__)
@@ -107,26 +113,32 @@ async def resources_page(request: Request):
             action_url = f"/resources/{r.id}/health-check"
             action_is_link = False  # HTMX trigger
 
-        resource_data.append({
-            "id": r.id,
-            "name": r.name,
-            "resource_type": r.resource_type,
-            "severity": severity,
-            "summary": summary,
-            "last_run_at": last_run_at,
-            "freshness": _freshness(last_run_at),
-            "enabled": r.enabled,
-            "explanation": explanation,
-            "impact": impact,
-            "action_label": action_label,
-            "action_url": action_url,
-            "action_is_link": action_is_link,
-        })
+        resource_data.append(
+            {
+                "id": r.id,
+                "name": r.name,
+                "resource_type": r.resource_type,
+                "severity": severity,
+                "summary": summary,
+                "last_run_at": last_run_at,
+                "freshness": _freshness(last_run_at),
+                "enabled": r.enabled,
+                "explanation": explanation,
+                "impact": impact,
+                "action_label": action_label,
+                "action_url": action_url,
+                "action_is_link": action_is_link,
+            }
+        )
 
-    return _render(request, "resources_list.html", {
-        "resources": resource_data,
-        "total": len(resources),
-    })
+    return _render(
+        request,
+        "resources_list.html",
+        {
+            "resources": resource_data,
+            "total": len(resources),
+        },
+    )
 
 
 # ── Wizard ────────────────────────────────────────────────────
@@ -141,28 +153,36 @@ async def resource_new_form(request: Request, type: str = ""):
 
     if not selected:
         # Type selector page
-        return _render(request, "resource_new.html", {
-            "resource": None,
-            "editing": False,
-            "selected_type": "",
-            "resource_types": RESOURCE_TYPES,
-        })
+        return _render(
+            request,
+            "resource_new.html",
+            {
+                "resource": None,
+                "editing": False,
+                "selected_type": "",
+                "resource_types": RESOURCE_TYPES,
+            },
+        )
 
     # Wizard step 1
-    return _render(request, "resource_new.html", {
-        "resource": None,
-        "editing": False,
-        "selected_type": selected,
-        "resource_types": RESOURCE_TYPES,
-        "wizard_flow": flow,
-        "current_wizard_step": 1,
-        "total_steps": len(flow),
-        "next_step_label": flow[1][0] if len(flow) > 1 else None,
-        "resource_type": selected,
-        "type_label": rtype.get("label", selected),
-        "how_it_works": rtype.get("how_it_works", ""),
-        "data": {},
-    })
+    return _render(
+        request,
+        "resource_new.html",
+        {
+            "resource": None,
+            "editing": False,
+            "selected_type": selected,
+            "resource_types": RESOURCE_TYPES,
+            "wizard_flow": flow,
+            "current_wizard_step": 1,
+            "total_steps": len(flow),
+            "next_step_label": flow[1][0] if len(flow) > 1 else None,
+            "resource_type": selected,
+            "type_label": rtype.get("label", selected),
+            "how_it_works": rtype.get("how_it_works", ""),
+            "data": {},
+        },
+    )
 
 
 # ── Wizard helpers ────────────────────────────────────────────
@@ -179,6 +199,40 @@ def _collect_wizard_data(form) -> dict:
         if isinstance(val, str) and val.strip():
             data[key] = val.strip()
     return data
+
+
+def _env_var_status(data: dict) -> dict[str, bool]:
+    """For each '<key>_env_var' value in `data`, report whether it's set in os.environ.
+
+    Used by the credentials wizard step to render a ✓/✗ indicator next to each
+    env-var-name field the user has filled in.
+    """
+    status: dict[str, bool] = {}
+    for key, val in data.items():
+        if not key.endswith("_env_var"):
+            continue
+        if not isinstance(val, str) or not val.strip():
+            continue
+        name = val.strip()
+        status[name] = bool(os.environ.get(name))
+    return status
+
+
+def _schedule_preview(cron_expr: str, count: int = 5) -> list[str]:
+    """Return the next `count` run times for a cron expression as ISO strings.
+
+    Returns an empty list for an empty or invalid expression — the template
+    just doesn't render the preview block in that case.
+    """
+    if not cron_expr:
+        return []
+    try:
+        from croniter import croniter
+
+        it = croniter(cron_expr, datetime.now(timezone.utc))
+        return [it.get_next(datetime).isoformat() for _ in range(count)]
+    except (ValueError, KeyError):
+        return []
 
 
 def _wizard_context(resource_type: str, step: int, data: dict, **extra) -> dict:
@@ -200,6 +254,9 @@ def _wizard_context(resource_type: str, step: int, data: dict, **extra) -> dict:
         "total_steps": len(flow),
         "next_step_label": next_label,
         "data": data,
+        "env_var_status": _env_var_status(data),
+        "health_schedule_preview": _schedule_preview(data.get("health_cron", "")),
+        "discovery_schedule_preview": _schedule_preview(data.get("discovery_cron", "")),
         **extra,
     }
 
@@ -231,13 +288,23 @@ def _validate_step(resource_type: str, step: int, data: dict) -> list[str]:
 
     elif suffix == "credentials":
         if resource_type == "aws_account":
-            if not data.get("aws_access_key"):
-                errors.append("Access Key ID is required.")
-            if not data.get("aws_secret_key"):
-                errors.append("Secret Access Key is required.")
+            required = (
+                ("aws_access_key_env_var", "Access Key ID env var name"),
+                ("aws_secret_key_env_var", "Secret Access Key env var name"),
+            )
         elif resource_type == "github_org":
-            if not data.get("github_token"):
-                errors.append("Personal Access Token is required.")
+            required = (("github_token_env_var", "Personal Access Token env var name"),)
+        else:
+            required = ()
+        for field, label in required:
+            val = data.get(field, "").strip()
+            if not val:
+                errors.append(f"{label} is required.")
+            elif not is_valid_env_var_name(val):
+                errors.append(
+                    f"{label} must be a valid environment variable name "
+                    "(uppercase letters, digits, underscores; cannot start with a digit)."
+                )
 
     elif suffix == "db_connection":
         method = data.get("db_connection_method", "direct")
@@ -289,6 +356,7 @@ async def wizard_next(request: Request):
     # Step-specific context enrichment
     if next_suffix == "ssh_key":
         from ...ssh_keys import ensure_ssh_keypair
+
         key_path = data.get("ssh_key_path") or None
         try:
             resolved_path, public_key = ensure_ssh_keypair(key_path)
@@ -326,10 +394,9 @@ async def wizard_back(request: Request):
     # Re-enrich ssh_key step context if going back to it
     if prev_suffix == "ssh_key":
         from ...ssh_keys import ensure_ssh_keypair
+
         try:
-            resolved_path, public_key = ensure_ssh_keypair(
-                data.get("ssh_key_path")
-            )
+            resolved_path, public_key = ensure_ssh_keypair(data.get("ssh_key_path"))
             ctx["public_key"] = public_key
             ctx["key_generated"] = True
         except Exception as e:
@@ -359,10 +426,14 @@ async def wizard_test_connection(request: Request):
     # Build SSH command
     cmd = [
         "ssh",
-        "-o", "ConnectTimeout=5",
-        "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=accept-new",
-        "-p", port,
+        "-o",
+        "ConnectTimeout=5",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-p",
+        port,
     ]
     if key_path:
         cmd.extend(["-i", key_path])
@@ -392,25 +463,33 @@ async def resource_edit_form(resource_id: str, request: Request):
 
     health_cron = resource.health_check_schedule.cron if resource.health_check_schedule else ""
     discovery_cron = resource.discovery_schedule.cron if resource.discovery_schedule else ""
-    slack_webhook = resource.config.get("slack_webhook", "")
+    slack_cred = resource.credentials.get("slack_webhook")
+    slack_webhook_env_var = slack_cred.env_var if slack_cred else ""
+    legacy_secret_keys = secret_keys_present(resource.config)
 
     next_health_check = None
     if health_cron and resource.enabled:
         try:
             from croniter import croniter
+
             cron = croniter(health_cron, datetime.now(timezone.utc))
             next_health_check = cron.get_next(datetime).isoformat()
         except Exception:
             pass
 
-    return _render(request, "resource_edit.html", {
-        "resource": resource,
-        "resource_types": RESOURCE_TYPES,
-        "health_cron": health_cron,
-        "discovery_cron": discovery_cron,
-        "slack_webhook": slack_webhook,
-        "next_health_check": next_health_check,
-    })
+    return _render(
+        request,
+        "resource_edit.html",
+        {
+            "resource": resource,
+            "resource_types": RESOURCE_TYPES,
+            "health_cron": health_cron,
+            "discovery_cron": discovery_cron,
+            "slack_webhook_env_var": slack_webhook_env_var,
+            "legacy_secret_keys": legacy_secret_keys,
+            "next_health_check": next_health_check,
+        },
+    )
 
 
 @router.post("/resources/{resource_id}/edit")
@@ -422,6 +501,22 @@ async def resource_edit_submit(resource_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Resource not found")
 
     form = await request.form()
+
+    # Defense in depth: reject any raw secret-shaped field in the submitted form.
+    # The edit form is supposed to only carry SSH/host fields, not credentials.
+    # A direct POST (curl, scripted client, tampered DOM) that tries to slip a
+    # raw secret in must be turned away — and we must NOT silently let the edit
+    # introduce *new* raw secrets just because the row already had legacy ones.
+    submitted_config_like = {k: v for k, v in form.items() if isinstance(v, str)}
+    raw_offenders = validate_no_raw_secrets(submitted_config_like)
+    if raw_offenders:
+        raise HTTPException(
+            400,
+            "Supavision does not store raw secrets. Use the Notifications section "
+            "to reference an env var instead. Offending fields: "
+            f"{', '.join(raw_offenders)}.",
+        )
+
     name = form.get("name", "").strip()
     if name:
         if len(name) > 200:
@@ -466,9 +561,17 @@ async def test_connection(request: Request):
     if not host:
         result["message"] = "SSH host is required"
     else:
-        cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
-               "-o", "StrictHostKeyChecking=accept-new",
-               "-p", port]
+        cmd = [
+            "ssh",
+            "-o",
+            "ConnectTimeout=5",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-p",
+            port,
+        ]
         if key_path:
             cmd.extend(["-i", key_path])
         cmd.extend([f"{user}@{host}", "echo ok"])
@@ -523,8 +626,7 @@ async def resource_new_submit(request: Request):
 
     # Database fields
     if resource_type == "database":
-        for field in ("db_engine", "db_host", "db_port", "db_name", "db_user",
-                       "db_connection_method"):
+        for field in ("db_engine", "db_host", "db_port", "db_name", "db_user", "db_connection_method"):
             val = form.get(field, "").strip()
             if val:
                 config[field] = val
@@ -534,16 +636,52 @@ async def resource_new_submit(request: Request):
     if github_org:
         config["github_org"] = github_org
 
-    # GitHub token
-    github_token = form.get("github_token", "").strip()
-    if github_token:
-        config["github_token"] = github_token
+    # Defense in depth: reject any raw secret-shaped field in the submitted form
+    # before doing anything else. A stale browser, tampered form, or future field
+    # rename could try to slip raw values in alongside the canonical *_env_var
+    # fields. Scan the form (not just the post-processed config) so an ignored
+    # field can't bypass the check.
+    submitted = {k: v for k, v in form.items() if isinstance(v, str)}
+    form_offenders = validate_no_raw_secrets(submitted)
+    if form_offenders:
+        raise HTTPException(
+            400,
+            "Supavision does not store raw secrets. Pass these as env-var references "
+            f"on the Credentials step (field name '<name>_env_var'): "
+            f"{', '.join(form_offenders)}.",
+        )
 
-    # AWS credentials
-    for field in ("aws_access_key", "aws_secret_key"):
+    # Credentials — env-var references only. Field name '<credential>_env_var' carries
+    # the NAME of an env var that holds the actual secret; the secret value itself is
+    # never accepted by Supavision.
+    credentials_env_vars: dict[str, str] = {}
+    for cred_name, field in (
+        ("aws_access_key", "aws_access_key_env_var"),
+        ("aws_secret_key", "aws_secret_key_env_var"),
+        ("github_token", "github_token_env_var"),
+        ("slack_webhook", "slack_webhook_env_var"),
+    ):
         val = form.get(field, "").strip()
         if val:
-            config[field] = val
+            credentials_env_vars[cred_name] = val
+
+    bad_env = validate_credentials_env_vars(credentials_env_vars)
+    if bad_env:
+        raise HTTPException(
+            400,
+            f"Credential env var names must be uppercase letters/digits/underscores (invalid: {', '.join(bad_env)}).",
+        )
+
+    # Defense in depth: reject any raw-secret-shaped key the wizard might have
+    # collected into config (e.g. notes containing a key=value pair).
+    raw_offenders = validate_no_raw_secrets(config)
+    if raw_offenders:
+        raise HTTPException(
+            400,
+            "Supavision does not store raw secrets. The following fields must be passed "
+            f"as env-var references on the Credentials step instead of as raw values: "
+            f"{', '.join(raw_offenders)}.",
+        )
 
     # Notes
     notes = form.get("notes", "").strip()
@@ -559,29 +697,22 @@ async def resource_new_submit(request: Request):
 
     # Monitoring requests (textarea → list); silently cap to avoid bad UX on free-text field
     monitoring_requests_raw = form.get("monitoring_requests", "").strip()
-    monitoring_requests = [
-        line.strip()[:500] for line in monitoring_requests_raw.split("\n")
-        if line.strip()
-    ][:50] if monitoring_requests_raw else []
-
-    # Slack webhook (with SSRF validation)
-    slack = form.get("slack_webhook", "").strip()
-    if slack:
-        try:
-            from ...notifications import validate_webhook_url
-            validate_webhook_url(slack)
-            config["slack_webhook"] = slack
-        except ValueError as e:
-            raise HTTPException(400, f"Invalid slack webhook URL: {e}")
+    monitoring_requests = (
+        [line.strip()[:500] for line in monitoring_requests_raw.split("\n") if line.strip()][:50]
+        if monitoring_requests_raw
+        else []
+    )
 
     # Schedules
     health_cron = form.get("health_cron", "").strip()
     discovery_cron = form.get("discovery_cron", "").strip()
 
+    credentials = {name: Credential(env_var=ev) for name, ev in credentials_env_vars.items()}
     resource = Resource(
         name=name,
         resource_type=resource_type,
         config=config,
+        credentials=credentials,
         monitoring_requests=monitoring_requests,
         health_check_schedule=Schedule(cron=health_cron, enabled=True) if health_cron else None,
         discovery_schedule=Schedule(cron=discovery_cron, enabled=True) if discovery_cron else None,
@@ -628,17 +759,19 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
             if report and report.payload_diff:
                 diff_new = len(report.payload_diff.new)
                 diff_resolved = len(report.payload_diff.resolved)
-        runs_data.append({
-            "run_type": str(run.run_type),
-            "status": str(run.status),
-            "severity": severity,
-            "started_at": run.started_at.isoformat() if run.started_at else "-",
-            "duration": duration,
-            "report_id": run.report_id,
-            "error": (run.error[:150] + "...") if run.error and len(run.error) > 150 else run.error,
-            "diff_new": diff_new,
-            "diff_resolved": diff_resolved,
-        })
+        runs_data.append(
+            {
+                "run_type": str(run.run_type),
+                "status": str(run.status),
+                "severity": severity,
+                "started_at": run.started_at.isoformat() if run.started_at else "-",
+                "duration": duration,
+                "report_id": run.report_id,
+                "error": (run.error[:150] + "...") if run.error and len(run.error) > 150 else run.error,
+                "diff_new": diff_new,
+                "diff_resolved": diff_resolved,
+            }
+        )
 
     latest_eval = store.get_recent_evaluations(resource_id, limit=1)
     severity = str(latest_eval[0].severity) if latest_eval else None
@@ -702,29 +835,109 @@ async def resource_detail(resource_id: str, request: Request, page: int = 1, new
         active_run = last_run
         sse_url = f"/resources/{resource_id}/runs/{last_run.id}/stream"
 
-    return _render(request, "resource_detail.html", {
-        "resource": resource,
-        "context": context,
-        "context_html": context_html,
-        "checklist": checklist,
-        "runs": runs_data,
-        "alert_history": alert_evals,
-        "severity": severity,
-        "latest_eval": latest_eval[0] if latest_eval else None,
-        "health_cron": health_cron,
-        "discovery_cron": discovery_cron,
-        "slack_webhook": slack_webhook,
-        "next_health_check": next_health_check,
-        "page": page,
-        "has_more_runs": has_more,
-        "is_new": bool(new),
-        "now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "engine_available": request.app.state.engine is not None,
-        "active_run": active_run,
-        "sse_url": sse_url,
-        "last_run": last_run,
-        "health_grid": health_grid,
-    })
+    # Active issues for the new top-of-page panel.
+    # Source order:
+    #   1. The latest health-check report's structured payload.issues
+    #      (canonical — has severity, evidence, recommendation, stable IDs).
+    #   2. Fallback for legacy reports: Evaluation.summary as a single
+    #      severity-coloured note. (Evaluation only carries resource-level
+    #      severity + summary; it is NOT a substitute for an issue list.)
+    active_issues: list[dict] = []
+    legacy_issue_summary: str | None = None
+    latest_health_run = next(
+        (r for r in recent_runs if str(r.run_type) == "health_check" and r.report_id),
+        None,
+    )
+    if latest_health_run and latest_health_run.report_id:
+        latest_report = store.get_report(latest_health_run.report_id)
+        if latest_report and latest_report.payload and latest_report.payload.issues:
+            severity_order = {"critical": 0, "warning": 1, "info": 2}
+            for issue in sorted(
+                latest_report.payload.issues,
+                key=lambda i: severity_order.get(str(i.severity), 99),
+            ):
+                active_issues.append(
+                    {
+                        "id": issue.id,
+                        "title": issue.title,
+                        "severity": str(issue.severity),
+                        "evidence": issue.evidence,
+                        "recommendation": issue.recommendation,
+                        "tags": list(issue.tags),
+                        "scope": issue.scope,
+                    }
+                )
+        elif latest_eval:
+            # Legacy: no structured payload → show the evaluation summary.
+            legacy_issue_summary = latest_eval[0].summary
+
+    # Workflow step indicator: where is this resource in the flagship journey?
+    has_discovery = any(str(r.run_type) == "discovery" and str(r.status) == "completed" for r in recent_runs)
+    has_health_check = any(str(r.run_type) == "health_check" and str(r.status) == "completed" for r in recent_runs)
+    if not has_discovery:
+        workflow_step = "needs_discovery"
+        recommended_action = {
+            "label": "Run Discovery",
+            "hint": "Map this resource and establish a baseline before the first health check.",
+            "href": f"/resources/{resource_id}/discover",
+            "method": "post",
+        }
+    elif not has_health_check:
+        workflow_step = "needs_health_check"
+        recommended_action = {
+            "label": "Run Health Check",
+            "hint": "Baseline is set — run your first health check to surface issues.",
+            "href": f"/resources/{resource_id}/health-check",
+            "method": "post",
+        }
+    elif active_issues and severity in ("critical", "warning"):
+        workflow_step = "verify_fix"
+        recommended_action = {
+            "label": "Verify Fix",
+            "hint": "Re-run the health check after addressing the issues above; the diff will show what changed.",
+            "href": f"/resources/{resource_id}/health-check",
+            "method": "post",
+        }
+    else:
+        workflow_step = "healthy"
+        recommended_action = {
+            "label": "Run Health Check",
+            "hint": "Everything looks healthy. Run an ad-hoc check anytime.",
+            "href": f"/resources/{resource_id}/health-check",
+            "method": "post",
+        }
+
+    return _render(
+        request,
+        "resource_detail.html",
+        {
+            "resource": resource,
+            "context": context,
+            "context_html": context_html,
+            "checklist": checklist,
+            "runs": runs_data,
+            "alert_history": alert_evals,
+            "severity": severity,
+            "latest_eval": latest_eval[0] if latest_eval else None,
+            "active_issues": active_issues,
+            "legacy_issue_summary": legacy_issue_summary,
+            "workflow_step": workflow_step,
+            "recommended_action": recommended_action,
+            "health_cron": health_cron,
+            "discovery_cron": discovery_cron,
+            "slack_webhook": slack_webhook,
+            "next_health_check": next_health_check,
+            "page": page,
+            "has_more_runs": has_more,
+            "is_new": bool(new),
+            "now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "engine_available": request.app.state.engine is not None,
+            "active_run": active_run,
+            "sse_url": sse_url,
+            "last_run": last_run,
+            "health_grid": health_grid,
+        },
+    )
 
 
 @router.get("/resources/{resource_id}/history", response_class=HTMLResponse)
@@ -757,23 +970,29 @@ async def resource_history(resource_id: str, request: Request, page: int = 1):
             day = run.completed_at.isoformat()[:10]
             version = context_versions.get(day)
 
-        events.append({
-            "type": str(run.run_type),
-            "severity": severity,
-            "summary": summary,
-            "error": run.error[:120] if run.error else None,
-            "report_id": run.report_id,
-            "created_at": (run.started_at or run.created_at).isoformat(),
-            "is_baseline": is_baseline,
-            "version": version,
-        })
+        events.append(
+            {
+                "type": str(run.run_type),
+                "severity": severity,
+                "summary": summary,
+                "error": run.error[:120] if run.error else None,
+                "report_id": run.report_id,
+                "created_at": (run.started_at or run.created_at).isoformat(),
+                "is_baseline": is_baseline,
+                "version": version,
+            }
+        )
 
-    return _render(request, "resource_history.html", {
-        "resource": resource,
-        "events": events,
-        "page": page,
-        "has_more": has_more,
-    })
+    return _render(
+        request,
+        "resource_history.html",
+        {
+            "resource": resource,
+            "events": events,
+            "page": page,
+            "has_more": has_more,
+        },
+    )
 
 
 @router.post("/resources/{resource_id}/discover")
@@ -857,16 +1076,37 @@ async def update_notifications(resource_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Resource not found")
 
     form = await request.form()
-    webhook = form.get("slack_webhook", "").strip()
-    if webhook:
-        try:
-            from ...notifications import validate_webhook_url
-            validate_webhook_url(webhook)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid webhook URL: {e}")
-        resource.config["slack_webhook"] = webhook
-    else:
+
+    # The legacy field is `slack_webhook` (a raw URL); the new field is
+    # `slack_webhook_env_var` (the name of an env var that holds the URL).
+    # Reject the legacy field entirely — webhook URLs are credentials.
+    if form.get("slack_webhook", "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Supavision does not store webhook URLs. Set an environment "
+                "variable holding the URL and pass its name via `slack_webhook_env_var`."
+            ),
+        )
+
+    env_var = form.get("slack_webhook_env_var", "").strip()
+    if env_var:
+        if not is_valid_env_var_name(env_var):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "`slack_webhook_env_var` must be a valid environment variable name "
+                    "(uppercase letters, digits, underscores; cannot start with a digit)."
+                ),
+            )
+        resource.credentials["slack_webhook"] = Credential(env_var=env_var)
+        # Editing the credential is the natural migration path for legacy raw values.
         resource.config.pop("slack_webhook", None)
+    else:
+        # Empty submit = remove the configuration entirely (both new and legacy).
+        resource.credentials.pop("slack_webhook", None)
+        resource.config.pop("slack_webhook", None)
+
     store.save_resource(resource)
     return Response(status_code=204)
 
@@ -1030,6 +1270,7 @@ async def stream_run_output(resource_id: str, run_id: str, request: Request):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
+
 @router.get("/reports/{report_id}", response_class=HTMLResponse)
 async def report_detail(report_id: str, request: Request):
     store = request.app.state.store
@@ -1049,14 +1290,18 @@ async def report_detail(report_id: str, request: Request):
 
     report_html = _md_to_html(report.content or "")
 
-    return _render(request, "report_detail.html", {
-        "report": report,
-        "report_html": report_html,
-        "evaluation": evaluation,
-        "resource_name": resource_name,
-        "base_url": os.environ.get("SUPAVISION_BASE_URL", "").rstrip("/"),
-        "summary_text": _report_to_summary(report, evaluation, resource),
-    })
+    return _render(
+        request,
+        "report_detail.html",
+        {
+            "report": report,
+            "report_html": report_html,
+            "evaluation": evaluation,
+            "resource_name": resource_name,
+            "base_url": os.environ.get("SUPAVISION_BASE_URL", "").rstrip("/"),
+            "summary_text": _report_to_summary(report, evaluation, resource),
+        },
+    )
 
 
 def _report_to_summary(report, evaluation, resource) -> str:
@@ -1182,6 +1427,3 @@ async def report_export_markdown(report_id: str, request: Request):
 
 
 # ── Health Check triggers ─────────────────────────
-
-
-

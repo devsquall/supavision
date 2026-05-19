@@ -91,6 +91,7 @@ def create_app(
 
         # Warn early if Claude CLI backend is not authenticated
         import os
+
         if os.environ.get("SUPAVISION_BACKEND", "claude_cli") == "claude_cli" and engine is not None:
             auth_ok, auth_detail = check_claude_auth()
             if not auth_ok:
@@ -138,8 +139,7 @@ def create_app(
         # (first-time setup before create-admin has been run)
         if store.count_users() == 0:
             logger.critical(
-                "NO USERS CONFIGURED — running in open-access mode. "
-                "Create an admin now: supavision create-admin"
+                "NO USERS CONFIGURED — running in open-access mode. Create an admin now: supavision create-admin"
             )
             request.state.csrf_token = ""
             request.state.current_user = None
@@ -165,6 +165,7 @@ def create_app(
                             body = await request.body()
                             if b"csrf_token=" in body:
                                 from urllib.parse import parse_qs
+
                                 parsed = parse_qs(body.decode("utf-8", errors="replace"))
                                 token = parsed.get("csrf_token", [""])[0]
                             request._body = body  # Re-wrap for downstream
@@ -179,6 +180,7 @@ def create_app(
         # Root "/" hits the public marketing page first.
         # Deep links go to login?next=... so users land where they intended.
         from fastapi.responses import RedirectResponse
+
         if request.url.path == "/":
             return RedirectResponse(url="/landing", status_code=302)
         next_url = request.url.path
@@ -188,8 +190,8 @@ def create_app(
 
     logger.info("Session-based auth enabled")
 
-    app.include_router(health_router)     # /api/v1/health (no auth, for healthchecks)
-    app.include_router(api_router)        # /api/v1/* (JSON, requires API key)
+    app.include_router(health_router)  # /api/v1/health (no auth, for healthchecks)
+    app.include_router(api_router)  # /api/v1/* (JSON, requires API key)
     app.include_router(dashboard_router)  # /* (HTML, session auth)
 
     # Custom error pages (branded, not default FastAPI JSON)
@@ -200,17 +202,29 @@ def create_app(
     async def not_found(request: Request, exc):
         if request.url.path.startswith("/api/"):
             return HTMLResponse(content='{"detail":"Not found"}', status_code=404, media_type="application/json")
-        return _error_templates.TemplateResponse(request, "error.html", {
-            "status_code": 404, "message": "Page not found.",
-        }, status_code=404)
+        return _error_templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "status_code": 404,
+                "message": "Page not found.",
+            },
+            status_code=404,
+        )
 
     @app.exception_handler(500)
     async def server_error(request: Request, exc):
         if request.url.path.startswith("/api/"):
             body = '{"detail":"Internal server error"}'
             return HTMLResponse(content=body, status_code=500, media_type="application/json")
-        return _error_templates.TemplateResponse(request, "error.html", {
-            "status_code": 500, "message": "Something went wrong. Please try again.",
-        }, status_code=500)
+        return _error_templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "status_code": 500,
+                "message": "Something went wrong. Please try again.",
+            },
+            status_code=500,
+        )
 
     return app

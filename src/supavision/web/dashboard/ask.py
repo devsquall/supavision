@@ -40,15 +40,16 @@ def _gather_context(store) -> dict:
     resource_summaries = []
     for r in resources[:20]:
         ev = evals.get(r.id)
-        resource_summaries.append({
-            "id": r.id,
-            "name": r.name,
-            "type": r.resource_type,
-            "severity": ev.severity if ev else "unknown",
-            "summary": ev.summary if ev else None,
-            "metrics": all_metrics.get(r.id, {}),
-        })
-
+        resource_summaries.append(
+            {
+                "id": r.id,
+                "name": r.name,
+                "type": r.resource_type,
+                "severity": ev.severity if ev else "unknown",
+                "summary": ev.summary if ev else None,
+                "metrics": all_metrics.get(r.id, {}),
+            }
+        )
 
     return {
         "resources": resource_summaries,
@@ -89,29 +90,54 @@ _INTENT_PATTERNS: dict[str, dict] = {
     },
     "priority": {
         "keywords": [
-            "fix first", "should i fix", "priority", "prioritize",
-            "triage", "most important", "worst", "most urgent",
+            "fix first",
+            "should i fix",
+            "priority",
+            "prioritize",
+            "triage",
+            "most important",
+            "worst",
+            "most urgent",
         ],
         "weight": 3,
     },
     "problems": {
         "keywords": [
-            "what's wrong", "what is wrong", "any problems", "any issues",
-            "anything broken", "broken", "failing", "errors", "problems",
+            "what's wrong",
+            "what is wrong",
+            "any problems",
+            "any issues",
+            "anything broken",
+            "broken",
+            "failing",
+            "errors",
+            "problems",
         ],
         "weight": 3,
     },
     "overview": {
         "keywords": [
-            "status", "overview", "summary", "health",
-            "how is", "how are", "show me everything",
+            "status",
+            "overview",
+            "summary",
+            "health",
+            "how is",
+            "how are",
+            "show me everything",
         ],
         "weight": 1,
     },
     "metrics": {
         "keywords": [
-            "metric", "metrics", "cpu", "disk", "memory", "cost",
-            "usage", "performance", "capacity",
+            "metric",
+            "metrics",
+            "cpu",
+            "disk",
+            "memory",
+            "cost",
+            "usage",
+            "performance",
+            "capacity",
         ],
         "weight": 1,
     },
@@ -144,9 +170,9 @@ def _classify_intent(question: str) -> str:
                 score += len(kw.split()) * conf["weight"]
         if score == 0:
             continue
-        if score > best_score or (score == best_score and conf["weight"] > (
-            _INTENT_PATTERNS.get(best_intent, {}).get("weight", 0)
-        )):
+        if score > best_score or (
+            score == best_score and conf["weight"] > (_INTENT_PATTERNS.get(best_intent, {}).get("weight", 0))
+        ):
             best_score = score
             best_intent = intent
 
@@ -167,10 +193,12 @@ def _detect_modifiers(question: str) -> dict:
     return mods
 
 
-
 def _build_calls(
-    intent: str, modifiers: dict, resource_id: str | None,
-    context: dict, question: str = "",
+    intent: str,
+    modifiers: dict,
+    resource_id: str | None,
+    context: dict,
+    question: str = "",
 ) -> list[dict]:
     calls: list[dict] = []
 
@@ -287,12 +315,18 @@ def _compose_help(_results: list, context: dict) -> dict:
         "answer": "Hey! I can help you explore your Supavision data. Try one of these:",
         "evidence": [],
         "next_step": None,
-        "sections": [{"type": "help", "title": "Example Questions", "data": [
-            "What's wrong with my system?",
-            "What should I fix first?",
-            "Show me metrics for my server",
-            "What's the status of everything?",
-        ]}],
+        "sections": [
+            {
+                "type": "help",
+                "title": "Example Questions",
+                "data": [
+                    "What's wrong with my system?",
+                    "What should I fix first?",
+                    "Show me metrics for my server",
+                    "What's the status of everything?",
+                ],
+            }
+        ],
     }
 
 
@@ -305,7 +339,8 @@ def _compose_priority(results: list, context: dict) -> dict:
         return {
             "answer": "Nothing urgent. All resources are healthy.",
             "evidence": [_resource_chip(r) for r in resources[:3]] if resources else [],
-            "next_step": None, "sections": [],
+            "next_step": None,
+            "sections": [],
         }
 
     first = unhealthy[0]
@@ -326,12 +361,15 @@ def _compose_problems(results: list, context: dict) -> dict:
 
     if not unhealthy:
         evidence = [_resource_chip(r) for r in resources[:3]] if resources else []
-        return {"answer": "Nothing urgent. All resources are healthy.", "evidence": evidence,
-                "next_step": None, "sections": []}
+        return {
+            "answer": "Nothing urgent. All resources are healthy.",
+            "evidence": evidence,
+            "next_step": None,
+            "sections": [],
+        }
 
     names = ", ".join(r.get("name", "?") for r in unhealthy)
-    answer = (f"{len(unhealthy)} resource{'s need' if len(unhealthy) != 1 else ' needs'} "
-              f"attention: {names}.")
+    answer = f"{len(unhealthy)} resource{'s need' if len(unhealthy) != 1 else ' needs'} attention: {names}."
     return {
         "answer": answer,
         "evidence": [_resource_chip(r) for r in unhealthy[:5]],
@@ -343,8 +381,12 @@ def _compose_problems(results: list, context: dict) -> dict:
 def _compose_overview(results: list, context: dict) -> dict:
     resources = _get_all_data(results, "supavision_list_resources")
     if not resources:
-        return {"answer": "No resources configured yet. Add a server to get started.",
-                "evidence": [], "next_step": "Go to Resources and add your first one.", "sections": []}
+        return {
+            "answer": "No resources configured yet. Add a server to get started.",
+            "evidence": [],
+            "next_step": "Go to Resources and add your first one.",
+            "sections": [],
+        }
 
     n = len(resources)
     by_sev: dict[str, int] = {}
@@ -374,8 +416,12 @@ def _compose_metrics(results: list, context: dict) -> dict:
                 all_metrics.append(r)
 
     if not all_metrics:
-        return {"answer": "No metrics available. Run a health check to start collecting.",
-                "evidence": [], "next_step": "Go to a resource and click Diagnose.", "sections": []}
+        return {
+            "answer": "No metrics available. Run a health check to start collecting.",
+            "evidence": [],
+            "next_step": "Go to a resource and click Diagnose.",
+            "sections": [],
+        }
 
     evidence: list[dict] = []
     sections: list[dict] = []
@@ -390,8 +436,12 @@ def _compose_metrics(results: list, context: dict) -> dict:
             answer_parts.append(f"{k}: {val}{' ' + unit if unit else ''}")
         sections.append({"type": "metrics", "title": f"Metrics ({res_id})", "data": d})
 
-    return {"answer": ", ".join(answer_parts[:5]) + "." if answer_parts else "Metrics collected.",
-            "evidence": evidence[:5], "next_step": None, "sections": sections}
+    return {
+        "answer": ", ".join(answer_parts[:5]) + "." if answer_parts else "Metrics collected.",
+        "evidence": evidence[:5],
+        "next_step": None,
+        "sections": sections,
+    }
 
 
 def _compose_resource_detail(results: list, context: dict) -> dict:
@@ -446,12 +496,19 @@ def _compose_generic(results: list, context: dict) -> dict:
     if not parts:
         return {
             "answer": "I'm not sure how to answer that. Try one of these:",
-            "evidence": [], "next_step": None,
-            "sections": [{"type": "help", "title": "Example Questions", "data": [
-                "What's wrong with my system?",
-                "What should I fix first?",
-                "Show me the latest report",
-            ]}],
+            "evidence": [],
+            "next_step": None,
+            "sections": [
+                {
+                    "type": "help",
+                    "title": "Example Questions",
+                    "data": [
+                        "What's wrong with my system?",
+                        "What should I fix first?",
+                        "Show me the latest report",
+                    ],
+                }
+            ],
         }
 
     return {"answer": " ".join(parts), "evidence": evidence[:5], "next_step": None, "sections": sections}
@@ -481,28 +538,38 @@ async def ask_page(request: Request):
 async def mcp_query(request: Request):
     """Query Supavision data. No LLM, zero cost."""
     if not getattr(request.state, "current_user", None):
-        return Response(content=json.dumps({"error": "Authentication required"}),
-                        status_code=401, media_type="application/json")
+        return Response(
+            content=json.dumps({"error": "Authentication required"}), status_code=401, media_type="application/json"
+        )
 
     ip = request.client.host if request.client else "unknown"
     from ...config import RATE_LIMIT_ASK
+
     if not _check_rate_limit(ip, max_per_minute=RATE_LIMIT_ASK):
-        return Response(content=json.dumps({"error": "Rate limit exceeded. Try again in a minute."}),
-                        status_code=429, media_type="application/json")
+        return Response(
+            content=json.dumps({"error": "Rate limit exceeded. Try again in a minute."}),
+            status_code=429,
+            media_type="application/json",
+        )
 
     try:
         body = await request.json()
     except Exception:
-        return Response(content=json.dumps({"error": "Invalid JSON body"}),
-                        status_code=400, media_type="application/json")
+        return Response(
+            content=json.dumps({"error": "Invalid JSON body"}), status_code=400, media_type="application/json"
+        )
 
     question = (body.get("question") or "").strip()
     if not question:
-        return Response(content=json.dumps({"error": "question is required"}),
-                        status_code=400, media_type="application/json")
+        return Response(
+            content=json.dumps({"error": "question is required"}), status_code=400, media_type="application/json"
+        )
     if len(question) > 2000:
-        return Response(content=json.dumps({"error": "Question too long (max 2000 chars)"}),
-                        status_code=400, media_type="application/json")
+        return Response(
+            content=json.dumps({"error": "Question too long (max 2000 chars)"}),
+            status_code=400,
+            media_type="application/json",
+        )
 
     store = request.app.state.store
     context = _gather_context(store)
@@ -522,14 +589,16 @@ async def mcp_query(request: Request):
     response = composer(results, context)
 
     return Response(
-        content=json.dumps({
-            "question": question,
-            "answer": response.get("answer", ""),
-            "evidence": response.get("evidence", []),
-            "next_step": response.get("next_step"),
-            "sections": response.get("sections", []),
-            "context": context,
-        }),
+        content=json.dumps(
+            {
+                "question": question,
+                "answer": response.get("answer", ""),
+                "evidence": response.get("evidence", []),
+                "next_step": response.get("next_step"),
+                "sections": response.get("sections", []),
+                "context": context,
+            }
+        ),
         status_code=200,
         media_type="application/json",
     )

@@ -131,16 +131,12 @@ def compute_diff(current_content: str, previous_content: str) -> ContextDiff:
 
         if in_current and not in_previous:
             heading, content = current[key]
-            diff.sections.append(
-                SectionDiff(heading=heading, change_type="added", new_content=content)
-            )
+            diff.sections.append(SectionDiff(heading=heading, change_type="added", new_content=content))
             diff.total_added += 1
 
         elif in_previous and not in_current:
             heading, content = previous[key]
-            diff.sections.append(
-                SectionDiff(heading=heading, change_type="removed", old_content=content)
-            )
+            diff.sections.append(SectionDiff(heading=heading, change_type="removed", old_content=content))
             diff.total_removed += 1
 
         else:

@@ -34,8 +34,7 @@ TOOLS = [
     {
         "name": "supavision_get_latest_report",
         "description": (
-            "Get the most recent health check report for a resource. "
-            "Returns report content, severity, and summary."
+            "Get the most recent health check report for a resource. Returns report content, severity, and summary."
         ),
         "inputSchema": {
             "type": "object",
@@ -68,8 +67,7 @@ TOOLS = [
     {
         "name": "supavision_get_run_history",
         "description": (
-            "Get recent run history for a resource. "
-            "Returns run type, status, severity, timestamps, and duration."
+            "Get recent run history for a resource. Returns run type, status, severity, timestamps, and duration."
         ),
         "inputSchema": {
             "type": "object",
@@ -142,9 +140,7 @@ TOOLS = [
 
 
 def _handle_list_resources(conn: sqlite3.Connection, _args: dict) -> str:
-    rows = conn.execute(
-        "SELECT id, data FROM resources ORDER BY created_at"
-    ).fetchall()
+    rows = conn.execute("SELECT id, data FROM resources ORDER BY created_at").fetchall()
 
     resources = []
     for row in rows:
@@ -161,13 +157,15 @@ def _handle_list_resources(conn: sqlite3.Connection, _args: dict) -> str:
             ev_data = json.loads(ev[0])
             severity = ev_data.get("severity")
 
-        resources.append({
-            "id": resource_id,
-            "name": data.get("name"),
-            "resource_type": data.get("resource_type"),
-            "severity": severity,
-            "enabled": data.get("enabled", True),
-        })
+        resources.append(
+            {
+                "id": resource_id,
+                "name": data.get("name"),
+                "resource_type": data.get("resource_type"),
+                "severity": severity,
+                "enabled": data.get("enabled", True),
+            }
+        )
 
     return json.dumps(resources, indent=2)
 
@@ -193,13 +191,16 @@ def _handle_get_latest_report(conn: sqlite3.Connection, args: dict) -> str:
     ).fetchone()
     eval_data = json.loads(ev[0]) if ev else None
 
-    return json.dumps({
-        "report_content": report_data.get("content", ""),
-        "run_type": report_data.get("run_type"),
-        "created_at": report_data.get("created_at"),
-        "severity": eval_data.get("severity") if eval_data else None,
-        "summary": eval_data.get("summary") if eval_data else None,
-    }, indent=2)
+    return json.dumps(
+        {
+            "report_content": report_data.get("content", ""),
+            "run_type": report_data.get("run_type"),
+            "created_at": report_data.get("created_at"),
+            "severity": eval_data.get("severity") if eval_data else None,
+            "summary": eval_data.get("summary") if eval_data else None,
+        },
+        indent=2,
+    )
 
 
 def _handle_get_baseline(conn: sqlite3.Connection, args: dict) -> str:
@@ -222,14 +223,16 @@ def _handle_get_baseline(conn: sqlite3.Connection, args: dict) -> str:
     ).fetchone()
     checklist_data = json.loads(checklist[0]) if checklist else None
 
-    return json.dumps({
-        "system_context": ctx_data.get("content", ""),
-        "version": ctx_data.get("version"),
-        "checklist_items": [
-            item.get("description", "")
-            for item in (checklist_data.get("items", []) if checklist_data else [])
-        ],
-    }, indent=2)
+    return json.dumps(
+        {
+            "system_context": ctx_data.get("content", ""),
+            "version": ctx_data.get("version"),
+            "checklist_items": [
+                item.get("description", "") for item in (checklist_data.get("items", []) if checklist_data else [])
+            ],
+        },
+        indent=2,
+    )
 
 
 def _handle_get_run_history(conn: sqlite3.Connection, args: dict) -> str:
@@ -250,13 +253,15 @@ def _handle_get_run_history(conn: sqlite3.Connection, args: dict) -> str:
     runs = []
     for row in rows:
         data = json.loads(row[0])
-        runs.append({
-            "run_type": data.get("run_type"),
-            "status": data.get("status"),
-            "started_at": data.get("started_at"),
-            "completed_at": data.get("completed_at"),
-            "error": data.get("error"),
-        })
+        runs.append(
+            {
+                "run_type": data.get("run_type"),
+                "status": data.get("status"),
+                "started_at": data.get("started_at"),
+                "completed_at": data.get("completed_at"),
+                "error": data.get("error"),
+            }
+        )
 
     return json.dumps(runs, indent=2)
 
@@ -291,6 +296,7 @@ def _handle_get_metrics_trend(conn: sqlite3.Connection, args: dict) -> str:
 
     days = min(max(int(args.get("days", 30)), 1), 90)
     from datetime import datetime, timedelta, timezone
+
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
     rows = conn.execute(
@@ -324,23 +330,23 @@ def _handle_get_severity_trend(conn: sqlite3.Connection, args: dict) -> str:
     entries = []
     for row in rows:
         ev = json.loads(row[0])
-        entries.append({
-            "severity": ev.get("severity"),
-            "summary": (ev.get("summary") or "")[:200],
-            "timestamp": ev.get("created_at"),
-            "report_id": ev.get("report_id"),
-            "should_alert": ev.get("should_alert", False),
-        })
+        entries.append(
+            {
+                "severity": ev.get("severity"),
+                "summary": (ev.get("summary") or "")[:200],
+                "timestamp": ev.get("created_at"),
+                "report_id": ev.get("report_id"),
+                "should_alert": ev.get("should_alert", False),
+            }
+        )
     return json.dumps({"resource_id": resource_id, "count": len(entries), "evaluations": entries}, indent=2)
 
 
 _HANDLERS = {
-
     "supavision_list_resources": _handle_list_resources,
     "supavision_get_latest_report": _handle_get_latest_report,
     "supavision_get_baseline": _handle_get_baseline,
     "supavision_get_run_history": _handle_get_run_history,
-
     "supavision_get_metrics": _handle_get_metrics,
     "supavision_get_metrics_trend": _handle_get_metrics_trend,
     "supavision_get_severity_trend": _handle_get_severity_trend,
@@ -375,8 +381,7 @@ def handle_jsonrpc(conn: sqlite3.Connection, line: str) -> dict | None:
             "id": msg_id,
             "result": {
                 "tools": [
-                    {"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
-                    for t in TOOLS
+                    {"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]} for t in TOOLS
                 ],
             },
         }

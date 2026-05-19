@@ -43,34 +43,43 @@ async def sessions_page(
     runs_status = status or None
     runs_type = run_type if run_type else None
     runs, runs_total = store.list_recent_runs(
-        limit=50, offset=0, status=runs_status, run_type=runs_type,
+        limit=50,
+        offset=0,
+        status=runs_status,
+        run_type=runs_type,
     )
 
     run_rows = []
     for run in runs:
         res = resources.get(run.resource_id)
-        run_rows.append({
-            "id": run.id,
-            "resource_id": run.resource_id,
-            "resource_name": res.name if res else run.resource_id[:8],
-            "run_type": str(run.run_type),
-            "status": str(run.status),
-            "started_at": run.started_at.isoformat() if run.started_at else "",
-            "duration": _duration(run.started_at, run.completed_at),
-            "tokens": (run.input_tokens or 0) + (run.output_tokens or 0),
-            "turns": run.turns,
-            "tool_calls": run.tool_calls,
-            "error": run.error or "",
-        })
+        run_rows.append(
+            {
+                "id": run.id,
+                "resource_id": run.resource_id,
+                "resource_name": res.name if res else run.resource_id[:8],
+                "run_type": str(run.run_type),
+                "status": str(run.status),
+                "started_at": run.started_at.isoformat() if run.started_at else "",
+                "duration": _duration(run.started_at, run.completed_at),
+                "tokens": (run.input_tokens or 0) + (run.output_tokens or 0),
+                "turns": run.turns,
+                "tool_calls": run.tool_calls,
+                "error": run.error or "",
+            }
+        )
 
-    return _render(request, "sessions.html", {
-        "run_rows": run_rows,
-        "runs_total": runs_total,
-        "status_filter": status,
-        "run_type_filter": run_type,
-        "run_statuses": [s.value for s in RunStatus],
-        "run_types": [t.value for t in RunType],
-    })
+    return _render(
+        request,
+        "sessions.html",
+        {
+            "run_rows": run_rows,
+            "runs_total": runs_total,
+            "status_filter": status,
+            "run_type_filter": run_type,
+            "run_statuses": [s.value for s in RunStatus],
+            "run_types": [t.value for t in RunType],
+        },
+    )
 
 
 @router.get("/sessions/{session_type}/{session_id}", response_class=HTMLResponse)
@@ -87,20 +96,24 @@ async def session_viewer(request: Request, session_type: str, session_id: str):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     res = resources.get(run.resource_id)
-    return _render(request, "session_viewer.html", {
-        "session_type": "run",
-        "session_id": run.id,
-        "resource_id": run.resource_id,
-        "resource_name": res.name if res else run.resource_id[:8],
-        "type_label": str(run.run_type),
-        "status": str(run.status),
-        "started_at": run.started_at.isoformat() if run.started_at else "",
-        "duration": _duration(run.started_at, run.completed_at),
-        "tokens": (run.input_tokens or 0) + (run.output_tokens or 0),
-        "turns": run.turns,
-        "tool_calls": run.tool_calls,
-        "error": run.error or "",
-        "output": run.error or "",
-        "is_running": str(run.status) == "running",
-        "sse_url": f"/resources/{run.resource_id}/runs/{run.id}/stream",
-    })
+    return _render(
+        request,
+        "session_viewer.html",
+        {
+            "session_type": "run",
+            "session_id": run.id,
+            "resource_id": run.resource_id,
+            "resource_name": res.name if res else run.resource_id[:8],
+            "type_label": str(run.run_type),
+            "status": str(run.status),
+            "started_at": run.started_at.isoformat() if run.started_at else "",
+            "duration": _duration(run.started_at, run.completed_at),
+            "tokens": (run.input_tokens or 0) + (run.output_tokens or 0),
+            "turns": run.turns,
+            "tool_calls": run.tool_calls,
+            "error": run.error or "",
+            "output": run.error or "",
+            "is_running": str(run.status) == "running",
+            "sse_url": f"/resources/{run.resource_id}/runs/{run.id}/stream",
+        },
+    )

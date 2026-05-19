@@ -34,6 +34,8 @@ from .models import (
     Report,
     Resource,
     Run,
+    RunMismatchError,
+    RunNotFoundError,
     RunStatus,
     RunType,
     Severity,
@@ -230,6 +232,7 @@ def _extract_result(event: dict) -> tuple[str | None, dict]:
         "duration_ms": event.get("duration_ms", 0),
     }
 
+
 MAX_TURNS = 50  # Safety limit — not configurable
 LOCK_DIR = Path(".supavision/locks")
 
@@ -271,15 +274,54 @@ class Engine:
 
     # ── Public API ───────────────────────────────────────────────────
 
-    def run_discovery(self, resource_id: str) -> Run:
+    def _prepare_run(
+        self,
+        resource_id: str,
+        run_type: RunType,
+        run_id: str | None,
+    ) -> Run:
+        """Return the Run to execute, either creating it fresh or transitioning an existing PENDING row.
+
+        When `run_id` is given, this is the API trigger path: the route has already
+        created a PENDING row for the caller to poll, and the engine must update
+        that same row instead of creating a duplicate.
+
+        Validates that the existing run matches `resource_id` and `run_type` and is
+        in PENDING status. Raises RunNotFoundError or RunMismatchError synchronously
+        so the route can surface 404/4xx instead of swallowing the error in a
+        background task.
+        """
+        if run_id is None:
+            run = Run(resource_id=resource_id, run_type=run_type, status=RunStatus.RUNNING)
+            run.started_at = datetime.now(timezone.utc)
+            self.store.save_run(run)
+            return run
+
+        existing = self.store.get_run(run_id)
+        if existing is None:
+            raise RunNotFoundError(f"Run {run_id!r} not found")
+        if existing.resource_id != resource_id:
+            raise RunMismatchError(f"Run {run_id!r} belongs to resource {existing.resource_id!r}, not {resource_id!r}")
+        if str(existing.run_type) != str(run_type):
+            raise RunMismatchError(f"Run {run_id!r} is a {existing.run_type!s} run, not {run_type!s}")
+        if existing.status != RunStatus.PENDING:
+            raise RunMismatchError(
+                f"Run {run_id!r} status is {existing.status!s}; expected PENDING. Re-execution must create a new Run."
+            )
+        existing.status = RunStatus.RUNNING
+        existing.started_at = datetime.now(timezone.utc)
+        self.store.save_run(existing)
+        return existing
+
+    def run_discovery(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute discovery (sync wrapper — use run_discovery_async from async code)."""
-        return asyncio.run(self.run_discovery_async(resource_id))
+        return asyncio.run(self.run_discovery_async(resource_id, run_id=run_id))
 
-    def run_health_check(self, resource_id: str) -> Run:
+    def run_health_check(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute health check (sync wrapper — use run_health_check_async from async code)."""
-        return asyncio.run(self.run_health_check_async(resource_id))
+        return asyncio.run(self.run_health_check_async(resource_id, run_id=run_id))
 
-    async def run_discovery_async(self, resource_id: str) -> Run:
+    async def run_discovery_async(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute Phase 1: Discovery.
 
         1. Acquire per-resource lock (prevent concurrent runs)
@@ -289,22 +331,32 @@ class Engine:
         5. Run tool_use agentic loop — Claude investigates via scoped tools
         6. Parse response → extract system context and checklist
         7. Store results + run evaluation
+
+        If `run_id` is given, the engine updates that existing PENDING run in place
+        instead of creating a new one — used by API trigger endpoints that need to
+        return the run_id synchronously while executing in a background task.
         """
         resource = self.store.get_resource(resource_id)
         if not resource:
             raise ValueError(f"Resource {resource_id} not found")
 
+        # Prepare/transition the Run FIRST so validation errors surface before
+        # we grab the per-resource lock.
+        run = self._prepare_run(resource_id, RunType.DISCOVERY, run_id)
+
         lock_fd = self._acquire_resource_lock(resource_id)
         if not lock_fd:
-            raise RuntimeError(
+            # Roll the prepared run back to PENDING/FAILED so we don't leave it RUNNING.
+            run.status = RunStatus.FAILED
+            run.error = (
                 f"Another run is in progress for resource {resource.name}. "
                 "Wait for it to complete or check for stale locks."
             )
+            run.completed_at = datetime.now(timezone.utc)
+            self.store.save_run(run)
+            raise RuntimeError(run.error)
 
-        run = Run(resource_id=resource_id, run_type=RunType.DISCOVERY, status=RunStatus.RUNNING)
-        run.started_at = datetime.now(timezone.utc)
         _run_pending.add(run.id)
-        self.store.save_run(run)
 
         executor = self._create_executor(resource)
 
@@ -314,6 +366,7 @@ class Engine:
                 ok, msg = await executor.test_connection()
                 if not ok:
                     import asyncio as _aio
+
                     logger.info("Connection test failed for %s, retrying in 2s: %s", resource.name, msg)
                     await _aio.sleep(2)
                     ok, msg = await executor.test_connection()
@@ -326,7 +379,9 @@ class Engine:
 
             # Load and resolve template
             template = load_template(
-                resource.resource_type, RunType.DISCOVERY, self.template_dir,
+                resource.resource_type,
+                RunType.DISCOVERY,
+                self.template_dir,
                 config=resource.config,
             )
 
@@ -443,7 +498,10 @@ class Engine:
 
             logger.info(
                 "Discovery completed: resource=%s severity=%s turns=%d tools=%d",
-                resource.name, evaluation.severity, run.turns, run.tool_calls,
+                resource.name,
+                evaluation.severity,
+                run.turns,
+                run.tool_calls,
             )
 
             return run
@@ -460,26 +518,30 @@ class Engine:
             await executor.teardown_multiplexing()
             self._release_resource_lock(lock_fd)
 
-    async def run_health_check_async(self, resource_id: str) -> Run:
+    async def run_health_check_async(self, resource_id: str, run_id: str | None = None) -> Run:
         """Execute Phase 2: Health Check.
 
         Same tool_use loop as discovery but includes baseline context,
         checklist, and recent reports for comparison.
+
+        If `run_id` is given, the engine updates that existing PENDING run in place
+        instead of creating a new one — used by API trigger endpoints.
         """
         resource = self.store.get_resource(resource_id)
         if not resource:
             raise ValueError(f"Resource {resource_id} not found")
 
+        run = self._prepare_run(resource_id, RunType.HEALTH_CHECK, run_id)
+
         lock_fd = self._acquire_resource_lock(resource_id)
         if not lock_fd:
-            raise RuntimeError(
-                f"Another run is in progress for resource {resource.name}."
-            )
+            run.status = RunStatus.FAILED
+            run.error = f"Another run is in progress for resource {resource.name}."
+            run.completed_at = datetime.now(timezone.utc)
+            self.store.save_run(run)
+            raise RuntimeError(run.error)
 
-        run = Run(resource_id=resource_id, run_type=RunType.HEALTH_CHECK, status=RunStatus.RUNNING)
-        run.started_at = datetime.now(timezone.utc)
         _run_pending.add(run.id)
-        self.store.save_run(run)
 
         executor = self._create_executor(resource)
 
@@ -488,6 +550,7 @@ class Engine:
                 ok, msg = await executor.test_connection()
                 if not ok:
                     import asyncio as _aio
+
                     logger.info("Connection test failed for %s, retrying in 2s: %s", resource.name, msg)
                     await _aio.sleep(2)
                     ok, msg = await executor.test_connection()
@@ -500,17 +563,13 @@ class Engine:
             # Load context from discovery
             latest_ctx = self.store.get_latest_context(resource_id)
             latest_checklist = self.store.get_latest_checklist(resource_id)
-            recent_reports = self.store.get_recent_reports(
-                resource_id, RunType.HEALTH_CHECK, limit=3
-            )
+            recent_reports = self.store.get_recent_reports(resource_id, RunType.HEALTH_CHECK, limit=3)
 
             runtime_ctx: dict[str, str] = {}
             if latest_ctx:
                 runtime_ctx["system_context"] = latest_ctx.content
             if latest_checklist:
-                runtime_ctx["checklist"] = "\n".join(
-                    f"- [ ] {item.description}" for item in latest_checklist.items
-                )
+                runtime_ctx["checklist"] = "\n".join(f"- [ ] {item.description}" for item in latest_checklist.items)
             if recent_reports:
                 summaries = []
                 for i, rpt in enumerate(recent_reports):
@@ -527,7 +586,9 @@ class Engine:
                 )
 
             template = load_template(
-                resource.resource_type, RunType.HEALTH_CHECK, self.template_dir,
+                resource.resource_type,
+                RunType.HEALTH_CHECK,
+                self.template_dir,
                 config=resource.config,
             )
             resolved = resolve_template(template, resource, creds, runtime_ctx)
@@ -572,7 +633,8 @@ class Engine:
             if payload_path is not None and structured_payload is None:
                 logger.warning(
                     "Structured payload missing for resource=%s run=%s — falling back to legacy",
-                    resource.name, run.id,
+                    resource.name,
+                    run.id,
                 )
 
             if structured_payload is not None:
@@ -594,8 +656,7 @@ class Engine:
                     # handoff call.
                     tool_calls = max(
                         0,
-                        dispatcher_for_payload.call_count
-                        - dispatcher_for_payload.submit_report_call_count,
+                        dispatcher_for_payload.call_count - dispatcher_for_payload.submit_report_call_count,
                     )
                 report_run_metadata = RunMetadata(
                     template_version=template_version,
@@ -606,9 +667,7 @@ class Engine:
             # A6: compute diff vs most recent prior structured payload
             payload_diff: IssueDiff | None = None
             if structured_payload is not None:
-                payload_diff = self._compute_payload_diff(
-                    resource_id, structured_payload
-                )
+                payload_diff = self._compute_payload_diff(resource_id, structured_payload)
 
             # Store report
             report = Report(
@@ -626,6 +685,7 @@ class Engine:
                 raw_metrics = self._parse_metrics_section(response)
                 if raw_metrics:
                     from .metric_schemas import validate_metrics
+
                     valid, warnings = validate_metrics(resource.resource_type, raw_metrics)
                     for w in warnings:
                         logger.warning("Metric validation: resource=%s %s", resource.name, w)
@@ -750,9 +810,7 @@ class Engine:
                     # Validate report has meaningful content
                     stripped = output.strip()
                     if len(stripped) < 50:
-                        raise RuntimeError(
-                            f"Claude CLI produced insufficient output ({len(stripped)} chars)"
-                        )
+                        raise RuntimeError(f"Claude CLI produced insufficient output ({len(stripped)} chars)")
                     # Cap output to prevent database/memory bloat (5MB)
                     _MAX_OUTPUT = 5_000_000
                     if len(stripped) > _MAX_OUTPUT:
@@ -765,7 +823,10 @@ class Engine:
                     if attempt < self._CLI_MAX_RETRIES:
                         logger.warning(
                             "Claude CLI attempt %d/%d failed: %s — retrying in %ds",
-                            attempt, self._CLI_MAX_RETRIES, e, self._CLI_RETRY_DELAY,
+                            attempt,
+                            self._CLI_MAX_RETRIES,
+                            e,
+                            self._CLI_RETRY_DELAY,
                         )
                         await asyncio.sleep(self._CLI_RETRY_DELAY)
                     else:
@@ -784,12 +845,16 @@ class Engine:
                     pass
 
     async def _run_claude_cli_once(
-        self, prompt: str, timeout: int, run_id: str | None = None,
+        self,
+        prompt: str,
+        timeout: int,
+        run_id: str | None = None,
     ) -> tuple[str, dict]:
         """Single Claude CLI execution attempt with live output streaming."""
         claude_path = shutil.which("claude") or "claude"
 
         import tempfile
+
         _fd, _tmp = tempfile.mkstemp(suffix=".md", prefix="supavision-")
         os.close(_fd)
         prompt_file = Path(_tmp)
@@ -798,11 +863,15 @@ class Engine:
         cmd = [
             claude_path,
             "--print",
-            "--output-format", "stream-json",
+            "--output-format",
+            "stream-json",
             "--verbose",
-            "--model", self._cli_model_name(),
-            "--permission-mode", "auto",
-            "--allowedTools", "Bash(*) Read Glob Grep",
+            "--model",
+            self._cli_model_name(),
+            "--permission-mode",
+            "auto",
+            "--allowedTools",
+            "Bash(*) Read Glob Grep",
             "--no-session-persistence",
             f"Follow the instructions in {prompt_file} exactly. "
             f"Read the file first, then execute all investigation steps. "
@@ -890,16 +959,15 @@ class Engine:
                         "Claude CLI is not authenticated. Run 'claude login' (OAuth) or set "
                         "ANTHROPIC_API_KEY, then retry. Detail: " + stderr_text[:200]
                     )
-                raise RuntimeError(
-                    f"Claude CLI exited with code {proc.returncode}: {stderr_text}"
-                )
+                raise RuntimeError(f"Claude CLI exited with code {proc.returncode}: {stderr_text}")
 
             if not output.strip():
                 raise RuntimeError("Claude CLI produced no result event (empty report)")
 
             logger.info(
                 "Claude CLI completed in %.0fs (%d chars, %d turns, $%.3f)",
-                elapsed, len(output),
+                elapsed,
+                len(output),
                 final_stats.get("num_turns", 0),
                 final_stats.get("cost_usd", 0.0),
             )
@@ -915,9 +983,7 @@ class Engine:
             }
 
         except FileNotFoundError:
-            raise RuntimeError(
-                "Claude Code CLI not found. Install it: npm install -g @anthropic-ai/claude-code"
-            )
+            raise RuntimeError("Claude Code CLI not found. Install it: npm install -g @anthropic-ai/claude-code")
         finally:
             prompt_file.unlink(missing_ok=True)
             # Note: _run_complete is NOT set here — set in _run_claude_cli wrapper
@@ -1013,20 +1079,24 @@ class Engine:
                 result = await dispatcher.dispatch(tool_name, tool_input)
 
                 # Append tool result
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.get("id", ""),
-                    "content": result,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id", ""),
+                        "content": result,
+                    }
+                )
 
         # Hit max turns — ask Claude to wrap up
-        messages.append({
-            "role": "user",
-            "content": (
-                "You have reached the maximum number of tool calls. "
-                "Please produce your final report now based on what you've gathered so far."
-            ),
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "You have reached the maximum number of tool calls. "
+                    "Please produce your final report now based on what you've gathered so far."
+                ),
+            }
+        )
         response_data = self._call_openrouter(messages, [])  # No tools — force text response
         usage = response_data.get("usage", {})
         total_input_tokens += usage.get("prompt_tokens", 0)
@@ -1044,9 +1114,7 @@ class Engine:
     _OR_MAX_RETRIES = 3
     _OR_RETRY_DELAYS = [2.0, 4.0, 8.0]
 
-    def _call_openrouter(
-        self, messages: list[dict], tools: list[dict]
-    ) -> dict:
+    def _call_openrouter(self, messages: list[dict], tools: list[dict]) -> dict:
         """Make a single call to OpenRouter with retry on transient failures."""
         payload: dict = {
             "model": self.model,
@@ -1084,8 +1152,10 @@ class Engine:
 
                     logger.warning(
                         "OpenRouter %d (attempt %d/%d), retrying in %.0fs",
-                        response.status_code, attempt + 1,
-                        self._OR_MAX_RETRIES + 1, delay,
+                        response.status_code,
+                        attempt + 1,
+                        self._OR_MAX_RETRIES + 1,
+                        delay,
                     )
                     time.sleep(delay)
                     continue
@@ -1108,7 +1178,9 @@ class Engine:
                     delay = self._OR_RETRY_DELAYS[attempt]
                     logger.warning(
                         "OpenRouter timeout (attempt %d/%d), retrying in %.0fs",
-                        attempt + 1, self._OR_MAX_RETRIES + 1, delay,
+                        attempt + 1,
+                        self._OR_MAX_RETRIES + 1,
+                        delay,
                     )
                     time.sleep(delay)
                     continue
@@ -1153,9 +1225,7 @@ class Engine:
 
         if host and user and key_path:
             port = int(resource.config.get("ssh_port", "22"))
-            conn = ConnectionConfig(
-                host=host, user=user, key_path=key_path, port=port
-            )
+            conn = ConnectionConfig(host=host, user=user, key_path=key_path, port=port)
             return Executor(connection=conn)
 
         # Local execution (no SSH)
@@ -1189,9 +1259,7 @@ class Engine:
         ]
         return "\n".join(parts)
 
-    def _parse_discovery_response(
-        self, response: str
-    ) -> tuple[str, list[ChecklistItem]]:
+    def _parse_discovery_response(self, response: str) -> tuple[str, list[ChecklistItem]]:
         """Parse discovery response into system context and checklist items."""
         system_context = ""
         checklist_items: list[ChecklistItem] = []
@@ -1218,9 +1286,7 @@ class Engine:
                     item_text = line[2:].strip()
                     item_text = item_text.removeprefix("[ ] ").removeprefix("[x] ")
                     if item_text:
-                        checklist_items.append(
-                            ChecklistItem(description=item_text, source="discovery")
-                        )
+                        checklist_items.append(ChecklistItem(description=item_text, source="discovery"))
 
         return system_context, checklist_items
 
@@ -1266,9 +1332,7 @@ class Engine:
 
         return metrics
 
-    def _compute_payload_diff(
-        self, resource_id: str, current_payload: ReportPayload
-    ) -> IssueDiff:
+    def _compute_payload_diff(self, resource_id: str, current_payload: ReportPayload) -> IssueDiff:
         """Compute run-vs-previous issue set-diff (Workstream A6).
 
         Walks recent health-check reports to find the most recent one that
@@ -1277,14 +1341,10 @@ class Engine:
         current issue is "new".
         """
         try:
-            recent = self.store.get_recent_reports(
-                resource_id, RunType.HEALTH_CHECK, limit=10
-            )
+            recent = self.store.get_recent_reports(resource_id, RunType.HEALTH_CHECK, limit=10)
             for prior in recent:
                 if prior.payload is not None:
-                    return compute_issue_diff(
-                        current_payload, prior.payload, prior.id
-                    )
+                    return compute_issue_diff(current_payload, prior.payload, prior.id)
         except Exception as e:
             logger.warning("Diff computation failed (non-fatal): %s", e)
         return compute_issue_diff(current_payload, None)
@@ -1330,18 +1390,16 @@ class Engine:
 
         return "Related resource issues:\n" + "\n".join(f"- {issue}" for issue in correlated_issues)
 
-    async def _handle_alert(
-        self, resource: Resource, report: Report, evaluation: Evaluation
-    ) -> None:
+    async def _handle_alert(self, resource: Resource, report: Report, evaluation: Evaluation) -> None:
         """Handle an alert: print to stdout + dispatch notifications."""
         # Stdout alert (always — useful for CLI and pipe-to-log)
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"ALERT: {evaluation.severity.upper()} — {resource.name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Summary: {evaluation.summary}")
         print(f"Resource: {resource.name} ({resource.resource_type})")
         print(f"Report ID: {report.id}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         # Dispatch to configured notification channels
         from .notifications import send_alert

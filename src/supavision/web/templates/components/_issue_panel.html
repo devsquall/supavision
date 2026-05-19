@@ -1,0 +1,40 @@
+{#
+  Renders a single issue card or a list of issue cards from
+  Report.payload.issues. Used on the resource detail page; ready to be
+  reused from report_detail.html for P2 #13.
+
+  Usage:
+    {% from 'components/_issue_panel.html' import issue_card, issue_list %}
+    {{ issue_list(active_issues) }}
+#}
+{% macro issue_card(issue) %}
+<li class="issue-card issue-card--{{ issue.severity }}">
+  <div class="issue-card-header">
+    <strong>{{ issue.title }}</strong>
+    <span class="badge badge--{{ issue.severity }} text-xs">{{ issue.severity }}</span>
+    {% if issue.scope %}<span class="text-xs text-muted">{{ issue.scope }}</span>{% endif %}
+    {% if issue.tags %}
+    <span class="text-xs text-muted">
+      {% for t in issue.tags %}<code>{{ t }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+    </span>
+    {% endif %}
+  </div>
+  {% if issue.evidence %}
+  <details class="issue-card-body">
+    <summary class="text-sm">Evidence</summary>
+    <pre class="text-sm">{{ issue.evidence }}</pre>
+  </details>
+  {% endif %}
+  {% if issue.recommendation %}
+  <div class="issue-card-rec text-sm"><strong>Recommended:</strong> {{ issue.recommendation }}</div>
+  {% endif %}
+</li>
+{% endmacro %}
+
+{% macro issue_list(issues) %}
+{% if issues %}
+<ul class="active-issues-list">
+  {% for issue in issues %}{{ issue_card(issue) }}{% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}

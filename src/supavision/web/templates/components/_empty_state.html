@@ -1,0 +1,19 @@
+{#
+  Empty state component for lists/pages with no data yet.
+  Usage:
+    {% from 'components/_empty_state.html' import empty_state %}
+    {{ empty_state(
+        'No resources yet',
+        'Add your first server, database, or cloud account to get started.',
+        cta_label='Add Resource', cta_href='/resources/new'
+    ) }}
+#}
+{% macro empty_state(title, hint, cta_label=None, cta_href=None) %}
+<div class="empty-state">
+  <h3>{{ title }}</h3>
+  {% if hint %}<p class="text-muted">{{ hint }}</p>{% endif %}
+  {% if cta_label and cta_href %}
+  <a href="{{ cta_href }}" class="btn mt-3">{{ cta_label }}</a>
+  {% endif %}
+</div>
+{% endmacro %}

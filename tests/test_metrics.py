@@ -47,19 +47,25 @@ class TestMetricSchemas:
 
 class TestValidateMetrics:
     def test_valid_metrics_pass(self):
-        valid, warnings = validate_metrics("server", {
-            "cpu_percent": 45,
-            "memory_percent": 80,
-            "disk_percent": 92,
-        })
+        valid, warnings = validate_metrics(
+            "server",
+            {
+                "cpu_percent": 45,
+                "memory_percent": 80,
+                "disk_percent": 92,
+            },
+        )
         assert len(valid) == 3
         assert any(m["name"] == "cpu_percent" and m["value"] == 45.0 for m in valid)
 
     def test_unknown_metric_rejected(self):
-        valid, warnings = validate_metrics("server", {
-            "cpu_percent": 45,
-            "totally_fake_metric": 99,
-        })
+        valid, warnings = validate_metrics(
+            "server",
+            {
+                "cpu_percent": 45,
+                "totally_fake_metric": 99,
+            },
+        )
         assert len(valid) == 1
         assert any("Rejected unknown metric" in w for w in warnings)
 
@@ -93,10 +99,13 @@ class TestValidateMetrics:
         assert valid[0]["unit"] == "%"
 
     def test_aws_metrics(self):
-        valid, _ = validate_metrics("aws_account", {
-            "monthly_cost_usd": 1234.56,
-            "ec2_running": 5,
-        })
+        valid, _ = validate_metrics(
+            "aws_account",
+            {
+                "monthly_cost_usd": 1234.56,
+                "ec2_running": 5,
+            },
+        )
         assert len(valid) == 2
         assert any(m["unit"] == "USD" for m in valid)
 
@@ -115,21 +124,33 @@ class TestMetricsStorage:
         return Store(str(tmp_path / "test.db"))
 
     def test_save_and_get_latest(self, store):
-        store.save_metrics("res-1", "report-1", [
-            {"name": "cpu_percent", "value": 45.0, "unit": "%"},
-            {"name": "disk_percent", "value": 82.0, "unit": "%"},
-        ])
+        store.save_metrics(
+            "res-1",
+            "report-1",
+            [
+                {"name": "cpu_percent", "value": 45.0, "unit": "%"},
+                {"name": "disk_percent", "value": 82.0, "unit": "%"},
+            ],
+        )
         latest = store.get_latest_metrics("res-1")
         assert latest["cpu_percent"] == 45.0
         assert latest["disk_percent"] == 82.0
 
     def test_latest_returns_most_recent(self, store):
-        store.save_metrics("res-1", "report-1", [
-            {"name": "cpu_percent", "value": 30.0, "unit": "%"},
-        ])
-        store.save_metrics("res-1", "report-2", [
-            {"name": "cpu_percent", "value": 60.0, "unit": "%"},
-        ])
+        store.save_metrics(
+            "res-1",
+            "report-1",
+            [
+                {"name": "cpu_percent", "value": 30.0, "unit": "%"},
+            ],
+        )
+        store.save_metrics(
+            "res-1",
+            "report-2",
+            [
+                {"name": "cpu_percent", "value": 60.0, "unit": "%"},
+            ],
+        )
         latest = store.get_latest_metrics("res-1")
         assert latest["cpu_percent"] == 60.0
 
@@ -161,6 +182,7 @@ class TestMetricsStorage:
 class TestMetricsParser:
     def _parse(self, text):
         from supavision.engine import Engine
+
         # Use __new__ to avoid __init__ validation
         engine = Engine.__new__(Engine)
         return engine._parse_metrics_section(text)

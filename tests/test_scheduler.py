@@ -3,6 +3,7 @@
 These tests use a real Store (SQLite in tmp_path) and a mock Engine so that
 scheduling logic is exercised against real DB state without needing Claude CLI.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -116,18 +117,14 @@ class TestGetDueJobs:
     """Scheduling logic: what makes a resource due?"""
 
     def test_first_run_resource_is_immediately_due(self, scheduler, store):
-        resource = _resource(
-            health_check_schedule=Schedule(cron="0 * * * *", enabled=True)
-        )
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=True))
         store.save_resource(resource)
         due = scheduler._get_due_jobs()
         ids = [r.id for r, _ in due]
         assert resource.id in ids
 
     def test_first_run_correct_run_type_returned(self, scheduler, store):
-        resource = _resource(
-            health_check_schedule=Schedule(cron="0 * * * *", enabled=True)
-        )
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=True))
         store.save_resource(resource)
         due = scheduler._get_due_jobs()
         entry = next((t for t in due if t[0].id == resource.id), None)
@@ -165,9 +162,7 @@ class TestGetDueJobs:
         assert resource.id not in ids
 
     def test_resource_due_after_interval_elapsed(self, scheduler, store):
-        resource = _resource(
-            health_check_schedule=Schedule(cron="*/5 * * * *", enabled=True)
-        )
+        resource = _resource(health_check_schedule=Schedule(cron="*/5 * * * *", enabled=True))
         store.save_resource(resource)
         run = _completed_run(resource.id, RunType.HEALTH_CHECK, completed_ago=timedelta(hours=1))
         store.save_run(run)
@@ -197,9 +192,7 @@ class TestGetDueJobs:
         assert not any(r.id == resource.id for r, _ in due)
 
     def test_disabled_schedule_is_skipped(self, scheduler, store):
-        resource = _resource(
-            health_check_schedule=Schedule(cron="0 * * * *", enabled=False)
-        )
+        resource = _resource(health_check_schedule=Schedule(cron="0 * * * *", enabled=False))
         store.save_resource(resource)
         due = scheduler._get_due_jobs()
         assert not any(r.id == resource.id for r, _ in due)

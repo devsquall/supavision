@@ -135,9 +135,7 @@ class TestResourceCRUD:
         store.save_resource(r)
         r.name = "updated"
         # Re-serialize the updated model
-        r_updated = Resource(
-            id=r.id, name="updated", resource_type=r.resource_type
-        )
+        r_updated = Resource(id=r.id, name="updated", resource_type=r.resource_type)
         store.save_resource(r_updated)
         got = store.get_resource(r.id)
         assert got.name == "updated"

@@ -91,8 +91,6 @@ def _seed_resource(store: Store, name: str = "test-server", resource_type: str =
     return r
 
 
-
-
 # ── Priority 1: Auth routes ─────────────────────────────────────
 
 
@@ -453,6 +451,7 @@ class TestAdminFormValidation:
 class TestReportExport:
     def test_export_markdown_returns_attachment(self, client, store):
         from supavision.models import Evaluation, Report, RunType, Severity
+
         r = _seed_resource(store, name="prod-web")
         report = Report(resource_id=r.id, run_type=RunType.HEALTH_CHECK, content="Report body here")
         store.save_report(report)
@@ -490,6 +489,7 @@ class TestResourceFreshness:
         from datetime import datetime, timedelta, timezone
 
         from supavision.models import Run, RunStatus, RunType
+
         r = _seed_resource(store, name="prod-server")
         completed_at = datetime.now(timezone.utc) - timedelta(hours=2)
         run = Run(

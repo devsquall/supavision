@@ -85,9 +85,7 @@ def get_allowed_names(resource_type: str) -> set[str]:
     return {m["name"] for m in get_schema(resource_type)}
 
 
-def validate_metrics(
-    resource_type: str, raw_metrics: dict[str, float]
-) -> tuple[list[dict], list[str]]:
+def validate_metrics(resource_type: str, raw_metrics: dict[str, float]) -> tuple[list[dict], list[str]]:
     """Validate raw metrics against the schema for a resource type.
 
     Returns:

@@ -70,9 +70,7 @@ class Resource(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    resource_type: str = Field(
-        description="Resource type identifier, e.g. 'aws_account', 'server', 'database'"
-    )
+    resource_type: str = Field(description="Resource type identifier, e.g. 'aws_account', 'server', 'database'")
 
     @field_validator("resource_type")
     @classmethod
@@ -80,10 +78,10 @@ class Resource(BaseModel):
         """Prevent path traversal — resource_type is used in template file paths."""
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(
-                f"resource_type must contain only alphanumeric characters, underscores, "
-                f"and hyphens (got: {v!r})"
+                f"resource_type must contain only alphanumeric characters, underscores, and hyphens (got: {v!r})"
             )
         return v
+
     parent_id: str | None = Field(
         default=None,
         description="Parent resource ID. Children inherit parent credentials.",
@@ -147,8 +145,8 @@ class Run(BaseModel):
     tool_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    output: str = ""       # Plain text output for display/search (capped 100KB)
-    recording: str = ""    # JSON: list of [delay_ms, text] events for terminal replay
+    output: str = ""  # Plain text output for display/search (capped 100KB)
+    recording: str = ""  # JSON: list of [delay_ms, text] events for terminal replay
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -182,3 +180,59 @@ class Session(BaseModel):
     )
     last_activity_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     revoked_at: datetime | None = None
+
+
+# ── Run-trigger errors ─────────────────────────────────────────────
+
+
+class RunNotFoundError(LookupError):
+    """The Run referenced by run_id does not exist in the store."""
+
+
+class RunMismatchError(ValueError):
+    """The Run referenced by run_id is incompatible with the request.
+
+    Raised when the existing Run's resource_id, run_type, or status doesn't
+    match what the engine expects (e.g. a discovery run_id passed to a
+    health-check entry point, or a RUNNING run_id passed to a fresh trigger).
+    """
+
+
+# ── Incident (lightweight workflow state on top of Evaluations) ────
+
+
+class IncidentState(enum.StrEnum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    SNOOZED = "snoozed"
+    RESOLVED = "resolved"
+
+
+class IncidentNote(BaseModel):
+    """A free-text note attached to an incident."""
+
+    author: str = ""  # user id or "system"
+    text: str = Field(min_length=1, max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Incident(BaseModel):
+    """A tracked operational incident.
+
+    Acknowledged, owned, snoozable, with a note history and explicit resolution.
+    Sits on top of `Evaluation` (which is the per-run severity verdict) — one
+    incident may span many evaluations as the underlying issue persists.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    resource_id: str
+    title: str = Field(min_length=1, max_length=200)
+    state: IncidentState = IncidentState.OPEN
+    severity: str = "warning"  # critical | warning | info
+    owner_user_id: str | None = None
+    snoozed_until: datetime | None = None
+    evaluation_id: str | None = None
+    notes: list[IncidentNote] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    resolved_at: datetime | None = None

@@ -33,10 +33,14 @@ def ensure_ssh_keypair(key_path: str | None = None) -> tuple[str, str]:
         subprocess.run(
             [
                 "ssh-keygen",
-                "-t", "ed25519",
-                "-f", resolved,
-                "-N", "",
-                "-C", "supavision",
+                "-t",
+                "ed25519",
+                "-f",
+                resolved,
+                "-N",
+                "",
+                "-C",
+                "supavision",
             ],
             check=True,
             capture_output=True,
@@ -45,9 +49,7 @@ def ensure_ssh_keypair(key_path: str | None = None) -> tuple[str, str]:
         logger.info("SSH keypair generated successfully")
 
     if not os.path.exists(pub_path):
-        raise FileNotFoundError(
-            f"Private key exists at {resolved} but public key not found at {pub_path}"
-        )
+        raise FileNotFoundError(f"Private key exists at {resolved} but public key not found at {pub_path}")
 
     with open(pub_path) as f:
         public_key = f.read().strip()

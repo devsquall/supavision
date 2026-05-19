@@ -141,9 +141,7 @@ class TestStructuredSlackPayload:
                 ),
             ]
         )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         assert "FIRE" in blob
         assert "Wake ops" in blob
 
@@ -162,9 +160,7 @@ class TestStructuredSlackPayload:
             ],
             diff=diff,
         )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         assert "+1 new" in blob
         assert "2 resolved" in blob
         assert "1 persisted" in blob
@@ -176,30 +172,20 @@ class TestStructuredSlackPayload:
             issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)],
             diff=diff,
         )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         assert "Since last run" not in blob
 
     def test_deep_link_when_base_url_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SUPAVISION_BASE_URL", "https://supavision.example/")
-        report = _structured_report(
-            issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)]
-        )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        report = _structured_report(issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)])
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         assert "https://supavision.example/reports/" in blob
         assert "View report" in blob
 
     def test_no_deep_link_without_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SUPAVISION_BASE_URL", raising=False)
-        report = _structured_report(
-            issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)]
-        )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        report = _structured_report(issues=[ReportIssue(title="x", severity=IssueSeverity.WARNING)])
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         assert "View report" not in blob
         assert "Report: `" in blob  # legacy-style footer
 
@@ -209,9 +195,7 @@ class TestStructuredSlackPayload:
             run_type=RunType.HEALTH_CHECK,
             content="legacy prose body about disk",
         )
-        blob = "\n".join(
-            _block_texts(self._channel()._build_payload(_resource(), report, _eval()))
-        )
+        blob = "\n".join(_block_texts(self._channel()._build_payload(_resource(), report, _eval())))
         # Legacy format wraps prose in a code block
         assert "legacy prose body about disk" in blob
         # And has no "Top issue:" label

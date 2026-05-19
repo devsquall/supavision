@@ -118,11 +118,11 @@ _DIAGNOSTIC_PREFIX_ALLOWLIST = [
     "gh pr list ",
     "gh api /rate_limit",
     # DNS/network/cert diagnostics (read-only) — Workstream H
-    "dig ",             # DNS lookup (all dig usage is read-only)
-    "nslookup ",        # DNS lookup — prefix only (bare nslookup enters interactive mode)
+    "dig ",  # DNS lookup (all dig usage is read-only)
+    "nslookup ",  # DNS lookup — prefix only (bare nslookup enters interactive mode)
     "openssl s_client -connect ",  # TLS cert inspection
-    "ping -c ",         # bounded ICMP — prefix ensures count is specified
-    "traceroute ",      # network path trace
+    "ping -c ",  # bounded ICMP — prefix ensures count is specified
+    "traceroute ",  # network path trace
     # AWS CLI additions for Workstream G security checks
     "aws cloudtrail describe-",
     "aws ec2 describe-flow-logs",
@@ -227,8 +227,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "check_service_status",
         "description": (
-            "Check the status of a systemd service. Returns whether it's active, "
-            "its recent logs, and resource usage."
+            "Check the status of a systemd service. Returns whether it's active, its recent logs, and resource usage."
         ),
         "input_schema": {
             "type": "object",
@@ -243,10 +242,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "read_file",
-        "description": (
-            "Read the contents of a file on the target system. "
-            "Returns the first N lines of the file."
-        ),
+        "description": ("Read the contents of a file on the target system. Returns the first N lines of the file."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -265,8 +261,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "list_directory",
         "description": (
-            "List files and directories at a given path with details "
-            "(permissions, size, modification time)."
+            "List files and directories at a given path with details (permissions, size, modification time)."
         ),
         "input_schema": {
             "type": "object",
@@ -566,9 +561,7 @@ class ToolDispatcher:
         """Run allowlisted diagnostic command."""
         command = tool_input.get("command", "").strip()
         if not command:
-            return CommandResult(
-                stdout="", stderr="[ERROR: No command provided]", exit_code=-1
-            )
+            return CommandResult(stdout="", stderr="[ERROR: No command provided]", exit_code=-1)
 
         if not _is_diagnostic_allowed(command):
             return CommandResult(
@@ -591,9 +584,7 @@ class ToolDispatcher:
         conn_str = tool_input.get("connection_string", "")
 
         if not query:
-            return CommandResult(
-                stdout="", stderr="[ERROR: No query provided]", exit_code=-1
-            )
+            return CommandResult(stdout="", stderr="[ERROR: No query provided]", exit_code=-1)
 
         if not _is_readonly_sql(query):
             return CommandResult(

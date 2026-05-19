@@ -30,6 +30,8 @@ def _load_dotenv() -> None:
             value = value.strip().strip("'\"")
             if key and key not in os.environ:  # Don't override existing env vars
                 os.environ[key] = value
+
+
 _load_dotenv()
 
 from .db import Store
@@ -40,21 +42,33 @@ from .models import (
     RunType,
     Schedule,
 )
+from .secrets_policy import (
+    is_valid_env_var_name,
+    validate_no_raw_secrets,
+)
 from .templates import TEMPLATE_DIR_DEFAULT, list_templates
 
 DB_PATH_DEFAULT = ".supavision/supavision.db"
+
+
 def _json_out(data: dict) -> None:
     json.dump(data, sys.stdout, default=str, ensure_ascii=False)
     sys.stdout.write("\n")
+
+
 def _error(msg: str) -> None:
     _json_out({"ok": False, "error": msg})
     sys.exit(1)
+
+
 # ── Table formatting (Workstream E1) ────────────────────────────────
 #
 # When --format=table (or auto on TTY), list commands print human-readable
 # tables instead of raw JSON. Hand-rolled to avoid adding a dependency.
 
 _FORMAT: str = "json"  # Set by main() from args.format
+
+
 def _should_table() -> bool:
     """Whether the current output mode calls for table format."""
     if _FORMAT == "json":
@@ -63,6 +77,8 @@ def _should_table() -> bool:
         return True
     # auto: table on TTY, JSON when piped
     return sys.stdout.isatty()
+
+
 def _print_table(headers: list[str], rows: list[list[str]], min_width: int = 6) -> None:
     """Print a simple aligned table to stdout."""
     if not rows:
@@ -82,12 +98,18 @@ def _print_table(headers: list[str], rows: list[list[str]], min_width: int = 6) 
     for row in rows:
         cells = [str(c).ljust(w) for c, w in zip(row, widths)]
         print("  ".join(cells))
+
+
 def _get_store(args: argparse.Namespace) -> Store:
     db_path = getattr(args, "db", DB_PATH_DEFAULT)
     return Store(db_path)
+
+
 def _get_engine(store: Store, args: argparse.Namespace) -> Engine:
     template_dir = getattr(args, "templates", TEMPLATE_DIR_DEFAULT)
     return Engine(store=store, template_dir=template_dir)
+
+
 # ── Resource commands ────────────────────────────────────────────────
 def cmd_resource_add(args: argparse.Namespace) -> None:
     store = _get_store(args)
@@ -99,6 +121,14 @@ def cmd_resource_add(args: argparse.Namespace) -> None:
             key, val = item.split("=", 1)
             config[key] = val
 
+    raw_offenders = validate_no_raw_secrets(config)
+    if raw_offenders:
+        _error(
+            "Supavision does not store raw secrets in resource config. "
+            f"Offending keys: {', '.join(raw_offenders)}. "
+            "Use `supavision resource add-credential` to register them as env-var references."
+        )
+
     resource = Resource(
         name=args.name,
         resource_type=args.type,
@@ -107,6 +137,8 @@ def cmd_resource_add(args: argparse.Namespace) -> None:
     )
     store.save_resource(resource)
     _json_out({"ok": True, "command": "resource_add", "resource_id": resource.id, "name": resource.name})
+
+
 def cmd_resource_list(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resources = store.list_resources()
@@ -116,20 +148,25 @@ def cmd_resource_list(args: argparse.Namespace) -> None:
             [[r.name, r.resource_type, r.id[:12]] for r in resources],
         )
     else:
-        _json_out({
-            "ok": True,
-            "command": "resource_list",
-            "resources": [
-                {"id": r.id, "name": r.name, "type": r.resource_type, "parent_id": r.parent_id}
-                for r in resources
-            ],
-        })
+        _json_out(
+            {
+                "ok": True,
+                "command": "resource_list",
+                "resources": [
+                    {"id": r.id, "name": r.name, "type": r.resource_type, "parent_id": r.parent_id} for r in resources
+                ],
+            }
+        )
+
+
 def cmd_resource_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
         _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
     _json_out({"ok": True, "command": "resource_show", "resource": resource.model_dump(mode="json")})
+
+
 def cmd_resource_set_schedule(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
@@ -153,48 +190,69 @@ def cmd_resource_set_schedule(args: argparse.Namespace) -> None:
 
     store.save_resource(resource)
     _json_out({"ok": True, "command": "set_schedule", "resource_id": resource.id})
+
+
 def cmd_resource_add_credential(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
         _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
-    resource.credentials[args.name] = Credential(env_var=args.env_var)
+    env_var = (args.env_var or "").strip()
+    if not is_valid_env_var_name(env_var):
+        _error(
+            f"--env-var must be a valid environment variable name (got: {args.env_var!r}). "
+            "Use uppercase letters, digits, and underscores; cannot start with a digit."
+        )
+
+    resource.credentials[args.name] = Credential(env_var=env_var)
     store.save_resource(resource)
     _json_out({"ok": True, "command": "add_credential", "resource_id": resource.id, "credential": args.name})
+
+
 # ── Run commands ─────────────────────────────────────────────────────
 def cmd_run_discovery(args: argparse.Namespace) -> None:
     store = _get_store(args)
     engine = _get_engine(store, args)
     run = engine.run_discovery(args.resource_id)
     eval_obj = store.get_evaluation(run.evaluation_id) if run.evaluation_id else None
-    _json_out({
-        "ok": True,
-        "command": "run_discovery",
-        "run_id": run.id,
-        "status": str(run.status),
-        "severity": str(eval_obj.severity) if eval_obj else None,
-        "should_alert": eval_obj.should_alert if eval_obj else False,
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "run_discovery",
+            "run_id": run.id,
+            "status": str(run.status),
+            "severity": str(eval_obj.severity) if eval_obj else None,
+            "should_alert": eval_obj.should_alert if eval_obj else False,
+        }
+    )
+
+
 def cmd_run_health_check(args: argparse.Namespace) -> None:
     store = _get_store(args)
     engine = _get_engine(store, args)
     run = engine.run_health_check(args.resource_id)
     eval_obj = store.get_evaluation(run.evaluation_id) if run.evaluation_id else None
-    _json_out({
-        "ok": True,
-        "command": "run_health_check",
-        "run_id": run.id,
-        "status": str(run.status),
-        "severity": str(eval_obj.severity) if eval_obj else None,
-        "should_alert": eval_obj.should_alert if eval_obj else False,
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "run_health_check",
+            "run_id": run.id,
+            "status": str(run.status),
+            "severity": str(eval_obj.severity) if eval_obj else None,
+            "should_alert": eval_obj.should_alert if eval_obj else False,
+        }
+    )
+
+
 def cmd_run_status(args: argparse.Namespace) -> None:
     store = _get_store(args)
     run = store.get_run(args.run_id)
     if not run:
         _error(f"Run {args.run_id} not found. Run 'supavisionreport-list <resource_id>' to find run IDs.")
     _json_out({"ok": True, "command": "run_status", "run": run.model_dump(mode="json")})
+
+
 # ── Report commands ──────────────────────────────────────────────────
 def cmd_report_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
@@ -204,6 +262,8 @@ def cmd_report_show(args: argparse.Namespace) -> None:
     # Print content to stderr for readability, JSON to stdout
     print(report.content, file=sys.stderr)
     _json_out({"ok": True, "command": "report_show", "report_id": report.id, "run_type": str(report.run_type)})
+
+
 def cmd_report_list(args: argparse.Namespace) -> None:
     store = _get_store(args)
     reports = store.get_recent_reports(
@@ -220,14 +280,17 @@ def cmd_report_list(args: argparse.Namespace) -> None:
             ],
         )
     else:
-        _json_out({
-            "ok": True,
-            "command": "report_list",
-            "reports": [
-                {"id": r.id, "run_type": str(r.run_type), "created_at": str(r.created_at)}
-                for r in reports
-            ],
-        })
+        _json_out(
+            {
+                "ok": True,
+                "command": "report_list",
+                "reports": [
+                    {"id": r.id, "run_type": str(r.run_type), "created_at": str(r.created_at)} for r in reports
+                ],
+            }
+        )
+
+
 # ── Context/checklist commands ───────────────────────────────────────
 def cmd_context_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
@@ -236,6 +299,8 @@ def cmd_context_show(args: argparse.Namespace) -> None:
         _error(f"No system context found for resource {args.resource_id}")
     print(ctx.content, file=sys.stderr)
     _json_out({"ok": True, "command": "context_show", "version": ctx.version, "resource_id": ctx.resource_id})
+
+
 def cmd_checklist_show(args: argparse.Namespace) -> None:
     store = _get_store(args)
     cl = store.get_latest_checklist(args.resource_id)
@@ -243,12 +308,16 @@ def cmd_checklist_show(args: argparse.Namespace) -> None:
         _error(f"No checklist found for resource {args.resource_id}")
     for item in cl.items:
         print(f"  [{item.source}] {item.description}", file=sys.stderr)
-    _json_out({
-        "ok": True,
-        "command": "checklist_show",
-        "version": cl.version,
-        "item_count": len(cl.items),
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "checklist_show",
+            "version": cl.version,
+            "item_count": len(cl.items),
+        }
+    )
+
+
 def cmd_checklist_add(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
@@ -257,16 +326,22 @@ def cmd_checklist_add(args: argparse.Namespace) -> None:
 
     resource.monitoring_requests.append(args.request)
     store.save_resource(resource)
-    _json_out({
-        "ok": True,
-        "command": "checklist_add",
-        "resource_id": resource.id,
-        "request": args.request,
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "checklist_add",
+            "resource_id": resource.id,
+            "request": args.request,
+        }
+    )
+
+
 # ── Template commands ────────────────────────────────────────────────
 def cmd_template_list(args: argparse.Namespace) -> None:
     templates = list_templates(getattr(args, "templates", TEMPLATE_DIR_DEFAULT))
     _json_out({"ok": True, "command": "template_list", "templates": templates})
+
+
 # ── Scheduler ────────────────────────────────────────────────────────
 def cmd_run_scheduler(args: argparse.Namespace) -> None:
     from .scheduler import Scheduler
@@ -281,6 +356,8 @@ def cmd_run_scheduler(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         scheduler.stop()
         print("\nScheduler stopped.", file=sys.stderr)
+
+
 # ── Doctor ───────────────────────────────────────────────────────────
 def cmd_doctor(args: argparse.Namespace) -> None:
     checks: list[dict] = []
@@ -320,6 +397,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     # croniter
     try:
         import croniter as _  # noqa: F401
+
         has_croniter = True
     except ImportError:
         has_croniter = False
@@ -334,9 +412,12 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     _json_out({"ok": all_ok, "command": "doctor", "checks": checks})
     if not all_ok:
         sys.exit(1)
+
+
 # ── Setup wizard ─────────────────────────────────────────────────────
 def cmd_setup(args: argparse.Namespace) -> None:
     """Guided first-run setup: checks prerequisites and authenticates Claude CLI."""
+
     def _print(msg: str) -> None:
         print(msg, file=sys.stderr)
 
@@ -389,6 +470,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
 
         if answer in ("", "y", "yes"):
             import subprocess
+
             _print("")
             result = subprocess.run([claude_path, "login"])
             _print("")
@@ -436,9 +518,7 @@ def cmd_notify_test(args: argparse.Namespace) -> None:
 
     import asyncio
 
-    channels, _ = asyncio.run(
-        send_alert(resource, test_report, test_eval, skip_dedup=True)
-    )
+    channels, _ = asyncio.run(send_alert(resource, test_report, test_eval, skip_dedup=True))
     if channels:
         _json_out({"ok": True, "command": "notify_test", "channels": channels})
     else:
@@ -446,50 +526,67 @@ def cmd_notify_test(args: argparse.Namespace) -> None:
             "No notification channels configured or all failed. "
             "Set slack_webhook in resource config or SLACK_WEBHOOK env var."
         )
+
+
 def cmd_notify_configure(args: argparse.Namespace) -> None:
     store = _get_store(args)
     resource = store.get_resource(args.resource_id)
     if not resource:
         _error(f"Resource {args.resource_id} not found. Run 'supavision resource-list' to see available resources.")
 
+    # Reject the legacy raw-URL flags outright. Webhook URLs are credentials.
+    legacy_raw = []
+    if getattr(args, "slack_webhook", ""):
+        legacy_raw.append("--slack-webhook")
+    if getattr(args, "webhook_url", ""):
+        legacy_raw.append("--webhook-url")
+    if legacy_raw:
+        _error(
+            "Supavision does not store webhook URLs. "
+            f"The following flags carry raw URLs and are no longer accepted: {', '.join(legacy_raw)}. "
+            "Use --slack-webhook-env-var or --webhook-env-var to reference an env var name instead."
+        )
+
     updated = []
 
-    if args.slack_webhook:
-        from .notifications import validate_webhook_url
-
-        try:
-            validate_webhook_url(args.slack_webhook)
-        except ValueError as e:
-            _error(f"Invalid slack webhook URL: {e}")
-        resource.config["slack_webhook"] = args.slack_webhook
+    if args.slack_webhook_env_var:
+        ev = args.slack_webhook_env_var.strip()
+        if not is_valid_env_var_name(ev):
+            _error(f"--slack-webhook-env-var must be a valid env var name (got: {args.slack_webhook_env_var!r}).")
+        resource.credentials["slack_webhook"] = Credential(env_var=ev)
+        resource.config.pop("slack_webhook", None)  # migrate any legacy raw value
         updated.append("slack_webhook")
 
-    if args.webhook_url:
-        from .notifications import validate_webhook_url
-
-        try:
-            validate_webhook_url(args.webhook_url)
-        except ValueError as e:
-            _error(f"Invalid webhook URL: {e}")
-        resource.config["webhook_url"] = args.webhook_url
+    if args.webhook_env_var:
+        ev = args.webhook_env_var.strip()
+        if not is_valid_env_var_name(ev):
+            _error(f"--webhook-env-var must be a valid env var name (got: {args.webhook_env_var!r}).")
+        resource.credentials["webhook_url"] = Credential(env_var=ev)
+        resource.config.pop("webhook_url", None)
         updated.append("webhook_url")
 
     if args.clear:
+        resource.credentials.pop("slack_webhook", None)
+        resource.credentials.pop("webhook_url", None)
         resource.config.pop("slack_webhook", None)
         resource.config.pop("webhook_url", None)
         resource.config.pop("_last_alert_key", None)
         updated.append("cleared_all")
 
     if not updated:
-        _error("Nothing to update. Use --slack-webhook, --webhook-url, or --clear.")
+        _error("Nothing to update. Use --slack-webhook-env-var, --webhook-env-var, or --clear.")
 
     store.save_resource(resource)
-    _json_out({
-        "ok": True,
-        "command": "notify_configure",
-        "resource_id": resource.id,
-        "updated": updated,
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "notify_configure",
+            "resource_id": resource.id,
+            "updated": updated,
+        }
+    )
+
+
 def cmd_context_diff(args: argparse.Namespace) -> None:
     store = _get_store(args)
     history = store.get_context_history(args.resource_id, limit=2)
@@ -506,18 +603,22 @@ def cmd_context_diff(args: argparse.Namespace) -> None:
     else:
         print("No changes detected between versions.", file=sys.stderr)
 
-    _json_out({
-        "ok": True,
-        "command": "context_diff",
-        "resource_id": args.resource_id,
-        "current_version": current.version,
-        "previous_version": previous.version,
-        "has_changes": diff.has_changes,
-        "is_significant": diff.is_significant,
-        "added": diff.total_added,
-        "removed": diff.total_removed,
-        "changed": diff.total_changed,
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "context_diff",
+            "resource_id": args.resource_id,
+            "current_version": current.version,
+            "previous_version": previous.version,
+            "has_changes": diff.has_changes,
+            "is_significant": diff.is_significant,
+            "added": diff.total_added,
+            "removed": diff.total_removed,
+            "changed": diff.total_changed,
+        }
+    )
+
+
 def cmd_purge(args: argparse.Namespace) -> None:
     store = _get_store(args)
     days = args.days
@@ -536,18 +637,32 @@ def cmd_purge(args: argparse.Namespace) -> None:
             ).fetchone()[0]
         msg = f"Dry run: would delete {reports_count} reports and {runs_count} runs older than {days} days"
         print(msg, file=sys.stderr)
-        _json_out({
-            "ok": True, "command": "purge", "dry_run": True,
-            "reports": reports_count, "runs": runs_count, "days": days,
-        })
+        _json_out(
+            {
+                "ok": True,
+                "command": "purge",
+                "dry_run": True,
+                "reports": reports_count,
+                "runs": runs_count,
+                "days": days,
+            }
+        )
     else:
         reports_deleted = store.purge_old_reports(days)
         runs_deleted = store.purge_old_runs(days)
         print(f"Purged {reports_deleted} reports and {runs_deleted} runs older than {days} days", file=sys.stderr)
-        _json_out({
-            "ok": True, "command": "purge", "dry_run": False,
-            "reports_deleted": reports_deleted, "runs_deleted": runs_deleted, "days": days,
-        })
+        _json_out(
+            {
+                "ok": True,
+                "command": "purge",
+                "dry_run": False,
+                "reports_deleted": reports_deleted,
+                "runs_deleted": runs_deleted,
+                "days": days,
+            }
+        )
+
+
 def cmd_seed_demo(args: argparse.Namespace) -> None:
     """Populate the database with sample data for demo/evaluation."""
     from datetime import timedelta
@@ -571,14 +686,12 @@ def cmd_seed_demo(args: argparse.Namespace) -> None:
     # Check for existing data
     existing = store.list_resources()
     if existing and not args.force:
-        _error(
-            f"Database already has {len(existing)} resource(s). "
-            "Use --force to add demo data anyway."
-        )
+        _error(f"Database already has {len(existing)} resource(s). Use --force to add demo data anyway.")
 
     print("Seeding demo data...", file=sys.stderr)
 
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
 
     # ── 1. Server resource with pre-baked baseline ──────────────────
@@ -749,11 +862,15 @@ def cmd_seed_demo(args: argparse.Namespace) -> None:
     print(f"Done! {len(resources)} resource(s) seeded.", file=sys.stderr)
     print("Run `supavision serve` to see the dashboard.", file=sys.stderr)
 
-    _json_out({
-        "ok": True,
-        "command": "seed-demo",
-        "resources": len(resources),
-    })
+    _json_out(
+        {
+            "ok": True,
+            "command": "seed-demo",
+            "resources": len(resources),
+        }
+    )
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
@@ -763,6 +880,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
     print(f"Starting Supavision API on {args.host}:{args.port}", file=sys.stderr)
     print(f"OpenAPI docs: http://{args.host}:{args.port}/docs", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
+
 def cmd_api_key_create(args: argparse.Namespace) -> None:
     from .web.auth import generate_api_key
 
@@ -773,6 +892,8 @@ def cmd_api_key_create(args: argparse.Namespace) -> None:
     print("\nAPI Key created. Save this — it cannot be retrieved again:\n", file=sys.stderr)
     print(f"  {raw_key}\n", file=sys.stderr)
     _json_out({"ok": True, "command": "api_key_create", "key_id": key_id, "key": raw_key})
+
+
 def cmd_api_key_list(args: argparse.Namespace) -> None:
     store = _get_store(args)
     keys = store.list_api_keys()
@@ -780,6 +901,8 @@ def cmd_api_key_list(args: argparse.Namespace) -> None:
         status = "REVOKED" if k["revoked"] else "active"
         print(f"  {k['id']}  {k['label'] or '(no label)'}  {status}  {k['created_at']}", file=sys.stderr)
     _json_out({"ok": True, "command": "api_key_list", "keys": keys})
+
+
 def cmd_api_key_revoke(args: argparse.Namespace) -> None:
     store = _get_store(args)
     if store.revoke_api_key(args.key_id):
@@ -787,10 +910,13 @@ def cmd_api_key_revoke(args: argparse.Namespace) -> None:
         _json_out({"ok": True, "command": "api_key_revoke", "key_id": args.key_id})
     else:
         _error(f"API key {args.key_id} not found or already revoked")
+
+
 # ── MCP ──────────────────────────────────────────────────────────────
 def cmd_mcp_config(args: argparse.Namespace) -> None:
     """Print MCP server configuration for Claude CLI."""
     import json as json_mod
+
     db_path = os.path.abspath(
         getattr(args, "db", None) or os.environ.get("SUPAVISION_DB_PATH", ".supavision/supavision.db")
     )
@@ -808,6 +934,8 @@ def cmd_mcp_config(args: argparse.Namespace) -> None:
         "\nCopy the above into your Claude CLI MCP config, or pass it with --mcp-config.",
         file=sys.stderr,
     )
+
+
 def cmd_mcp_serve(args: argparse.Namespace) -> None:
     """Run MCP server (JSON-RPC over stdin/stdout)."""
     db_path = getattr(args, "db", None) or os.environ.get("SUPAVISION_DB_PATH", "")
@@ -815,7 +943,10 @@ def cmd_mcp_serve(args: argparse.Namespace) -> None:
         db_path = os.path.abspath(".supavision/supavision.db")
     os.environ["SUPAVISION_DB_PATH"] = os.path.abspath(db_path)
     from .mcp import main as mcp_main
+
     mcp_main()
+
+
 # ── Auth ──────────────────────────────────────────────────────────────
 def cmd_create_admin(args: argparse.Namespace) -> None:
     """Create the first admin user interactively."""
@@ -858,6 +989,8 @@ def cmd_create_admin(args: argparse.Namespace) -> None:
 
     print(f"Admin user created: {email}", file=sys.stderr)
     _json_out({"ok": True, "command": "create-admin", "user_id": user.id, "email": email})
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 def main() -> None:
     from . import __version__
@@ -867,7 +1000,9 @@ def main() -> None:
     parser.add_argument("--db", default=DB_PATH_DEFAULT, help="Database path")
     parser.add_argument("--templates", default=TEMPLATE_DIR_DEFAULT, help="Templates directory")
     parser.add_argument(
-        "--format", default="auto", choices=["auto", "json", "table"],
+        "--format",
+        default="auto",
+        choices=["auto", "json", "table"],
         help="Output format: auto (table on TTY, JSON when piped), json, or table",
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -892,11 +1027,13 @@ def main() -> None:
     p = sub.add_parser("set-schedule", help="Set discovery and health-check schedules for a resource")
     p.add_argument("resource_id", help="Resource ID")
     p.add_argument(
-        "--discovery", default="",
+        "--discovery",
+        default="",
         help="Cron expression for discovery runs (e.g., '0 */6 * * *' for every 6 hours)",
     )
     p.add_argument(
-        "--health-check", default="",
+        "--health-check",
+        default="",
         help="Cron expression for health checks (e.g., '0 */6 * * *' for every 6 hours)",
     )
     p.set_defaults(func=cmd_resource_set_schedule)
@@ -969,7 +1106,9 @@ def main() -> None:
     p = sub.add_parser("notify-test", help="Send a test notification for a resource")
     p.add_argument("resource_id", help="Resource ID")
     p.add_argument(
-        "--severity", choices=["healthy", "warning", "critical"], default="warning",
+        "--severity",
+        choices=["healthy", "warning", "critical"],
+        default="warning",
         help="Severity level for the test notification",
     )
     p.set_defaults(func=cmd_notify_test)
@@ -977,8 +1116,28 @@ def main() -> None:
     # notify-configure
     p = sub.add_parser("notify-configure", help="Configure notification channels for a resource")
     p.add_argument("resource_id", help="Resource ID")
-    p.add_argument("--slack-webhook", default="", help="Slack incoming webhook URL")
-    p.add_argument("--webhook-url", default="", help="Generic webhook URL for notifications")
+    p.add_argument(
+        "--slack-webhook-env-var",
+        default="",
+        help="Name of env var holding the Slack webhook URL (e.g. SLACK_WEBHOOK_URL)",
+    )
+    p.add_argument(
+        "--webhook-env-var",
+        default="",
+        help="Name of env var holding the generic webhook URL",
+    )
+    # Legacy raw-URL flags are deliberately retained so cmd_notify_configure can
+    # reject them with a useful migration message instead of silently failing.
+    p.add_argument(
+        "--slack-webhook",
+        default="",
+        help="(removed) Raw URLs are no longer accepted — use --slack-webhook-env-var",
+    )
+    p.add_argument(
+        "--webhook-url",
+        default="",
+        help="(removed) Raw URLs are no longer accepted — use --webhook-env-var",
+    )
     p.add_argument("--clear", action="store_true", help="Remove all notification config")
     p.set_defaults(func=cmd_notify_configure)
 
@@ -1038,5 +1197,7 @@ def main() -> None:
         raise
     except Exception as e:
         _error(str(e))
+
+
 if __name__ == "__main__":
     main()

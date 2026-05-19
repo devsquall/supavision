@@ -75,7 +75,10 @@ def _make_report(resource_id: str, run_type: RunType = RunType.HEALTH_CHECK, con
 
 
 def _make_evaluation(
-    report_id: str, resource_id: str, severity: Severity = Severity.HEALTHY, summary: str = "All good",
+    report_id: str,
+    resource_id: str,
+    severity: Severity = Severity.HEALTHY,
+    summary: str = "All good",
 ) -> Evaluation:
     return Evaluation(
         report_id=report_id,
@@ -184,10 +187,16 @@ class TestListResources:
         ev = _make_evaluation(report.id, r1.id, severity=Severity.WARNING, summary="Disk high")
         store.save_evaluation(ev)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_list_resources",
-            "arguments": {},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_list_resources",
+                    "arguments": {},
+                },
+            ),
+        )
         assert resp is not None
         assert "error" not in resp
         content = resp["result"]["content"]
@@ -206,10 +215,16 @@ class TestListResources:
         assert by_name["db-server"]["severity"] is None
 
     def test_list_resources_empty_db(self, store, ro_conn):
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_list_resources",
-            "arguments": {},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_list_resources",
+                    "arguments": {},
+                },
+            ),
+        )
         content = resp["result"]["content"]
         resources = json.loads(content[0]["text"])
         assert resources == []
@@ -229,10 +244,16 @@ class TestGetLatestReport:
         ev = _make_evaluation(report.id, resource.id, severity=Severity.HEALTHY, summary="All clear")
         store.save_evaluation(ev)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_latest_report",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_latest_report",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         assert "error" not in resp
         data = json.loads(resp["result"]["content"][0]["text"])
         assert data["report_content"] == "Everything looks fine"
@@ -241,10 +262,16 @@ class TestGetLatestReport:
         assert data["run_type"] == "health_check"
 
     def test_get_latest_report_nonexistent_resource(self, store, ro_conn):
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_latest_report",
-            "arguments": {"resource_id": "nonexistent-id"},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_latest_report",
+                    "arguments": {"resource_id": "nonexistent-id"},
+                },
+            ),
+        )
         assert "error" not in resp  # No JSON-RPC error — tool returns an error message in content
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
@@ -265,10 +292,16 @@ class TestGetBaseline:
         cl = _make_checklist(resource.id, version=1)
         store.save_checklist(cl)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_baseline",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_baseline",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         assert "error" not in resp
         data = json.loads(resp["result"]["content"][0]["text"])
         assert data["system_context"] == "System context document"
@@ -281,10 +314,16 @@ class TestGetBaseline:
         resource = _make_resource()
         store.save_resource(resource)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_baseline",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_baseline",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
         assert "No baseline found" in data["error"]
@@ -309,10 +348,16 @@ class TestGetRunHistory:
             )
             store.save_run(run)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_run_history",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_run_history",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         assert "error" not in resp
         runs = json.loads(resp["result"]["content"][0]["text"])
         assert len(runs) == 3
@@ -336,10 +381,16 @@ class TestGetRunHistory:
             )
             store.save_run(run)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_run_history",
-            "arguments": {"resource_id": resource.id, "limit": 3},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_run_history",
+                    "arguments": {"resource_id": resource.id, "limit": 3},
+                },
+            ),
+        )
         runs = json.loads(resp["result"]["content"][0]["text"])
         assert len(runs) == 3
 
@@ -347,10 +398,16 @@ class TestGetRunHistory:
         resource = _make_resource()
         store.save_resource(resource)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_run_history",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_run_history",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
         assert "No run history found" in data["error"]
@@ -361,10 +418,16 @@ class TestGetRunHistory:
 
 class TestErrors:
     def test_unknown_tool_returns_jsonrpc_error(self, ro_conn):
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "nonexistent_tool",
-            "arguments": {},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "nonexistent_tool",
+                    "arguments": {},
+                },
+            ),
+        )
         assert resp is not None
         assert "error" in resp
         assert resp["error"]["code"] == -32601
@@ -382,7 +445,6 @@ class TestErrors:
             handle_jsonrpc(ro_conn, "this is not json{{{")
 
 
-
 # ── supavision_get_metrics ────────────────────────────────────────
 
 
@@ -391,15 +453,25 @@ class TestGetMetrics:
         resource = _make_resource()
         store.save_resource(resource)
 
-        store.save_metrics(resource.id, "report-1", [
-            {"name": "cpu_percent", "value": 45.2, "unit": "%"},
-            {"name": "disk_percent", "value": 72.0, "unit": "%"},
-        ])
+        store.save_metrics(
+            resource.id,
+            "report-1",
+            [
+                {"name": "cpu_percent", "value": 45.2, "unit": "%"},
+                {"name": "disk_percent", "value": 72.0, "unit": "%"},
+            ],
+        )
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         assert "error" not in resp
         metrics = json.loads(resp["result"]["content"][0]["text"])
         assert "cpu_percent" in metrics
@@ -412,18 +484,30 @@ class TestGetMetrics:
         resource = _make_resource()
         store.save_resource(resource)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics",
-            "arguments": {"resource_id": resource.id},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics",
+                    "arguments": {"resource_id": resource.id},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
 
     def test_get_metrics_missing_resource_id(self, store, ro_conn):
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics",
-            "arguments": {},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics",
+                    "arguments": {},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
 
@@ -437,17 +521,31 @@ class TestGetMetricsTrend:
         store.save_resource(resource)
 
         # Save metrics across multiple "reports" to simulate time series
-        store.save_metrics(resource.id, "report-1", [
-            {"name": "cpu_percent", "value": 30.0, "unit": "%"},
-        ])
-        store.save_metrics(resource.id, "report-2", [
-            {"name": "cpu_percent", "value": 50.0, "unit": "%"},
-        ])
+        store.save_metrics(
+            resource.id,
+            "report-1",
+            [
+                {"name": "cpu_percent", "value": 30.0, "unit": "%"},
+            ],
+        )
+        store.save_metrics(
+            resource.id,
+            "report-2",
+            [
+                {"name": "cpu_percent", "value": 50.0, "unit": "%"},
+            ],
+        )
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics_trend",
-            "arguments": {"resource_id": resource.id, "metric_name": "cpu_percent"},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics_trend",
+                    "arguments": {"resource_id": resource.id, "metric_name": "cpu_percent"},
+                },
+            ),
+        )
         assert "error" not in resp
         data = json.loads(resp["result"]["content"][0]["text"])
         assert data["metric"] == "cpu_percent"
@@ -458,17 +556,29 @@ class TestGetMetricsTrend:
         resource = _make_resource()
         store.save_resource(resource)
 
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics_trend",
-            "arguments": {"resource_id": resource.id, "metric_name": "nonexistent_metric"},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics_trend",
+                    "arguments": {"resource_id": resource.id, "metric_name": "nonexistent_metric"},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
 
     def test_get_trend_missing_params(self, store, ro_conn):
-        resp = handle_jsonrpc(ro_conn, _jsonrpc("tools/call", {
-            "name": "supavision_get_metrics_trend",
-            "arguments": {},
-        }))
+        resp = handle_jsonrpc(
+            ro_conn,
+            _jsonrpc(
+                "tools/call",
+                {
+                    "name": "supavision_get_metrics_trend",
+                    "arguments": {},
+                },
+            ),
+        )
         data = json.loads(resp["result"]["content"][0]["text"])
         assert "error" in data
