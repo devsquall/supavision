@@ -171,11 +171,16 @@ class TestGetDueJobs:
         assert resource.id in ids
 
     def test_resource_not_due_before_interval(self, scheduler, store):
+        # Use a yearly cron so the next firing is far in the future from
+        # any "completed 5 minutes ago" anchor — keeps the test stable
+        # regardless of wall-clock minute. (The earlier `0 * * * *` form
+        # was flaky in the first 5 minutes of any hour: croniter started
+        # from completed_at would surface "next minute 0" which had
+        # already passed.)
         resource = _resource(
-            health_check_schedule=Schedule(cron="0 * * * *", enabled=True)  # hourly
+            health_check_schedule=Schedule(cron="0 0 1 1 *", enabled=True)  # Jan 1 midnight
         )
         store.save_resource(resource)
-        # Completed 5 minutes ago — next run ~55 min away
         run = _completed_run(resource.id, RunType.HEALTH_CHECK, completed_ago=timedelta(minutes=5))
         store.save_run(run)
         due = scheduler._get_due_jobs()

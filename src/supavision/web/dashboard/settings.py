@@ -99,6 +99,17 @@ async def settings_page(request: Request, new_key: str = ""):
         {"label": "Scheduler running", "done": bool(scheduler_status.get("running"))},
     ]
 
+    # Operational metrics (runs by status, duration percentiles, notification
+    # delivery rates). Reuses the same computation as /api/v1/system/metrics
+    # so the dashboard and the JSON API agree.
+    try:
+        from ..routes import compute_system_metrics
+
+        sys_metrics = compute_system_metrics(store)
+    except Exception:
+        logger.exception("Failed to compute system metrics for settings page")
+        sys_metrics = None
+
     return _render(
         request,
         "settings.html",
@@ -115,6 +126,7 @@ async def settings_page(request: Request, new_key: str = ""):
                 "db_size": db_size,
                 "resource_count": len(resources),
             },
+            "sys_metrics": sys_metrics,
             "setup_checklist": setup_checklist,
         },
     )

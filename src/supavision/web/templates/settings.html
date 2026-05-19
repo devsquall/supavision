@@ -87,6 +87,70 @@
   </div>
 </div>
 
+{# ── Operational metrics (P2 #16 — self-observability surfaced in UI) ── #}
+{% if sys_metrics %}
+<div class="settings-section">
+  <div class="section-header-row">
+    <div>
+      <h4 class="mb-1">Operational metrics</h4>
+      <p class="text-sm text-muted">Run health and notification delivery, last 200 events. Same data as <code>GET /api/v1/system/metrics</code>.</p>
+    </div>
+  </div>
+  <div class="info-grid">
+    <div class="info-item">
+      <span class="text-muted text-sm">Failed runs (24h)</span>
+      <span>
+        {% set fc = sys_metrics.runs.failures_24h %}
+        {% if fc == 0 %}
+        <span class="badge badge--healthy">{{ fc }}</span>
+        {% elif fc < 5 %}
+        <span class="badge badge--warning">{{ fc }}</span>
+        {% else %}
+        <span class="badge badge--critical">{{ fc }}</span>
+        {% endif %}
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Runs in flight</span>
+      <span>{{ sys_metrics.runs.by_status.get('running', 0) + sys_metrics.runs.by_status.get('pending', 0) }}</span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Run duration p50</span>
+      <span>{% if sys_metrics.runs.duration_seconds.p50 is not none %}{{ sys_metrics.runs.duration_seconds.p50 }}s{% else %}—{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Run duration p95</span>
+      <span>{% if sys_metrics.runs.duration_seconds.p95 is not none %}{{ sys_metrics.runs.duration_seconds.p95 }}s{% else %}—{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Notifications sent</span>
+      <span>{{ sys_metrics.notifications.sent }} / {{ sys_metrics.notifications.total_recent }}</span>
+    </div>
+    <div class="info-item">
+      <span class="text-muted text-sm">Notification failures</span>
+      <span>
+        {% set nf = sys_metrics.notifications.failed %}
+        {% if nf == 0 %}
+        <span class="badge badge--healthy">{{ nf }}</span>
+        {% else %}
+        <span class="badge badge--warning">{{ nf }}</span>
+        {% endif %}
+      </span>
+    </div>
+    {% if sys_metrics.scheduler.ticks %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Scheduler ticks</span>
+      <span>{{ sys_metrics.scheduler.ticks }}</span>
+    </div>
+    {% endif %}
+    <div class="info-item">
+      <span class="text-muted text-sm">Version</span>
+      <span><code>{{ sys_metrics.version }}</code></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ── Audit log link ── #}
 <div class="settings-section">
   <div class="section-header-row">

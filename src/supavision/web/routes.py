@@ -100,19 +100,16 @@ async def system_status(request: Request):
     }
 
 
-@router.get("/system/metrics")
-async def system_metrics(request: Request):
-    """Self-observability snapshot (P2 #16).
+def compute_system_metrics(store) -> dict:
+    """Shared computation for /api/v1/system/metrics and the dashboard panel.
 
-    Returns a small dict of operational metrics intended for ops dashboards
-    and uptime monitors. Cheap reads only — no engine calls, no LLM round trips.
+    Cheap reads only — no engine calls, no LLM round trips. Suitable for
+    polling at 10-30s intervals.
     """
     import os
 
     from .. import __version__
     from ..scheduler import get_scheduler_status
-
-    store = _get_store(request)
 
     # Counts by run status (over the recent window)
     recent_runs = store.get_recent_runs_global(limit=200)
@@ -172,6 +169,17 @@ async def system_metrics(request: Request):
             "resources": len(store.list_resources()),
         },
     }
+
+
+@router.get("/system/metrics")
+async def system_metrics(request: Request):
+    """Self-observability snapshot (P2 #16).
+
+    Returns a small dict of operational metrics intended for ops dashboards
+    and uptime monitors. Cheap reads only — no engine calls, no LLM round trips.
+    """
+    store = _get_store(request)
+    return compute_system_metrics(store)
 
 
 # ── Request/Response models ─────────────────────────────────────
